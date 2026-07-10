@@ -352,7 +352,6 @@ Commit: feat: orchestrate private Specular threads
 - Create: server/rate-limit.ts
 - Create: server/safety.ts
 - Create: server/http.test.ts
-- Delete: server.js
 
 **Interfaces:**
 - Consumes: shared schemas, validators, QuestioningProvider, and ThreadContext.
@@ -362,7 +361,7 @@ Commit: feat: orchestrate private Specular threads
 
 Run: npm install openai
 
-Add dev:server, build:server, start, and audit scripts while replacing the prototype chatgpt:server entry with the compiled stateless server.
+Add dev:server, build:server, start, and audit scripts for the compiled stateless server. Preserve the runnable prototype chatgpt:server/chatgpt:inspect entry until Task 7 integrates the shared MCP operations into the new server and performs the cutover.
 
 - [ ] **Step 2: Write failing HTTP and service contract tests**
 
@@ -393,11 +392,11 @@ export interface ServerConfig {
 }
 ~~~
 
-Reject unknown JSON fields, cap strings and turns, set Content-Security-Policy, X-Content-Type-Options, Referrer-Policy, Permissions-Policy, and a specific Access-Control-Allow-Origin only after allowlist validation. Never log request bodies.
+Reject unknown JSON fields, cap strings and turns, set Content-Security-Policy, X-Content-Type-Options, Referrer-Policy, Permissions-Policy, and a specific Access-Control-Allow-Origin only after allowlist validation. Never log request bodies. Default OPENAI_MODEL to gpt-5.5, the current generally available flagship recommended by the official model guide, while allowing an environment override for controlled rollout or pinned snapshots.
 
 - [ ] **Step 5: Implement the provider and structured prompts**
 
-OpenAIQuestioningProvider is server-only and uses strict structured outputs for the three operations. System instructions must encode one-question, no-why, no filler, user authority, Challenge permission, explicit conclusion, provenance, and safety rules. Model output is parsed with the shared schemas before deterministic validation.
+OpenAIQuestioningProvider is server-only and uses the installed OpenAI SDK Responses API parse helper with zodTextFormat for strict structured outputs. Read response.output_parsed, handle null/refusal/incomplete responses as typed recoverable provider failures, and never expose raw output. System instructions must encode one-question, no-why, no filler, user authority, Challenge permission, explicit conclusion, provenance, and safety rules. Model output is parsed with the shared schemas before deterministic validation.
 
 - [ ] **Step 6: Implement one repair attempt and typed errors**
 
@@ -558,7 +557,9 @@ Commit: feat: add editable conclusions and capsules
 - Create: server/mcp.test.ts
 - Replace: public/specular-widget.html
 - Modify: server/http.ts
+- Modify: package.json
 - Modify: README.md
+- Delete: server.js
 
 **Interfaces:**
 - Consumes: the same ThreadContext, operation schemas, validators, and operation service as the web API.
@@ -577,6 +578,8 @@ Expected: FAIL because createSpecularMcpServer is missing.
 - [ ] **Step 3: Register the three shared operations**
 
 Register next_question, challenge, and draft_conclusion with strict Zod inputs built from ThreadContext and output schemas from Task 1. Each handler delegates to createOperationService and returns both structuredContent and a concise content text fallback. Do not retain session content in module globals or server instances.
+
+Integrate the MCP transport at /mcp on the compiled stateless server, replace chatgpt:server/chatgpt:inspect with that server, and only then delete the prototype server.js so the ChatGPT surface remains runnable between tasks.
 
 - [ ] **Step 4: Replace the prototype widget**
 
