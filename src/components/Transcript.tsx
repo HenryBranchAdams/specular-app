@@ -31,7 +31,7 @@ function deliveryLabel(state: DeliveryState): string | null {
     case 'failed':
       return 'Not sent';
     case 'pending':
-      return 'Sending…';
+      return 'Interrupted — ready to retry';
     default:
       return assertNever(state);
   }

@@ -97,10 +97,14 @@ function orderedUniqueTurns(current: readonly Turn[], incoming: readonly Turn[])
   return [...byId.values()].sort((left, right) => left.position - right.position);
 }
 
-function latestFailedTurnId(turns: readonly Turn[]): TurnId | null {
+function latestRetryableTurnId(turns: readonly Turn[]): TurnId | null {
   for (let index = turns.length - 1; index >= 0; index -= 1) {
     const turn = turns[index];
-    if (turn?.role === 'user' && turn.deliveryState === 'failed') {
+    if (
+      turn?.role === 'user'
+      && turn.operation === 'next_question'
+      && (turn.deliveryState === 'failed' || turn.deliveryState === 'pending')
+    ) {
       return turn.id;
     }
   }
@@ -267,7 +271,7 @@ export function useSpecular(
       setView((current) => ({
         ...current,
         activity: null,
-        draft: latestFailedTurnId(turns) === null && current.draft.length === 0
+        draft: latestRetryableTurnId(turns) === null && current.draft.length === 0
           ? content
           : current.draft,
         error: result.error,
@@ -280,7 +284,7 @@ export function useSpecular(
 
   const retry = useCallback(() => {
     const dependencies = dependenciesRef.current;
-    const turnId = latestFailedTurnId(view.turns);
+    const turnId = latestRetryableTurnId(view.turns);
     if (dependencies === null || turnId === null || view.activity !== null) {
       return;
     }
@@ -289,9 +293,6 @@ export function useSpecular(
       ...current,
       activity: 'retry',
       error: null,
-      turns: current.turns.map((turn) => turn.id === turnId
-        ? { ...turn, deliveryState: 'pending' }
-        : turn),
     }));
 
     void (async () => {
@@ -391,7 +392,7 @@ export function useSpecular(
 
   return {
     ...view,
-    canRetry: latestFailedTurnId(view.turns) !== null,
+    canRetry: latestRetryableTurnId(view.turns) !== null,
     challenge,
     clearNotice,
     draftConclusion,

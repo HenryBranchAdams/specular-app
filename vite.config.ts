@@ -9,7 +9,7 @@ export default defineConfig({
     react(),
     VitePWA({
       registerType: 'prompt',
-      injectRegister: 'auto',
+      injectRegister: false,
       manifest: {
         name: 'Specular',
         short_name: 'Specular',

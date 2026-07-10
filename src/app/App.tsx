@@ -100,17 +100,27 @@ export function App({ dependencies }: AppProps) {
         {specular.error === null ? null : (
           <div aria-live="assertive" className="error-notice" role="alert">
             <p>{specular.error.message}</p>
-            {specular.error.retryable && specular.canRetry ? (
-              <button
-                className="retry-button touch-target"
-                onClick={specular.retry}
-                type="button"
-              >
-                Retry saved thought
-              </button>
-            ) : null}
           </div>
         )}
+
+        {specular.canRetry ? (
+          <div
+            aria-label="Saved thought recovery"
+            aria-live="polite"
+            className="recovery-notice"
+            role="status"
+          >
+            <span>Your saved thought is ready to retry.</span>
+            <button
+              className="retry-button touch-target"
+              disabled={specular.activity === 'retry'}
+              onClick={specular.retry}
+              type="button"
+            >
+              {specular.activity === 'retry' ? 'Retrying…' : 'Retry saved thought'}
+            </button>
+          </div>
+        ) : null}
 
         <div aria-atomic="true" aria-live="polite" className="status-notice" role="status">
           {specular.notice}

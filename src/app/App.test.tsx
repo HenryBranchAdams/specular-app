@@ -449,6 +449,81 @@ describe('Specular mobile thinking loop', () => {
       .not.toBeInTheDocument();
   });
 
+  it('does not offer a saved-turn retry for a conclusion operation error', async () => {
+    const fixture = await createFixture();
+    await seedActiveThread(fixture);
+    fixture.provider.conclusionHandler = () =>
+      Promise.reject(new QuestioningClientError('offline'));
+    const user = userEvent.setup();
+    render(<App dependencies={fixture.dependencies} />);
+
+    await user.click(await screen.findByRole('button', { name: 'Draft a conclusion' }));
+
+    expect(await screen.findByRole('alert')).toBeVisible();
+    expect(screen.queryByRole('button', { name: 'Retry saved thought' }))
+      .not.toBeInTheDocument();
+  });
+
+  it('restores and retries a persisted failed user turn after reload', async () => {
+    const fixture = await createFixture();
+    fixture.provider.nextQuestionHandler = () =>
+      Promise.reject(new QuestioningClientError('offline'));
+    const thread = unwrap(await fixture.service.startThread('Interrupted thought'));
+    const failed = await fixture.service.submitUserTurn(
+      thread.id,
+      'This thought should remain recoverable.',
+    );
+    expect(failed.ok).toBe(false);
+    const [savedTurn] = await fixture.repositories.turns.listByThread(thread.id);
+    expect(savedTurn?.deliveryState).toBe('failed');
+    fixture.provider.nextQuestionHandler = () => Promise.resolve(VALID_QUESTION);
+    const retryTurn = vi.spyOn(fixture.service, 'retryTurn');
+    const user = userEvent.setup();
+
+    render(<App dependencies={fixture.dependencies} />);
+
+    expect(await screen.findByText('Not sent')).toBeVisible();
+    const recovery = screen.getByRole('status', { name: 'Saved thought recovery' });
+    expect(recovery).toHaveTextContent('Your saved thought is ready to retry.');
+    await user.click(within(recovery).getByRole('button', { name: 'Retry saved thought' }));
+
+    expect(retryTurn).toHaveBeenCalledWith(savedTurn?.id);
+    expect(await screen.findByText(VALID_QUESTION.question)).toBeVisible();
+    expect(screen.queryByRole('status', { name: 'Saved thought recovery' }))
+      .not.toBeInTheDocument();
+  });
+
+  it('restores an orphaned pending turn as interrupted and retries it', async () => {
+    const firstResponse = deferred<NextQuestionResult>();
+    const fixture = await createFixture();
+    fixture.provider.nextQuestionHandler = () => firstResponse.promise;
+    const thread = unwrap(await fixture.service.startThread('Interrupted thought'));
+    void fixture.service.submitUserTurn(
+      thread.id,
+      'This pending thought was interrupted by reload.',
+    );
+    await waitFor(() => {
+      expect(fixture.provider.nextQuestionCalls).toBe(1);
+    });
+    const [savedTurn] = await fixture.repositories.turns.listByThread(thread.id);
+    expect(savedTurn?.deliveryState).toBe('pending');
+    fixture.provider.nextQuestionHandler = () => Promise.resolve(VALID_QUESTION);
+    const retryTurn = vi.spyOn(fixture.service, 'retryTurn');
+    const user = userEvent.setup();
+
+    render(<App dependencies={fixture.dependencies} />);
+
+    expect(await screen.findByText('Interrupted — ready to retry')).toBeVisible();
+    expect(screen.queryByText('Sending…')).not.toBeInTheDocument();
+    const recovery = screen.getByRole('status', { name: 'Saved thought recovery' });
+    await user.click(within(recovery).getByRole('button', { name: 'Retry saved thought' }));
+
+    expect(retryTurn).toHaveBeenCalledWith(savedTurn?.id);
+    expect(await screen.findByText(VALID_QUESTION.question)).toBeVisible();
+    expect(screen.queryByRole('status', { name: 'Saved thought recovery' }))
+      .not.toBeInTheDocument();
+  });
+
   it('gives every icon-only control an accessible name', async () => {
     const { dependencies } = await createFixture();
     render(<App dependencies={dependencies} />);
