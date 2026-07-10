@@ -396,7 +396,7 @@ Reject unknown JSON fields, cap strings and turns, set Content-Security-Policy, 
 
 - [ ] **Step 5: Implement the provider and structured prompts**
 
-OpenAIQuestioningProvider is server-only and uses the installed OpenAI SDK Responses API parse helper with zodTextFormat for strict structured outputs. Read response.output_parsed, handle null/refusal/incomplete responses as typed recoverable provider failures, and never expose raw output. System instructions must encode one-question, no-why, no filler, user authority, Challenge permission, explicit conclusion, provenance, and safety rules. Model output is parsed with the shared schemas before deterministic validation.
+OpenAIQuestioningProvider is server-only and uses the installed OpenAI SDK Responses API with zodTextFormat for strict structured outputs. It must preserve enough ephemeral response data inside the provider/service boundary to route JSON/schema/product-validation failures through the single repair attempt, while never logging, persisting, or returning raw model output. Handle null, refusal, and incomplete responses as typed recoverable provider failures. System instructions must encode one-question, no-why, no filler, user authority, Challenge permission, explicit conclusion, provenance, and safety rules. Model output is parsed with the shared schemas before deterministic validation.
 
 - [ ] **Step 6: Implement one repair attempt and typed errors**
 
