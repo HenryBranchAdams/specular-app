@@ -228,6 +228,29 @@ describe('validateOperationResult', () => {
     ).kind).toBe('question');
   });
 
+  it.each([
+    'First sentence.second sentence.',
+    'We considered speed, cost, etc. Another constraint remains.',
+    'First sentence.2nd sentence.',
+    'First sentence!!!Second sentence.',
+  ])('rejects an explicit second setup sentence boundary: %s', (setup) => {
+    expect(() => validateOperationResult(
+      'next_question',
+      normalResult('Which launch constraint matters most?', setup),
+    )).toThrow(/schema_invalid/);
+  });
+
+  it.each([
+    'A concrete example may help, e.g. a delayed launch.',
+    'A concrete distinction may help, i.e. demand versus timing.',
+    'One emphatic sentence!!!',
+  ])('accepts one setup sentence with an internal abbreviation or terminator cluster: %s', (setup) => {
+    expect(validateOperationResult(
+      'next_question',
+      normalResult('Which launch constraint matters most?', setup),
+    ).kind).toBe('question');
+  });
+
   it('requires the normal question to end in its only question mark', () => {
     expect(() => validateOperationResult(
       'next_question',
@@ -259,6 +282,35 @@ describe('validateOperationResult', () => {
       'next_question',
       normalResult('Which launch constraint matters most?'),
     ).kind).toBe('question');
+  });
+
+  it.each([
+    'Which evidence shows that demand exists?',
+    'Is there a smaller reversible step?',
+    'Which customer said they would leave?',
+    'Which mechanism fails when it overheats?',
+    'Which risk from that launch matters most?',
+    'Which team changes its plan when it receives new evidence?',
+  ])('accepts a grammatical or locally bound reference: %s', (question) => {
+    expect(validateOperationResult(
+      'next_question',
+      normalResult(question),
+    ).kind).toBe('question');
+  });
+
+  it.each([
+    'Which option works better here?',
+    'What happens there?',
+    'Which of the former matters most?',
+    'Which latter option changes the decision?',
+    'Which side of those matters most?',
+    'Who owns that one?',
+    'Which result proves that?',
+  ])('keeps rejecting an unqualified demonstrative or locative reference: %s', (question) => {
+    expect(() => validateOperationResult(
+      'next_question',
+      normalResult(question),
+    )).toThrow(/question_independence/);
   });
 
   it('accepts a normal turn at 45 words and rejects one at 46 words', () => {
