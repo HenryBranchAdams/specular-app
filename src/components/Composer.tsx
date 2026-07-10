@@ -1,15 +1,16 @@
 import {
-  forwardRef,
   useRef,
 } from 'react';
 import type {
   KeyboardEvent,
+  Ref,
   SyntheticEvent,
 } from 'react';
 import { Mic, Send } from 'lucide-react';
 
 export interface ComposerProps {
   busy: boolean;
+  ref?: Ref<HTMLTextAreaElement>;
   value: string;
   onFocusChange: (focused: boolean) => void;
   onSubmit: () => void;
@@ -17,24 +18,22 @@ export interface ComposerProps {
   onVoice: () => void;
 }
 
-export const Composer = forwardRef<HTMLTextAreaElement, ComposerProps>(function Composer(
-  {
-    busy,
-    onFocusChange,
-    onSubmit,
-    onValueChange,
-    onVoice,
-    value,
-  },
-  forwardedRef,
-) {
+export function Composer({
+  busy,
+  onFocusChange,
+  onSubmit,
+  onValueChange,
+  onVoice,
+  ref,
+  value,
+}: ComposerProps) {
   const localRef = useRef<HTMLTextAreaElement | null>(null);
-  const setRef = (element: HTMLTextAreaElement | null) => {
+  const setComposerRef = (element: HTMLTextAreaElement | null) => {
     localRef.current = element;
-    if (typeof forwardedRef === 'function') {
-      forwardedRef(element);
-    } else if (forwardedRef !== null) {
-      forwardedRef.current = element;
+    if (typeof ref === 'function') {
+      ref(element);
+    } else if (ref !== undefined && ref !== null) {
+      ref.current = element;
     }
   };
 
@@ -68,7 +67,7 @@ export const Composer = forwardRef<HTMLTextAreaElement, ComposerProps>(function 
         onFocus={() => { onFocusChange(true); }}
         onKeyDown={handleKeyDown}
         placeholder="Share whatever’s on your mind…"
-        ref={setRef}
+        ref={setComposerRef}
         rows={1}
         value={value}
       />
@@ -92,4 +91,4 @@ export const Composer = forwardRef<HTMLTextAreaElement, ComposerProps>(function 
       </div>
     </form>
   );
-});
+}
