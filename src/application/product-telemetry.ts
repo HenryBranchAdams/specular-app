@@ -58,23 +58,28 @@ export class ProductTelemetry {
   }
 
   async isEnabled(): Promise<boolean> {
-    const stored = await this.preferences.get(TELEMETRY_ENABLED_KEY);
-    if (stored === true) {
-      return true;
-    }
-
-    await this.preferences.delete(PRODUCT_TELEMETRY_EVENTS_KEY);
-    if (stored !== false) {
-      await this.preferences.put(TELEMETRY_ENABLED_KEY, false);
-    }
-    return false;
+    let enabled = false;
+    await this.preferences.mutatePair(
+      TELEMETRY_ENABLED_KEY,
+      PRODUCT_TELEMETRY_EVENTS_KEY,
+      ([storedEnabled, storedEvents]) => {
+        enabled = storedEnabled === true;
+        return enabled
+          ? [true, storedEvents]
+          : [false, undefined];
+      },
+    );
+    return enabled;
   }
 
   async setEnabled(enabled: boolean): Promise<void> {
-    if (!enabled) {
-      await this.preferences.delete(PRODUCT_TELEMETRY_EVENTS_KEY);
-    }
-    await this.preferences.put(TELEMETRY_ENABLED_KEY, enabled);
+    await this.preferences.mutatePair(
+      TELEMETRY_ENABLED_KEY,
+      PRODUCT_TELEMETRY_EVENTS_KEY,
+      ([storedEnabled, storedEvents]) => enabled
+        ? [true, storedEnabled === true ? storedEvents : undefined]
+        : [false, undefined],
+    );
   }
 
   async record(name: ProductTelemetryEventName): Promise<void> {
@@ -83,39 +88,41 @@ export class ProductTelemetry {
       throw new Error('Invalid product telemetry event.');
     }
     assertProductTelemetryEventName(parsedName.data);
-    if (!await this.isEnabled()) {
-      return;
-    }
-
-    const event = productTelemetryEventSchema.parse({
-      name: parsedName.data,
-      timestamp: this.now(),
-    });
-    const current = await this.readStoredEvents();
-    const events = [...current, event].slice(-MAX_QUEUED_PRODUCT_EVENTS);
-    await this.preferences.put(
+    await this.preferences.mutatePair(
+      TELEMETRY_ENABLED_KEY,
       PRODUCT_TELEMETRY_EVENTS_KEY,
-      events.map((stored) => ({ ...stored })),
+      ([storedEnabled, storedEvents]) => {
+        if (storedEnabled !== true) {
+          return [false, undefined];
+        }
+        const parsedEvents = productTelemetryEventsSchema.safeParse(storedEvents);
+        const current = parsedEvents.success ? parsedEvents.data : [];
+        const event = productTelemetryEventSchema.parse({
+          name: parsedName.data,
+          timestamp: this.now(),
+        });
+        const events = [...current, event]
+          .slice(-MAX_QUEUED_PRODUCT_EVENTS)
+          .map((stored) => ({ ...stored }));
+        return [true, events];
+      },
     );
   }
 
   async listEvents(): Promise<ProductTelemetryEvent[]> {
-    if (!await this.isEnabled()) {
-      return [];
-    }
-    return this.readStoredEvents();
-  }
-
-  private async readStoredEvents(): Promise<ProductTelemetryEvent[]> {
-    const stored = await this.preferences.get(PRODUCT_TELEMETRY_EVENTS_KEY);
-    if (stored === undefined) {
-      return [];
-    }
-    const parsed = productTelemetryEventsSchema.safeParse(stored);
-    if (!parsed.success) {
-      await this.preferences.delete(PRODUCT_TELEMETRY_EVENTS_KEY);
-      return [];
-    }
-    return parsed.data;
+    let events: ProductTelemetryEvent[] = [];
+    await this.preferences.mutatePair(
+      TELEMETRY_ENABLED_KEY,
+      PRODUCT_TELEMETRY_EVENTS_KEY,
+      ([storedEnabled, storedEvents]) => {
+        if (storedEnabled !== true) {
+          return [false, undefined];
+        }
+        const parsed = productTelemetryEventsSchema.safeParse(storedEvents);
+        events = parsed.success ? parsed.data : [];
+        return [true, parsed.success ? parsed.data : undefined];
+      },
+    );
+    return events;
   }
 }

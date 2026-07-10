@@ -244,12 +244,15 @@ export class ConversationService {
         operation: 'next_question',
         deliveryState: 'pending',
       });
-      await this.repositories.turns.put(userTurn);
-      await this.repositories.threads.put(threadSchema.parse({
+      const updatedThread = threadSchema.parse({
         ...thread,
         updatedAt: this.now(),
         turnIds: appendTurnId(thread.turnIds, userTurn.id),
-      }));
+      });
+      await this.repositories.conversation.persistPendingTurn({
+        thread: updatedThread,
+        userTurn,
+      });
     } catch {
       return failure('storage_failure');
     }
@@ -274,14 +277,15 @@ export class ConversationService {
         ...stored,
         deliveryState: 'pending',
       });
-      await this.repositories.turns.put(pendingTurn);
-      if (!thread.turnIds.includes(pendingTurn.id)) {
-        await this.repositories.threads.put(threadSchema.parse({
-          ...thread,
-          updatedAt: this.now(),
-          turnIds: appendTurnId(thread.turnIds, pendingTurn.id),
-        }));
-      }
+      const updatedThread = threadSchema.parse({
+        ...thread,
+        updatedAt: this.now(),
+        turnIds: appendTurnId(thread.turnIds, pendingTurn.id),
+      });
+      await this.repositories.conversation.persistPendingTurn({
+        thread: updatedThread,
+        userTurn: pendingTurn,
+      });
     } catch {
       return failure('storage_failure');
     }
@@ -323,8 +327,10 @@ export class ConversationService {
         updatedAt: this.now(),
         turnIds: appendTurnId(thread.turnIds, responseTurn.id),
       });
-      await this.repositories.turns.put(responseTurn);
-      await this.repositories.threads.put(updatedThread);
+      await this.repositories.conversation.persistSpecularTurn({
+        thread: updatedThread,
+        responseTurn,
+      });
       return success({ thread: updatedThread, responseTurn, output });
     } catch {
       return failure('storage_failure');
@@ -375,8 +381,10 @@ export class ConversationService {
         turnIds: appendTurnId(thread.turnIds, responseTurn.id),
         provisionalConclusion: output,
       });
-      await this.repositories.turns.put(responseTurn);
-      await this.repositories.threads.put(updatedThread);
+      await this.repositories.conversation.persistSpecularTurn({
+        thread: updatedThread,
+        responseTurn,
+      });
       return success({ thread: updatedThread, responseTurn, output });
     } catch {
       return failure('storage_failure');
@@ -459,17 +467,40 @@ export class ConversationService {
     try {
       const thread = await this.requireActiveThread(threadId);
       const timestamp = this.now();
-      await this.repositories.threads.put(threadSchema.parse({
+      const completedThread = threadSchema.parse({
         ...thread,
         lifecycleState: 'completed',
         completedAt: timestamp,
         updatedAt: timestamp,
-      }));
+      });
+      const freshThread = threadSchema.parse({
+        id: this.ids.threadId(),
+        ownerScope: OWNER_SCOPE,
+        title: 'New thought',
+        lifecycleState: 'active',
+        createdAt: timestamp,
+        updatedAt: timestamp,
+        turnIds: [],
+        understanding: {
+          claims: [],
+          observations: [],
+          stakeholders: [],
+          contexts: [],
+          distinctions: [],
+          tensions: [],
+          exploredBlindSpots: [],
+          unexploredBlindSpots: [],
+        },
+      });
+      await this.repositories.conversation.finishAndStart({
+        completedThread,
+        freshThread,
+      });
+      await this.recordTelemetry('thread_started');
+      return success(freshThread);
     } catch {
       return failure('storage_failure');
     }
-
-    return this.startThread();
   }
 
   async exportAll(): Promise<ServiceResult<SpecularExport>> {
@@ -549,9 +580,11 @@ export class ConversationService {
         ),
         understanding: output.understanding,
       });
-      await this.repositories.turns.put(acceptedUserTurn);
-      await this.repositories.turns.put(responseTurn);
-      await this.repositories.threads.put(updatedThread);
+      await this.repositories.conversation.acceptExchange({
+        thread: updatedThread,
+        userTurn: acceptedUserTurn,
+        responseTurn,
+      });
       return success({
         thread: updatedThread,
         userTurn: acceptedUserTurn,

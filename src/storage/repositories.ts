@@ -31,6 +31,34 @@ export interface TurnRepository {
   put(turn: Turn): Promise<void>;
 }
 
+export interface PendingTurnWrite {
+  thread: Thread;
+  userTurn: Turn;
+}
+
+export interface AcceptedExchangeWrite {
+  thread: Thread;
+  userTurn: Turn;
+  responseTurn: Turn;
+}
+
+export interface SpecularTurnWrite {
+  thread: Thread;
+  responseTurn: Turn;
+}
+
+export interface FinishedThreadWrite {
+  completedThread: Thread;
+  freshThread: Thread;
+}
+
+export interface ConversationRepository {
+  persistPendingTurn(write: PendingTurnWrite): Promise<void>;
+  acceptExchange(write: AcceptedExchangeWrite): Promise<void>;
+  persistSpecularTurn(write: SpecularTurnWrite): Promise<void>;
+  finishAndStart(write: FinishedThreadWrite): Promise<void>;
+}
+
 export interface CapsuleRepository {
   get(id: CapsuleId): Promise<Capsule | undefined>;
   list(): Promise<Capsule[]>;
@@ -43,6 +71,12 @@ export interface PreferencesRepository {
   list(): Promise<UserPreference[]>;
   put(key: string, value: JsonValue): Promise<void>;
   delete(key: string): Promise<void>;
+  mutatePair(
+    firstKey: string,
+    secondKey: string,
+    mutation: (current: readonly [JsonValue | undefined, JsonValue | undefined]) =>
+      readonly [JsonValue | undefined, JsonValue | undefined],
+  ): Promise<void>;
 }
 
 export interface ExportRepository {
@@ -55,6 +89,7 @@ export interface ExportRepository {
 export interface LocalRepositories {
   threads: ThreadRepository;
   turns: TurnRepository;
+  conversation: ConversationRepository;
   capsules: CapsuleRepository;
   preferences: PreferencesRepository;
   export: ExportRepository;

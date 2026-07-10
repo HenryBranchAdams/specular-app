@@ -32,11 +32,16 @@ import {
 } from './export';
 import { migrations as schemaMigrations, type Migration } from './migrations';
 import type {
+  AcceptedExchangeWrite,
   CapsuleRepository,
+  ConversationRepository,
   ExportRepository,
+  FinishedThreadWrite,
   JsonValue,
   LocalRepositories,
+  PendingTurnWrite,
   PreferencesRepository,
+  SpecularTurnWrite,
   ThreadRepository,
   TurnRepository,
   UserPreference,
@@ -316,6 +321,61 @@ function parsePreferenceForOwner(value: unknown, ownerScope: OwnerScope): UserPr
   return result.data;
 }
 
+interface AtomicTransaction {
+  readonly done: Promise<void>;
+  abort(): void;
+}
+
+function abortTransactionIfActive(transaction: AtomicTransaction): void {
+  try {
+    transaction.abort();
+  } catch {
+    return;
+  }
+}
+
+async function runAtomicTransaction(
+  transaction: AtomicTransaction,
+  operation: () => Promise<void>,
+): Promise<void> {
+  const completion = transaction.done.then(
+    () => ({ ok: true as const }),
+    (error: unknown) => ({ ok: false as const, error }),
+  );
+  try {
+    await operation();
+    const result = await completion;
+    if (!result.ok) {
+      throw result.error;
+    }
+  } catch (error) {
+    abortTransactionIfActive(transaction);
+    await completion;
+    throw error;
+  }
+}
+
+async function enqueueAtomicWrites(
+  operations: readonly (() => Promise<unknown>)[],
+): Promise<void> {
+  const pending: Promise<unknown>[] = [];
+  try {
+    operations.forEach((operation) => {
+      pending.push(operation());
+    });
+  } catch (error) {
+    await Promise.allSettled(pending);
+    throw error;
+  }
+  await Promise.all(pending);
+}
+
+function assertConversationWrite(condition: boolean, message: string): asserts condition {
+  if (!condition) {
+    throw new StorageValidationError(message);
+  }
+}
+
 class IndexedDbThreadRepository implements ThreadRepository {
   constructor(
     private readonly database: IDBPDatabase<SpecularDbSchema>,
@@ -390,6 +450,110 @@ class IndexedDbTurnRepository implements TurnRepository {
   }
 }
 
+class IndexedDbConversationRepository implements ConversationRepository {
+  constructor(
+    private readonly database: IDBPDatabase<SpecularDbSchema>,
+    private readonly ownerScope: OwnerScope,
+    private readonly assertWritable: () => void,
+  ) {}
+
+  async persistPendingTurn(write: PendingTurnWrite): Promise<void> {
+    this.assertWritable();
+    const thread = parseThreadForOwner(write.thread, this.ownerScope);
+    const userTurn = parseTurnForOwner(write.userTurn, this.ownerScope);
+    assertConversationWrite(
+      thread.lifecycleState === 'active'
+        && userTurn.role === 'user'
+        && userTurn.deliveryState === 'pending'
+        && userTurn.threadId === thread.id
+        && thread.turnIds.includes(userTurn.id),
+      'Invalid pending conversation write.',
+    );
+
+    const transaction = this.database.transaction(['threads', 'turns'], 'readwrite');
+    await runAtomicTransaction(transaction, async () => {
+      await enqueueAtomicWrites([
+        () => transaction.objectStore('turns').put(userTurn),
+        () => transaction.objectStore('threads').put(thread),
+      ]);
+    });
+  }
+
+  async acceptExchange(write: AcceptedExchangeWrite): Promise<void> {
+    this.assertWritable();
+    const thread = parseThreadForOwner(write.thread, this.ownerScope);
+    const userTurn = parseTurnForOwner(write.userTurn, this.ownerScope);
+    const responseTurn = parseTurnForOwner(write.responseTurn, this.ownerScope);
+    assertConversationWrite(
+      thread.lifecycleState === 'active'
+        && userTurn.role === 'user'
+        && userTurn.deliveryState === 'accepted'
+        && responseTurn.role === 'specular'
+        && responseTurn.deliveryState === 'accepted'
+        && userTurn.threadId === thread.id
+        && responseTurn.threadId === thread.id
+        && userTurn.position < responseTurn.position
+        && thread.turnIds.includes(userTurn.id)
+        && thread.turnIds.includes(responseTurn.id),
+      'Invalid accepted conversation exchange.',
+    );
+
+    const transaction = this.database.transaction(['threads', 'turns'], 'readwrite');
+    await runAtomicTransaction(transaction, async () => {
+      await enqueueAtomicWrites([
+        () => transaction.objectStore('turns').put(userTurn),
+        () => transaction.objectStore('turns').put(responseTurn),
+        () => transaction.objectStore('threads').put(thread),
+      ]);
+    });
+  }
+
+  async persistSpecularTurn(write: SpecularTurnWrite): Promise<void> {
+    this.assertWritable();
+    const thread = parseThreadForOwner(write.thread, this.ownerScope);
+    const responseTurn = parseTurnForOwner(write.responseTurn, this.ownerScope);
+    assertConversationWrite(
+      thread.lifecycleState === 'active'
+        && responseTurn.role === 'specular'
+        && responseTurn.deliveryState === 'accepted'
+        && responseTurn.threadId === thread.id
+        && thread.turnIds.includes(responseTurn.id),
+      'Invalid Specular turn write.',
+    );
+
+    const transaction = this.database.transaction(['threads', 'turns'], 'readwrite');
+    await runAtomicTransaction(transaction, async () => {
+      await enqueueAtomicWrites([
+        () => transaction.objectStore('turns').put(responseTurn),
+        () => transaction.objectStore('threads').put(thread),
+      ]);
+    });
+  }
+
+  async finishAndStart(write: FinishedThreadWrite): Promise<void> {
+    this.assertWritable();
+    const completedThread = parseThreadForOwner(write.completedThread, this.ownerScope);
+    const freshThread = parseThreadForOwner(write.freshThread, this.ownerScope);
+    assertConversationWrite(
+      completedThread.lifecycleState === 'completed'
+        && completedThread.completedAt !== undefined
+        && freshThread.lifecycleState === 'active'
+        && freshThread.id !== completedThread.id
+        && freshThread.turnIds.length === 0
+        && freshThread.provisionalConclusion === undefined,
+      'Invalid finished conversation write.',
+    );
+
+    const transaction = this.database.transaction('threads', 'readwrite');
+    await runAtomicTransaction(transaction, async () => {
+      await enqueueAtomicWrites([
+        () => transaction.objectStore('threads').put(completedThread),
+        () => transaction.objectStore('threads').put(freshThread),
+      ]);
+    });
+  }
+}
+
 class IndexedDbCapsuleRepository implements CapsuleRepository {
   constructor(
     private readonly database: IDBPDatabase<SpecularDbSchema>,
@@ -456,6 +620,60 @@ class IndexedDbPreferencesRepository implements PreferencesRepository {
   async delete(key: string): Promise<void> {
     this.assertWritable();
     await this.database.delete('preferences', [this.ownerScope, key]);
+  }
+
+  async mutatePair(
+    firstKey: string,
+    secondKey: string,
+    mutation: (current: readonly [JsonValue | undefined, JsonValue | undefined]) =>
+      readonly [JsonValue | undefined, JsonValue | undefined],
+  ): Promise<void> {
+    this.assertWritable();
+    if (firstKey === secondKey) {
+      throw new StorageValidationError('Preference mutation keys must be distinct.');
+    }
+
+    const transaction = this.database.transaction('preferences', 'readwrite');
+    await runAtomicTransaction(transaction, async () => {
+      const store = transaction.objectStore('preferences');
+      const [firstStored, secondStored] = await Promise.all([
+        store.get([this.ownerScope, firstKey]),
+        store.get([this.ownerScope, secondKey]),
+      ]);
+      const current = [
+        firstStored === undefined
+          ? undefined
+          : parsePreferenceForOwner(firstStored, this.ownerScope).value,
+        secondStored === undefined
+          ? undefined
+          : parsePreferenceForOwner(secondStored, this.ownerScope).value,
+      ] as const;
+      const next: unknown = mutation(current);
+      if (!Array.isArray(next) || next.length !== 2) {
+        throw new StorageValidationError('Preference mutation returned an invalid pair.');
+      }
+      const pair = next as [JsonValue | undefined, JsonValue | undefined];
+      const firstPreference = pair[0] === undefined
+        ? undefined
+        : parsePreferenceForOwner(
+            { ownerScope: this.ownerScope, key: firstKey, value: pair[0] },
+            this.ownerScope,
+          );
+      const secondPreference = pair[1] === undefined
+        ? undefined
+        : parsePreferenceForOwner(
+            { ownerScope: this.ownerScope, key: secondKey, value: pair[1] },
+            this.ownerScope,
+          );
+      await enqueueAtomicWrites([
+        () => firstPreference === undefined
+          ? store.delete([this.ownerScope, firstKey])
+          : store.put(firstPreference),
+        () => secondPreference === undefined
+          ? store.delete([this.ownerScope, secondKey])
+          : store.put(secondPreference),
+      ]);
+    });
   }
 }
 
@@ -691,6 +909,11 @@ export async function createLocalRepositories(
   return {
     threads: new IndexedDbThreadRepository(database, parsedOwnerScope.data, assertWritable),
     turns: new IndexedDbTurnRepository(database, parsedOwnerScope.data, assertWritable),
+    conversation: new IndexedDbConversationRepository(
+      database,
+      parsedOwnerScope.data,
+      assertWritable,
+    ),
     capsules: new IndexedDbCapsuleRepository(database, parsedOwnerScope.data, assertWritable),
     preferences: new IndexedDbPreferencesRepository(
       database,

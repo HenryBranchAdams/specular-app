@@ -1,4 +1,7 @@
-import { IDBFactory } from 'fake-indexeddb';
+import {
+  IDBFactory,
+  IDBObjectStore as FakeIdbObjectStore,
+} from 'fake-indexeddb';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { Thread } from '../domain/contracts';
 import {
@@ -126,6 +129,28 @@ function makeArchive(overrides: Partial<SpecularExport> = {}): SpecularExport {
     preferences: [],
     ...overrides,
   };
+}
+
+function abortOnNthPut(storeName: string, occurrence: number): void {
+  // eslint-disable-next-line @typescript-eslint/unbound-method -- restored with the object-store receiver below.
+  const originalPut = FakeIdbObjectStore.prototype.put;
+  let matches = 0;
+  vi.spyOn(FakeIdbObjectStore.prototype, 'put').mockImplementation(function (
+    this: IDBObjectStore,
+    value,
+    key,
+  ) {
+    const request = key === undefined
+      ? originalPut.call(this, value)
+      : originalPut.call(this, value, key);
+    if (this.name === storeName) {
+      matches += 1;
+      if (matches === occurrence) {
+        this.transaction.abort();
+      }
+    }
+    return request;
+  });
 }
 
 async function seedCompleteThread(repositories: LocalRepositories): Promise<void> {
@@ -271,6 +296,118 @@ describe('versioned owner-scoped IndexedDB persistence', () => {
     }));
 
     expect((await repositories.turns.get(asTurnId('turn-pending')))?.deliveryState).toBe('pending');
+    repositories.close();
+  });
+
+  it('rolls back pending turn and thread reference writes as one unit', async () => {
+    const factory = new IDBFactory();
+    const repositories = await createLocalRepositories('local', factory);
+    const originalThread = makeThread();
+    const pendingTurn = makeTurn({ deliveryState: 'pending' });
+    const updatedThread = makeThread({ turnIds: [pendingTurn.id], updatedAt: 21 });
+    await repositories.threads.put(originalThread);
+    abortOnNthPut('threads', 1);
+
+    await expect(repositories.conversation.persistPendingTurn({
+      thread: updatedThread,
+      userTurn: pendingTurn,
+    })).rejects.toBeDefined();
+
+    expect(await repositories.turns.get(pendingTurn.id)).toBeUndefined();
+    expect(await repositories.threads.get(originalThread.id)).toEqual(originalThread);
+    repositories.close();
+  });
+
+  it('rolls back accepted user, assistant, and thread updates as one unit', async () => {
+    const factory = new IDBFactory();
+    const repositories = await createLocalRepositories('local', factory);
+    const pendingTurn = makeTurn({ deliveryState: 'pending' });
+    const pendingThread = makeThread({ turnIds: [pendingTurn.id] });
+    const acceptedTurn = makeTurn({ deliveryState: 'accepted' });
+    const responseTurn = makeTurn({
+      id: 'turn-2',
+      role: 'specular',
+      content: 'Which customer would notice first?',
+      position: 1,
+      deliveryState: 'accepted',
+    });
+    const acceptedThread = makeThread({
+      turnIds: [acceptedTurn.id, responseTurn.id],
+      updatedAt: 30,
+      understanding: {
+        ...EMPTY_UNDERSTANDING,
+        stakeholders: ['The first customer cohort.'],
+      },
+    });
+    await repositories.threads.put(pendingThread);
+    await repositories.turns.put(pendingTurn);
+    abortOnNthPut('turns', 2);
+
+    await expect(repositories.conversation.acceptExchange({
+      thread: acceptedThread,
+      userTurn: acceptedTurn,
+      responseTurn,
+    })).rejects.toBeDefined();
+
+    expect(await repositories.turns.get(pendingTurn.id)).toEqual(pendingTurn);
+    expect(await repositories.turns.get(responseTurn.id)).toBeUndefined();
+    expect(await repositories.threads.get(pendingThread.id)).toEqual(pendingThread);
+    repositories.close();
+  });
+
+  it('rolls back an assistant turn and thread reference as one unit', async () => {
+    const factory = new IDBFactory();
+    const repositories = await createLocalRepositories('local', factory);
+    const originalThread = makeThread();
+    const responseTurn = makeTurn({
+      id: 'turn-challenge',
+      role: 'specular',
+      content: 'Which stakeholder bears the hidden cost?',
+      operation: 'challenge',
+      deliveryState: 'accepted',
+    });
+    const updatedThread = makeThread({
+      turnIds: [responseTurn.id],
+      updatedAt: 31,
+    });
+    await repositories.threads.put(originalThread);
+    abortOnNthPut('threads', 1);
+
+    await expect(repositories.conversation.persistSpecularTurn({
+      thread: updatedThread,
+      responseTurn,
+    })).rejects.toBeDefined();
+
+    expect(await repositories.turns.get(responseTurn.id)).toBeUndefined();
+    expect(await repositories.threads.get(originalThread.id)).toEqual(originalThread);
+    repositories.close();
+  });
+
+  it('rolls back old-thread completion and fresh-thread creation as one unit', async () => {
+    const factory = new IDBFactory();
+    const repositories = await createLocalRepositories('local', factory);
+    const activeThread = makeThread();
+    const completedThread = makeThread({
+      lifecycleState: 'completed',
+      completedAt: 40,
+      updatedAt: 40,
+    });
+    const freshThread = makeThread({
+      id: 'thread-fresh',
+      title: 'New thought',
+      createdAt: 40,
+      updatedAt: 40,
+    });
+    await repositories.threads.put(activeThread);
+    abortOnNthPut('threads', 2);
+
+    await expect(repositories.conversation.finishAndStart({
+      completedThread,
+      freshThread,
+    })).rejects.toBeDefined();
+
+    expect(await repositories.threads.get(activeThread.id)).toEqual(activeThread);
+    expect(await repositories.threads.get(freshThread.id)).toBeUndefined();
     repositories.close();
   });
 

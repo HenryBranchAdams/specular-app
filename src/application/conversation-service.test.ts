@@ -1,5 +1,8 @@
-import { IDBFactory } from 'fake-indexeddb';
-import { afterEach, describe, expect, it } from 'vitest';
+import {
+  IDBFactory,
+  IDBObjectStore as FakeIdbObjectStore,
+} from 'fake-indexeddb';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import type {
   ChallengeResult,
   NextQuestionResult,
@@ -102,6 +105,28 @@ function createDeferred<T>(): Deferred<T> {
       resolvers.resolve(value);
     },
   };
+}
+
+function abortOnNthPut(storeName: string, occurrence: number): void {
+  // eslint-disable-next-line @typescript-eslint/unbound-method -- restored with the object-store receiver below.
+  const originalPut = FakeIdbObjectStore.prototype.put;
+  let matches = 0;
+  vi.spyOn(FakeIdbObjectStore.prototype, 'put').mockImplementation(function (
+    this: IDBObjectStore,
+    value,
+    key,
+  ) {
+    const request = key === undefined
+      ? originalPut.call(this, value)
+      : originalPut.call(this, value, key);
+    if (this.name === storeName) {
+      matches += 1;
+      if (matches === occurrence) {
+        this.transaction.abort();
+      }
+    }
+    return request;
+  });
 }
 
 function validConclusion(turnId: TurnId): WorkingConclusionResult {
@@ -241,39 +266,100 @@ function makeTurn(
 const openRepositories: LocalRepositories[] = [];
 
 afterEach(() => {
+  vi.restoreAllMocks();
   while (openRepositories.length > 0) {
     openRepositories.pop()?.close();
   }
 });
 
 describe('ConversationService orchestration', () => {
+  it('rolls back the full pending exchange and does not dispatch after a write failure', async () => {
+    const { client, repositories, service } = await createServiceFixture();
+    const thread = unwrap(await service.startThread('Atomic pending exchange'));
+    let providerDispatched = false;
+    client.nextQuestionHandler = () => {
+      providerDispatched = true;
+      return Promise.resolve(VALID_QUESTION);
+    };
+    abortOnNthPut('threads', 1);
+
+    const result = await service.submitUserTurn(thread.id, 'This write must be all or nothing.');
+
+    expect(result).toMatchObject({
+      ok: false,
+      error: { code: 'storage_failure' },
+    });
+    expect(providerDispatched).toBe(false);
+    expect(await repositories.turns.listByThread(thread.id)).toEqual([]);
+    expect((await repositories.threads.get(thread.id))?.turnIds).toEqual([]);
+  });
+
+  it('rolls back an accepted exchange failure and preserves one retryable user turn', async () => {
+    const { repositories, service } = await createServiceFixture();
+    const thread = unwrap(await service.startThread('Atomic accepted exchange'));
+    abortOnNthPut('threads', 2);
+
+    const result = await service.submitUserTurn(thread.id, 'Preserve this once for retry.');
+
+    expect(result).toMatchObject({
+      ok: false,
+      error: { code: 'storage_failure' },
+    });
+    const failedTurns = await repositories.turns.listByThread(thread.id);
+    expect(failedTurns).toEqual([
+      expect.objectContaining({
+        role: 'user',
+        content: 'Preserve this once for retry.',
+        deliveryState: 'failed',
+      }),
+    ]);
+    expect((await repositories.threads.get(thread.id))?.understanding).toEqual(
+      EMPTY_UNDERSTANDING,
+    );
+
+    vi.restoreAllMocks();
+    const retried = unwrap(await service.retryTurn(failedTurns[0]?.id ?? turnIdSchema.parse('missing')));
+    expect(retried.output).toEqual(VALID_QUESTION);
+    expect((await repositories.turns.listByThread(thread.id)).filter(
+      (turn) => turn.role === 'user',
+    )).toHaveLength(1);
+  });
+
+  it('rolls back completion when the fresh replacement thread cannot commit', async () => {
+    const { repositories, service } = await createServiceFixture();
+    const oldThread = unwrap(await service.startThread('Atomic finish'));
+    abortOnNthPut('threads', 2);
+
+    const result = await service.finishThread(oldThread.id);
+
+    expect(result).toMatchObject({
+      ok: false,
+      error: { code: 'storage_failure' },
+    });
+    const storedOldThread = await repositories.threads.get(oldThread.id);
+    expect(storedOldThread?.lifecycleState).toBe('active');
+    expect(storedOldThread?.completedAt).toBeUndefined();
+    expect((await repositories.threads.list()).map((thread) => thread.id)).toEqual([
+      oldThread.id,
+    ]);
+  });
+
   it('makes the pending user write durable before dispatch and persists accepted output afterward', async () => {
     const { client, repositories, service } = await createServiceFixture();
     const thread = unwrap(await service.startThread('A launch decision'));
     const response = createDeferred<NextQuestionResult>();
     const callOrder: string[] = [];
-    const baseTurns = repositories.turns;
-    const recordingRepositories: LocalRepositories = {
-      ...repositories,
-      turns: {
-        get: (id) => baseTurns.get(id),
-        listByThread: (threadId) => baseTurns.listByThread(threadId),
-        async put(turn) {
-          await baseTurns.put(turn);
-          if (turn.role === 'user' && turn.deliveryState === 'pending') {
-            callOrder.push('pending-write-complete');
-          }
-        },
-      },
-    };
-    const recordingService = new ConversationService({
-      repositories: recordingRepositories,
-      client,
-      ids: createIdGenerator(),
-      now: createClock(2_000),
-      telemetry: new ProductTelemetry(repositories.preferences, { now: createClock(3_000) }),
-    });
-    client.nextQuestionHandler = (context) => {
+    client.nextQuestionHandler = async (context) => {
+      const [storedTurns, storedThread] = await Promise.all([
+        repositories.turns.listByThread(thread.id),
+        repositories.threads.get(thread.id),
+      ]);
+      if (
+        storedTurns.at(-1)?.deliveryState === 'pending'
+        && storedThread?.turnIds.at(-1) === storedTurns.at(-1)?.id
+      ) {
+        callOrder.push('pending-write-complete');
+      }
       callOrder.push('network-dispatched');
       expect(context.turns.at(-1)).toMatchObject({
         role: 'user',
@@ -283,7 +369,7 @@ describe('ConversationService orchestration', () => {
       return response.promise;
     };
 
-    const pendingSubmission = recordingService.submitUserTurn(
+    const pendingSubmission = service.submitUserTurn(
       thread.id,
       'The handoff is where the launch gets stuck.',
     );
@@ -378,6 +464,29 @@ describe('ConversationService orchestration', () => {
       }),
     ]);
   });
+
+  it.each(['offline', 'provider_unavailable'] as const)(
+    'preserves failed writing for the typed %s application error',
+    async (code) => {
+      const { client, repositories, service } = await createServiceFixture();
+      const thread = unwrap(await service.startThread(`Typed ${code}`));
+      client.nextQuestionHandler = () => Promise.reject(new QuestioningClientError(code));
+
+      const result = await service.submitUserTurn(thread.id, 'Keep this writing retryable.');
+
+      expect(result).toMatchObject({
+        ok: false,
+        error: { code, retryable: true },
+      });
+      expect(await repositories.turns.listByThread(thread.id)).toEqual([
+        expect.objectContaining({
+          role: 'user',
+          content: 'Keep this writing retryable.',
+          deliveryState: 'failed',
+        }),
+      ]);
+    },
+  );
 
   it('runs Challenge and conclusion only through their explicit operations', async () => {
     const { repositories, service } = await createServiceFixture();
@@ -647,6 +756,30 @@ describe('ProductTelemetry', () => {
     expect(await telemetry.listEvents()).toEqual([]);
     expect(await repositories.preferences.get('productTelemetryEvents')).toBeUndefined();
   });
+
+  it('keeps opt-out final when another instance records concurrently', async () => {
+    const factory = new IDBFactory();
+    const recordingRepositories = await createLocalRepositories('local', factory);
+    const disablingRepositories = await createLocalRepositories('local', factory);
+    openRepositories.push(recordingRepositories, disablingRepositories);
+    const disablingTelemetry = new ProductTelemetry(disablingRepositories.preferences);
+    let optOut: Promise<void> | undefined;
+    const recordingTelemetry = new ProductTelemetry(recordingRepositories.preferences, {
+      now: () => {
+        optOut = disablingTelemetry.setEnabled(false);
+        return 50;
+      },
+    });
+    await recordingTelemetry.setEnabled(true);
+
+    await recordingTelemetry.record('turn_sent');
+    await optOut;
+
+    expect(await recordingRepositories.preferences.get('telemetryEnabled')).toBe(false);
+    expect(
+      await recordingRepositories.preferences.get('productTelemetryEvents'),
+    ).toBeUndefined();
+  });
 });
 
 describe('HttpQuestioningClient', () => {
@@ -722,6 +855,27 @@ describe('HttpQuestioningClient', () => {
     });
     await expect(invalid.nextQuestion(context)).rejects.toMatchObject({
       code: 'invalid_output',
+    });
+  });
+
+  it('maps offline preflight and unavailable-provider fetch failures', async () => {
+    let offlineFetchInvoked = false;
+    const offline = new HttpQuestioningClient({
+      isOnline: () => false,
+      fetch: () => {
+        offlineFetchInvoked = true;
+        return Promise.reject(new Error('Fetch must not run while offline.'));
+      },
+    });
+    await expect(offline.nextQuestion(context)).rejects.toMatchObject({ code: 'offline' });
+    expect(offlineFetchInvoked).toBe(false);
+
+    const unavailable = new HttpQuestioningClient({
+      isOnline: () => true,
+      fetch: () => Promise.reject(new TypeError('Network failed.')),
+    });
+    await expect(unavailable.nextQuestion(context)).rejects.toMatchObject({
+      code: 'provider_unavailable',
     });
   });
 
