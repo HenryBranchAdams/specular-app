@@ -1,5 +1,6 @@
 node_modules/
 dist/
+dist-server/
 .codegraph/
 .DS_Store
 .env

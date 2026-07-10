@@ -2,13 +2,17 @@
   "type": "module",
   "scripts": {
     "dev": "vite --host 0.0.0.0",
+    "dev:server": "node --watch --watch-path=server --watch-path=src/domain scripts/dev-model-server.mjs",
     "build": "vite build",
+    "build:server": "vite build --config vite.server.config.ts",
     "preview": "vite preview --host 0.0.0.0",
     "test": "vitest run",
     "test:watch": "vitest",
     "lint": "eslint .",
     "typecheck": "tsc --noEmit -p tsconfig.json && tsc --noEmit -p tsconfig.node.json",
-    "validate": "npm run typecheck && npm run lint && npm run test && npm run build",
+    "validate": "npm run typecheck && npm run lint && npm run test && npm run build && npm run build:server",
+    "start": "node dist-server/index.js",
+    "audit": "npm audit --omit=dev",
     "chatgpt:server": "node server.js",
     "chatgpt:inspect": "npx @modelcontextprotocol/inspector http://localhost:8787/mcp"
   },

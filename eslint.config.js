@@ -12,7 +12,7 @@ const nodeGlobals = {
 
 export default tseslint.config(
   {
-    ignores: ['dist', 'node_modules', 'public'],
+    ignores: ['dist', 'dist-server', 'node_modules', 'public'],
   },
   {
     files: ['**/*.js'],
