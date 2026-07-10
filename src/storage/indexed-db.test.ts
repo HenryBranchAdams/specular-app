@@ -22,10 +22,18 @@ import {
   createLocalRepositories,
   exportRecoverySnapshot,
 } from './indexed-db';
-import { migrations, type Migration } from './migrations';
+import {
+  AbortNextUpgradeFactory,
+  getRawAggregates,
+  openRawDatabase,
+  seedRawAggregate,
+} from './indexed-db.test-support';
 import type { LocalRepositories } from './repositories';
 
 const EXPORTED_AT = Date.UTC(2026, 6, 9, 12);
+
+type CreateParameterCount = Parameters<typeof createLocalRepositories>['length'];
+const HAS_EXACT_TWO_ARGUMENT_API: CreateParameterCount extends 1 | 2 ? true : false = true;
 
 const EMPTY_UNDERSTANDING = {
   claims: [],
@@ -120,62 +128,6 @@ function makeArchive(overrides: Partial<SpecularExport> = {}): SpecularExport {
   };
 }
 
-function requestResult<T>(request: IDBRequest<T>): Promise<T> {
-  return new Promise((resolve, reject) => {
-    request.addEventListener('success', () => {
-      resolve(request.result);
-    });
-    request.addEventListener('error', () => {
-      reject(request.error ?? new Error('IndexedDB request failed.'));
-    });
-  });
-}
-
-function transactionComplete(transaction: IDBTransaction): Promise<void> {
-  return new Promise((resolve, reject) => {
-    transaction.addEventListener('complete', () => {
-      resolve();
-    });
-    transaction.addEventListener('abort', () => {
-      reject(transaction.error ?? new Error('IndexedDB transaction aborted.'));
-    });
-    transaction.addEventListener('error', () => {
-      reject(transaction.error ?? new Error('IndexedDB transaction failed.'));
-    });
-  });
-}
-
-async function openRawDatabase(factory: IDBFactory): Promise<IDBDatabase> {
-  return requestResult(factory.open(DATABASE_NAME));
-}
-
-async function seedRawAggregate(
-  factory: IDBFactory,
-  storeName: 'threads' | 'turns' | 'capsules' | 'preferences',
-  aggregate: unknown,
-): Promise<void> {
-  const database = await openRawDatabase(factory);
-  const transaction = database.transaction(storeName, 'readwrite');
-  transaction.objectStore(storeName).put(aggregate);
-  await transactionComplete(transaction);
-  database.close();
-}
-
-async function getRawAggregates(
-  factory: IDBFactory,
-  storeName: 'threads' | 'turns' | 'capsules' | 'preferences',
-): Promise<unknown[]> {
-  const database = await openRawDatabase(factory);
-  const transaction = database.transaction(storeName, 'readonly');
-  const result: unknown = await requestResult(transaction.objectStore(storeName).getAll());
-  await transactionComplete(transaction);
-  database.close();
-  if (!Array.isArray(result)) {
-    throw new Error('Expected IndexedDB getAll to return an array.');
-  }
-  return result.map((value: unknown) => value);
-}
-
 async function seedCompleteThread(repositories: LocalRepositories): Promise<void> {
   const firstTurn = makeTurn();
   const secondTurn = makeTurn({
@@ -200,14 +152,41 @@ afterEach(() => {
 });
 
 describe('versioned owner-scoped IndexedDB persistence', () => {
-  it('does not export the raw unscoped database opener', () => {
-    expect(Object.hasOwn(indexedDbModule, 'openSpecularDatabase')).toBe(false);
+  it('exports only the bounded owner-scoped runtime surface', () => {
+    expect(Object.keys(indexedDbModule).sort()).toEqual([
+      'DATABASE_NAME',
+      'SPECULAR_DB_VERSION',
+      'StorageMigrationError',
+      'StorageValidationError',
+      'createLocalRepositories',
+      'exportRecoverySnapshot',
+    ]);
+    expect(HAS_EXACT_TWO_ARGUMENT_API).toBe(true);
+  });
+
+  it('does not accept a third-argument migration capability at runtime', async () => {
+    const factory = new IDBFactory();
+    let migrationInvoked = false;
+    // @ts-expect-error Runtime regression: production construction intentionally has no third arg.
+    const repositories = await createLocalRepositories('local', factory, {
+      version: 1,
+      migrations: [{
+        version: 1,
+        migrate() {
+          migrationInvoked = true;
+        },
+      }],
+    });
+
+    expect(migrationInvoked).toBe(false);
+    expect(await repositories.threads.list()).toEqual([]);
+    repositories.close();
   });
 
   it('creates the explicit version 1 schema', async () => {
     const factory = new IDBFactory();
     const repositories = await createLocalRepositories('local', factory);
-    const database = await openRawDatabase(factory);
+    const database = await openRawDatabase(factory, DATABASE_NAME);
 
     expect(database.name).toBe(DATABASE_NAME);
     expect(database.version).toBe(SPECULAR_DB_VERSION);
@@ -233,20 +212,13 @@ describe('versioned owner-scoped IndexedDB persistence', () => {
   });
 
   it('recovers a failed first migration without creating a database before a clean retry', async () => {
-    const factory = new IDBFactory();
-    const failingFirstMigration: Migration = {
-      version: 1,
-      migrate(database, transaction) {
-        migrations[0]?.migrate(database, transaction);
-        throw new Error('first migration failure');
-      },
-    };
+    const baseFactory = new IDBFactory();
+    const factory = new AbortNextUpgradeFactory(baseFactory);
 
-    await expect(createLocalRepositories('local', factory, {
-      version: 1,
-      migrations: [failingFirstMigration],
-    })).rejects.toBeInstanceOf(StorageMigrationError);
-    expect((await factory.databases()).map((database) => database.name)).not.toContain(
+    await expect(createLocalRepositories('local', factory)).rejects.toBeInstanceOf(
+      StorageMigrationError,
+    );
+    expect((await baseFactory.databases()).map((database) => database.name)).not.toContain(
       DATABASE_NAME,
     );
 
@@ -259,12 +231,12 @@ describe('versioned owner-scoped IndexedDB persistence', () => {
       capsules: [],
       preferences: [],
     });
-    expect((await factory.databases()).map((database) => database.name)).not.toContain(
+    expect((await baseFactory.databases()).map((database) => database.name)).not.toContain(
       DATABASE_NAME,
     );
 
     const repositories = await createLocalRepositories('local', factory);
-    const database = await openRawDatabase(factory);
+    const database = await openRawDatabase(baseFactory, DATABASE_NAME);
     expect(database.version).toBe(SPECULAR_DB_VERSION);
     expect([...database.objectStoreNames]).toEqual([
       'capsules',
@@ -280,7 +252,7 @@ describe('versioned owner-scoped IndexedDB persistence', () => {
     const factory = new IDBFactory();
     const local = await createLocalRepositories('local', factory);
     await local.threads.put(makeThread({ id: 'thread-local' }));
-    await seedRawAggregate(factory, 'threads', {
+    await seedRawAggregate(factory, DATABASE_NAME, 'threads', {
       ...makeThread({ id: 'thread-other' }),
       ownerScope: 'other',
     });
@@ -591,7 +563,7 @@ describe('versioned owner-scoped IndexedDB persistence', () => {
     const factory = new IDBFactory();
     const repositories = await createLocalRepositories('local', factory);
     await seedCompleteThread(repositories);
-    await seedRawAggregate(factory, 'threads', {
+    await seedRawAggregate(factory, DATABASE_NAME, 'threads', {
       ...makeThread({ id: 'thread-other' }),
       ownerScope: 'other',
     });
@@ -602,7 +574,7 @@ describe('versioned owner-scoped IndexedDB persistence', () => {
     expect(await repositories.turns.listByThread(asThreadId('thread-1'))).toEqual([]);
     expect(await repositories.capsules.list()).toEqual([]);
     expect(await repositories.preferences.list()).toEqual([]);
-    expect(await getRawAggregates(factory, 'threads')).toEqual([
+    expect(await getRawAggregates(factory, DATABASE_NAME, 'threads')).toEqual([
       expect.objectContaining({ id: 'thread-other', ownerScope: 'other' }),
     ]);
     repositories.close();
@@ -613,7 +585,7 @@ describe('versioned owner-scoped IndexedDB persistence', () => {
     const repositories = await createLocalRepositories('local', factory);
     await repositories.threads.put(makeThread({ id: 'thread-local' }));
     repositories.close();
-    await seedRawAggregate(factory, 'threads', {
+    await seedRawAggregate(factory, DATABASE_NAME, 'threads', {
       ...makeThread({ id: 'thread-other' }),
       ownerScope: 'other',
     });
@@ -636,31 +608,19 @@ describe('versioned owner-scoped IndexedDB persistence', () => {
   });
 
   it('aborts a failed migration, blocks writes, and exports recovery data non-destructively', async () => {
-    const factory = new IDBFactory();
-    const original = await createLocalRepositories('local', factory);
+    const baseFactory = new IDBFactory();
+    const original = await createLocalRepositories('local', baseFactory);
     await original.threads.put(makeThread({
       id: 'thread-preserved',
       title: 'private migration sentinel',
     }));
     original.close();
 
-    const duplicateThread = makeThread({
-      id: 'thread-preserved',
-      title: 'private migration sentinel',
-    });
-    const failingMigration: Migration = {
-      version: 2,
-      migrate(_database, transaction) {
-        void transaction.objectStore('threads').add(duplicateThread).catch(() => undefined);
-      },
-    };
+    const factory = new AbortNextUpgradeFactory(baseFactory, 2);
 
     let migrationError: unknown;
     try {
-      await createLocalRepositories('local', factory, {
-        version: 2,
-        migrations: [...migrations, failingMigration],
-      });
+      await createLocalRepositories('local', factory);
     } catch (error) {
       migrationError = error;
     }
@@ -682,7 +642,7 @@ describe('versioned owner-scoped IndexedDB persistence', () => {
     ]);
     expect(secondRecovery.stores).toEqual(firstRecovery.stores);
 
-    const preservedDatabase = await openRawDatabase(factory);
+    const preservedDatabase = await openRawDatabase(baseFactory, DATABASE_NAME);
     expect(preservedDatabase.version).toBe(1);
     preservedDatabase.close();
   });

@@ -76,11 +76,6 @@ interface OpenSpecularDatabaseOptions {
   migrations?: readonly Migration[];
 }
 
-export interface RepositoryInitializationOptions {
-  version?: number;
-  migrations?: readonly Migration[];
-}
-
 export class StorageMigrationError extends Error {
   readonly databaseName: string;
   readonly fromVersion: number;
@@ -676,7 +671,6 @@ export async function exportRecoverySnapshot(
 export async function createLocalRepositories(
   ownerScope: OwnerScope,
   indexedDBFactory?: IDBFactory,
-  initialization: RepositoryInitializationOptions = {},
 ): Promise<LocalRepositories> {
   const parsedOwnerScope = ownerScopeSchema.safeParse(ownerScope);
   if (!parsedOwnerScope.success) {
@@ -686,9 +680,9 @@ export async function createLocalRepositories(
   assertWritesAllowed(factory, DATABASE_NAME);
   const database = await openSpecularDatabase({
     databaseName: DATABASE_NAME,
-    version: initialization.version ?? SPECULAR_DB_VERSION,
+    version: SPECULAR_DB_VERSION,
     indexedDBFactory: factory,
-    migrations: initialization.migrations ?? schemaMigrations,
+    migrations: schemaMigrations,
   });
   const assertWritable = () => {
     assertWritesAllowed(factory, DATABASE_NAME);
