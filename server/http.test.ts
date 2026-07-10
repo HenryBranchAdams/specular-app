@@ -4,6 +4,7 @@ import {
   type IncomingHttpHeaders,
   type Server,
 } from 'node:http';
+import { createConnection } from 'node:net';
 import { afterEach, describe, expect, it } from 'vitest';
 import { z } from 'zod';
 import type { Operation, ThreadContext } from '../src/domain/contracts';
@@ -133,6 +134,8 @@ class ScriptedRepairingProvider implements RepairingQuestioningProvider {
   readonly configured: boolean;
   readonly modelId = 'scripted-model';
   readonly providerId = 'scripted';
+  generateCalls = 0;
+  repairCalls = 0;
   private readonly generateSteps: GenerateStep[];
   private readonly repairSteps: RepairStep[];
 
@@ -147,6 +150,7 @@ class ScriptedRepairingProvider implements RepairingQuestioningProvider {
   }
 
   async generate(request: ProviderRequest): Promise<ProviderAttempt> {
+    this.generateCalls += 1;
     const step = this.generateSteps.shift();
     if (step === undefined) {
       throw new Error('Unexpected provider generation call.');
@@ -158,6 +162,7 @@ class ScriptedRepairingProvider implements RepairingQuestioningProvider {
   }
 
   async repair(request: ProviderRepairRequest): Promise<ProviderAttempt> {
+    this.repairCalls += 1;
     const step = this.repairSteps.shift();
     if (step === undefined) {
       throw new Error('Unexpected provider repair call.');
@@ -350,6 +355,61 @@ async function nativeRequest(
     });
     request.on('error', reject);
     request.end(body);
+  });
+}
+
+async function rawTargetRequest(server: Server, target: string): Promise<NativeHttpResponse> {
+  const body = JSON.stringify({ context: context('next_question') });
+  const requestHead = [
+    `POST ${target} HTTP/1.1`,
+    `Host: 127.0.0.1:${String(serverPort(server))}`,
+    'Origin: https://specular.test',
+    'Content-Type: application/json',
+    `Content-Length: ${String(Buffer.byteLength(body))}`,
+    'Connection: close',
+    '',
+    body,
+  ].join('\r\n');
+
+  return await new Promise<NativeHttpResponse>((resolve, reject) => {
+    const socket = createConnection({ host: '127.0.0.1', port: serverPort(server) });
+    let rawResponse = '';
+    socket.setEncoding('utf8');
+    socket.on('connect', () => {
+      socket.end(requestHead);
+    });
+    socket.on('data', (chunk: string) => {
+      rawResponse += chunk;
+    });
+    socket.on('error', reject);
+    socket.on('end', () => {
+      const separator = rawResponse.indexOf('\r\n\r\n');
+      if (separator < 0) {
+        reject(new Error('Raw HTTP response did not contain a header terminator.'));
+        return;
+      }
+      const headerText = rawResponse.slice(0, separator);
+      const rawBody = rawResponse.slice(separator + 4);
+      const lines = headerText.split('\r\n');
+      const status = Number(lines[0]?.split(' ')[1]);
+      const headers: IncomingHttpHeaders = {};
+      for (const line of lines.slice(1)) {
+        const colon = line.indexOf(':');
+        if (colon > 0) {
+          headers[line.slice(0, colon).toLocaleLowerCase('en-US')] = line.slice(colon + 1).trim();
+        }
+      }
+      try {
+        resolve({
+          body: JSON.parse(rawBody) as unknown,
+          headers,
+          rawBody,
+          status,
+        });
+      } catch (error) {
+        reject(error instanceof Error ? error : new Error('Could not decode raw HTTP response.'));
+      }
+    });
   });
 }
 
@@ -834,6 +894,45 @@ describe('stateless model HTTP service', () => {
   });
 
   it.each([
+    "I'm going to kill myself tonight.",
+    'I’m going to kill myself tonight.',
+    "I have pills and I'm about to take them all tonight.",
+  ])('routes exact contraction and imminent-means safety text locally: %s', async (content) => {
+    const provider = new ScriptedRepairingProvider();
+    const telemetry = new CapturingMetadataSink();
+    const { server } = await startServer({ provider, telemetry });
+
+    const response = await nativeRequest(
+      server,
+      operationRequest('next_question', content),
+    );
+
+    expect(response.status).toBe(200);
+    validateOperationResult('next_question', successValue(response));
+    expect(provider.generateCalls).toBe(0);
+    expect(provider.repairCalls).toBe(0);
+    expect(telemetry.events).toHaveLength(1);
+  });
+
+  it('keeps the laughing idiom on the ordinary provider path', async () => {
+    const provider = new ScriptedRepairingProvider({
+      generate: [attempt(VALID_NEXT_QUESTION)],
+    });
+    const telemetry = new CapturingMetadataSink();
+    const { server } = await startServer({ provider, telemetry });
+
+    const response = await nativeRequest(
+      server,
+      operationRequest('next_question', 'I am going to kill myself laughing tonight.'),
+    );
+
+    expect(successValue(response)).toEqual(VALID_NEXT_QUESTION);
+    expect(provider.generateCalls).toBe(1);
+    expect(provider.repairCalls).toBe(0);
+    expect(telemetry.events).toHaveLength(1);
+  });
+
+  it.each([
     'I am about to tell my therapist that I used to hurt myself.',
     'I will not hurt myself today.',
   ])('keeps non-immediate self-harm references in normal reflective flow: %s', async (content) => {
@@ -867,6 +966,31 @@ describe('stateless model HTTP service', () => {
     );
 
     expect(successValue(response)).toEqual(providerValue);
+  });
+
+  it.each([
+    '/api/operations/challenge/../next-question',
+    '//example.invalid/api/operations/next-question',
+    '/api/operations/challenge\\..\\next-question',
+    '/api/operations/challenge/%2e%2e/next-question',
+    '/api/operations/challenge%2f..%2fnext-question',
+    '/api/operations/challenge%5c..%5cnext-question',
+    '/api/operations/%6eext-question',
+    'http://example.invalid/api/operations/next-question',
+  ])('rejects noncanonical raw request target without operation side effects: %s', async (target) => {
+    const provider = new ScriptedRepairingProvider({
+      generate: [attempt(VALID_NEXT_QUESTION)],
+    });
+    const telemetry = new CapturingMetadataSink();
+    const { server } = await startServer({ provider, telemetry });
+
+    const response = await rawTargetRequest(server, target);
+
+    expect(response.status).toBe(404);
+    expect(failure(response).code).toBe('invalid_output');
+    expect(provider.generateCalls).toBe(0);
+    expect(provider.repairCalls).toBe(0);
+    expect(telemetry.events).toHaveLength(0);
   });
 });
 

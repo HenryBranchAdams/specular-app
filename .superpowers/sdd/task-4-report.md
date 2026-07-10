@@ -124,7 +124,7 @@ The independent narrow re-review then approved all five prior Critical/Important
 ```text
 npm run test -- server/http.test.ts
 Test Files  1 passed (1)
-Tests  47 passed (47)
+Tests  59 passed (59)
 ```
 
 ### Full validation
@@ -132,9 +132,9 @@ Tests  47 passed (47)
 ```text
 npm run validate
 Test Files  6 passed (6)
-Tests  157 passed (157)
+Tests  169 passed (169)
 client build: PASS
-server build: PASS (dist-server/index.js, 51.12 kB)
+server build: PASS (dist-server/index.js, 51.15 kB)
 ```
 
 Typecheck and ESLint both pass with the server included in `tsconfig.node.json`.
@@ -187,3 +187,76 @@ No model call occurred. A prior compiled operation probe also returned typed `pr
 - Vite `8.0.0`–`8.0.15`: GHSA-v6wh-96g9-6wx3 and GHSA-fx2h-pf6j-xcff. npm reports that the available fix moves outside the stated dependency range and requires `--force`.
 
 These advisories were not introduced by Task 4. No live OpenAI smoke was run because a credential remains intentionally unavailable; readiness correctly reflects that state.
+
+## Controller Review Fixes
+
+Controller review status after commit `831b760` was `Needs fixes` for contraction/imminent-means safety recall, a nonliteral laughter false positive, and request-target normalization aliases. The fixes were completed under a new strict RED/GREEN cycle without credential access or live model calls.
+
+### Exact controller-fix RED
+
+Command:
+
+```bash
+npm run test -- server/http.test.ts
+```
+
+Result:
+
+```text
+Test Files  1 failed (1)
+Tests  9 failed | 50 passed (59)
+```
+
+The nine expected failures were:
+
+- all three exact contraction/imminent-means cases returned typed no-key 503 instead of local safety 200;
+- `I am going to kill myself laughing tonight.` incorrectly selected the safety result instead of the provider result;
+- raw dot-segment, scheme-relative, backslash, and percent-encoded-dot aliases normalized into the accepted next-question route and returned 200;
+- the absolute-form target returned 400 instead of the required noncanonical-target 404.
+
+The percent-encoded slash/backslash/character aliases already returned 404, and remained in the matrix to prevent future normalization regressions.
+
+### Controller-fix implementation
+
+- Curly apostrophes are normalized to straight apostrophes before the safety grammar runs.
+- First-person intent recognizes `I am` and `I'm`, and first-person means-plus-imminence recognizes `going to`, `about to`, `intend to`, and `plan to` forms.
+- The terminal self-harm phrase excludes the explicit nonliteral continuations `laughing`, `with laughter`, and `from laughing` before classification; it does not use an unrestricted content denylist.
+- HTTP routing now compares the raw Node `request.url` directly with the canonical operation, health, and readiness targets. It does not construct or consult a WHATWG URL for routing.
+- Raw TCP tests send the exact request-target bytes for dot segments, scheme-relative form, backslashes, encoded dot/slash/backslash/character forms, and absolute-form targets.
+- Every noncanonical target returns 404 with zero provider generation/repair calls and zero operation telemetry events.
+- Canonical POST, health, readiness, OPTIONS, CORS, timeout, repair, safety, and privacy behavior remains covered.
+
+### Exact controller-fix GREEN
+
+Focused suite:
+
+```text
+npm run test -- server/http.test.ts
+Test Files  1 passed (1)
+Tests  59 passed (59)
+```
+
+Static checks:
+
+```text
+npm run typecheck -> exit 0
+npm run lint -> exit 0
+```
+
+Full validation:
+
+```text
+npm run validate
+Test Files  6 passed (6)
+Tests  169 passed (169)
+client build: PASS
+server build: PASS (dist-server/index.js, 51.15 kB)
+```
+
+Final bounded probes:
+
+```text
+compiled GET /healthz -> 200 healthy
+compiled GET /readyz -> 503 provider_unavailable
+legacy MCP initialize -> protocol 2025-06-18, Specular 1.0.0
+```

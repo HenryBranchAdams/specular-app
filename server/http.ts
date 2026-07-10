@@ -275,15 +275,11 @@ export function createHttpServer(options: HttpServerOptions): Server {
 
     try {
       applyAllowedOrigin(request, response, options.config.allowedOrigins);
-      if (!request.url?.startsWith('/')) {
+      if (request.url === undefined) {
         throw new HttpBoundaryError(400, 'invalid_output');
       }
-      const url = new URL(request.url, 'http://localhost');
-      if (url.search !== '' || url.hash !== '') {
-        throw new HttpBoundaryError(404, 'invalid_output');
-      }
 
-      const operation = operationForPath(url.pathname);
+      const operation = operationForPath(request.url);
       if (operation !== undefined) {
         if (request.method === 'OPTIONS') {
           validatePreflight(request);
@@ -319,12 +315,12 @@ export function createHttpServer(options: HttpServerOptions): Server {
         return;
       }
 
-      if (url.pathname === '/healthz' || url.pathname === '/readyz') {
+      if (request.url === '/healthz' || request.url === '/readyz') {
         if (request.method !== 'GET') {
           response.setHeader('Allow', 'GET');
           throw new HttpBoundaryError(405, 'invalid_output');
         }
-        if (url.pathname === '/healthz') {
+        if (request.url === '/healthz') {
           sendJson(response, 200, { ok: true, value: { status: 'healthy' } });
           return;
         }
