@@ -1,9 +1,31 @@
-import React, { useMemo, useState } from 'react';
+import { useMemo, useState } from 'react';
 import { createRoot } from 'react-dom/client';
-import { ArrowRight, Brain, CheckCircle2, Compass, Eye, Flame, Pause, RefreshCw, Sparkles } from 'lucide-react';
+import { ArrowRight, CheckCircle2, Compass, Eye, Flame, Pause, RefreshCw, Sparkles } from 'lucide-react';
+import type { LucideIcon } from 'lucide-react';
 import './styles.css';
 
-const starterPrompts = [
+interface Prompt {
+  title: string;
+  body: string;
+  lens: string;
+}
+
+type ModeKey = 'Clarify' | 'Invert' | 'Distill';
+
+interface Mode {
+  key: ModeKey;
+  icon: LucideIcon;
+  text: string;
+}
+
+interface SavedReflection {
+  question: string;
+  text: string;
+  mode: ModeKey;
+  at: string;
+}
+
+const starterPrompts: readonly Prompt[] = [
   {
     title: 'What are you actually trying to understand?',
     body: 'Take the thought in front of you and zoom out one level. Is the real question about facts, values, timing, fear, taste, obligation, or identity?',
@@ -31,15 +53,21 @@ const starterPrompts = [
   },
 ];
 
-const modes = [
+const modes: readonly Mode[] = [
   { key: 'Clarify', icon: Eye, text: 'Turn a vague thought into a cleaner question or claim.' },
   { key: 'Invert', icon: RefreshCw, text: 'Look from the opposite side and test the hidden frame.' },
   { key: 'Distill', icon: Pause, text: 'Strip away noise until the central distinction is visible.' },
 ];
 
-function buildQuestion(input, mode) {
+function buildQuestion(input: string, mode: ModeKey): Prompt {
   const clean = input.trim();
-  if (!clean) return starterPrompts[0];
+  if (!clean) {
+    return starterPrompts[0] ?? {
+      title: 'What are you actually trying to understand?',
+      body: 'Take the thought in front of you and zoom out one level.',
+      lens: 'core question',
+    };
+  }
   const words = clean.split(/\s+/).slice(0, 18).join(' ');
   if (mode === 'Invert') {
     return {
@@ -64,10 +92,10 @@ function buildQuestion(input, mode) {
 
 function App() {
   const [input, setInput] = useState('');
-  const [mode, setMode] = useState('Invert');
-  const [selected, setSelected] = useState(starterPrompts[0]);
+  const [mode, setMode] = useState<ModeKey>('Invert');
+  const [selected, setSelected] = useState<Prompt>(() => buildQuestion('', 'Invert'));
   const [notes, setNotes] = useState('');
-  const [saved, setSaved] = useState([]);
+  const [saved, setSaved] = useState<SavedReflection[]>([]);
 
   const generated = useMemo(() => buildQuestion(input, mode), [input, mode]);
 
@@ -132,19 +160,19 @@ function App() {
         </div>
         <div className="modes">
           {modes.map(({ key, icon: Icon, text }) => (
-            <button key={key} onClick={() => setMode(key)} className={mode === key ? 'mode active' : 'mode'}>
+            <button key={key} onClick={() => { setMode(key); }} className={mode === key ? 'mode active' : 'mode'}>
               <Icon size={18}/><strong>{key}</strong><span>{text}</span>
             </button>
           ))}
         </div>
-        <textarea className="idea" value={input} onChange={e => setInput(e.target.value)} placeholder="Example: I think this argument is right, but I can't tell which part is actually doing the work..." />
+        <textarea className="idea" value={input} onChange={(event) => { setInput(event.target.value); }} placeholder="Example: I think this argument is right, but I can't tell which part is actually doing the work..." />
         <button className="button primary wide" onClick={generate}>Sharpen this thought</button>
         <div className="questionBox">
           <span className="pill">{selected.lens}</span>
           <h3>{selected.title}</h3>
           <p>{selected.body}</p>
         </div>
-        <textarea className="reflection" value={notes} onChange={e => setNotes(e.target.value)} placeholder="Write the rough answer. Precision beats polish." />
+        <textarea className="reflection" value={notes} onChange={(event) => { setNotes(event.target.value); }} placeholder="Write the rough answer. Precision beats polish." />
         <button className="button subtle" onClick={saveReflection}>Keep this note locally</button>
       </section>
 
@@ -158,4 +186,10 @@ function App() {
   );
 }
 
-createRoot(document.getElementById('root')).render(<App />);
+const rootElement = document.getElementById('root');
+
+if (rootElement === null) {
+  throw new Error('Specular root element was not found.');
+}
+
+createRoot(rootElement).render(<App />);
