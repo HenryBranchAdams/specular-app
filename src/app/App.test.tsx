@@ -1,3 +1,7 @@
+/// <reference types="node" />
+
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import {
   act,
   cleanup,
@@ -40,6 +44,8 @@ import type { LocalRepositories } from '../storage/repositories';
 import { App } from './App';
 import type { SpecularDependencies } from './use-specular';
 
+const styles = readFileSync(join(process.cwd(), 'src/styles.css'), 'utf8');
+
 const STARTERS = [
   'What are you thinking about?',
   'Give me a hot take.',
@@ -50,6 +56,10 @@ const STARTERS = [
   'What are you reconsidering?',
   'What feels true but still blurry?',
 ] as const;
+
+const STARTER_OPACITY_PATTERN = /--starter-opacity:\s*(\d+(?:\.\d+)?)/gu;
+const FOCUSED_STARTER_OPACITY_PATTERN =
+  /\.starter-deck__item:hover,\s*\.starter-deck__item:focus-within\s*\{[^}]*opacity:\s*1;/u;
 
 const EMPTY_UNDERSTANDING: ThreadUnderstanding = {
   claims: [],
@@ -264,6 +274,15 @@ describe('Specular mobile thinking loop', () => {
 
     expect(await screen.findByRole('list', { name: 'Ways to begin' }))
       .toHaveAttribute('data-motion', 'static');
+  });
+
+  it('keeps starter hierarchy accessible and fully reveals the targeted item', () => {
+    const starterOpacities = [...styles.matchAll(STARTER_OPACITY_PATTERN)]
+      .map((match) => Number.parseFloat(match[1] ?? '0'));
+
+    expect(starterOpacities.length).toBeGreaterThan(0);
+    expect(Math.min(...starterOpacities)).toBeGreaterThanOrEqual(0.5);
+    expect(styles).toMatch(FOCUSED_STARTER_OPACITY_PATTERN);
   });
 
   it('makes text, microphone, and send controls immediately accessible with touch geometry', async () => {
