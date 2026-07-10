@@ -35,7 +35,6 @@
 - Modify: package.json
 - Modify: index.html
 - Delete: src/main.jsx
-- Delete: server.js
 - Create: tsconfig.json
 - Create: tsconfig.node.json
 - Create: vite.config.ts
@@ -56,8 +55,7 @@
 Run:
 
 ~~~bash
-npm install idb openai
-npm install -D typescript @types/node @types/react @types/react-dom vite-plugin-pwa vitest jsdom @testing-library/react @testing-library/user-event @testing-library/jest-dom fake-indexeddb eslint @eslint/js typescript-eslint
+npm install -D typescript @types/node @types/react @types/react-dom vitest jsdom @testing-library/react @testing-library/user-event @testing-library/jest-dom fake-indexeddb eslint @eslint/js typescript-eslint
 ~~~
 
 Expected: package-lock.json resolves one version of React, TypeScript, Zod, and the OpenAI SDK with no install error.
@@ -168,7 +166,7 @@ Implement wordCount, questionMarkCount, containsProhibitedQuestion, containsFill
 
 - [ ] **Step 6: Add scripts and strict compiler/lint configuration**
 
-package.json scripts must include dev, dev:server, build, build:client, build:server, preview, start, test, test:watch, test:e2e, eval, eval:live, lint, typecheck, audit, and validate. TypeScript must enable strict, noUncheckedIndexedAccess, exactOptionalPropertyTypes, and noFallthroughCasesInSwitch.
+Preserve the runnable prototype server and its chatgpt:server/chatgpt:inspect scripts until Task 4 replaces it. package.json scripts in this task must include dev, build, preview, test, test:watch, lint, typecheck, and validate. TypeScript must enable strict, noUncheckedIndexedAccess, exactOptionalPropertyTypes, and noFallthroughCasesInSwitch.
 
 - [ ] **Step 7: Run and commit the foundation**
 
@@ -199,7 +197,13 @@ Commit: feat: establish Specular production contracts
 - Consumes: Thread, Turn, Capsule, OwnerScope, and stable identifiers from Task 1.
 - Produces: ThreadRepository, TurnRepository, CapsuleRepository, PreferencesRepository, ExportRepository, and createLocalRepositories(ownerScope, indexedDBFactory?).
 
-- [ ] **Step 1: Write failing repository, migration, export, import, and delete tests**
+- [ ] **Step 1: Install the IndexedDB adapter**
+
+Run: npm install idb
+
+Expected: idb is recorded as a production dependency.
+
+- [ ] **Step 2: Write failing repository, migration, export, import, and delete tests**
 
 Tests must prove:
 
@@ -229,13 +233,13 @@ it('round trips stable ids through export and import', async () => {
 
 Also cover schema version 1 creation, migration rollback preserving the original database, cascade deletion of a thread and its turns, capsule permanent deletion, sanitized export filenames, and deletion of all content.
 
-- [ ] **Step 2: Verify tests fail**
+- [ ] **Step 3: Verify tests fail**
 
 Run: npm run test -- src/storage/indexed-db.test.ts
 
 Expected: FAIL because createLocalRepositories is missing.
 
-- [ ] **Step 3: Implement repository interfaces and IndexedDB schema**
+- [ ] **Step 4: Implement repository interfaces and IndexedDB schema**
 
 Use database name specular-local and explicit version 1 stores:
 
@@ -250,15 +254,15 @@ export interface SpecularDbSchema extends DBSchema {
 
 Every repository method must build the ownerScope into its key or index range; no caller may provide an unscoped query.
 
-- [ ] **Step 4: Implement atomic migrations and recovery**
+- [ ] **Step 5: Implement atomic migrations and recovery**
 
 Keep migrations as a numbered top-level array. The upgrade transaction must abort on failure. Surface StorageMigrationError with databaseName, fromVersion, and toVersion but no user content. Block repository writes after migration failure and expose exportRecoverySnapshot without deleting or overwriting the original database.
 
-- [ ] **Step 5: Implement validated export, import, and permanent deletion**
+- [ ] **Step 6: Implement validated export, import, and permanent deletion**
 
 Export JSON must include format: specular-export, version: 1, exportedAt, ownerScope, threads, turns, capsules, and preferences. Validate imports strictly before a single write, preserve all ids, reject non-local owner scopes in the initial product, escape rendered content through React text nodes only, and sanitize the downloaded filename to specular-export-YYYY-MM-DD.json.
 
-- [ ] **Step 6: Verify and commit persistence**
+- [ ] **Step 7: Verify and commit persistence**
 
 Run:
 
@@ -348,22 +352,29 @@ Commit: feat: orchestrate private Specular threads
 - Create: server/rate-limit.ts
 - Create: server/safety.ts
 - Create: server/http.test.ts
+- Delete: server.js
 
 **Interfaces:**
 - Consumes: shared schemas, validators, QuestioningProvider, and ThreadContext.
 - Produces: POST /api/operations/next-question, /api/operations/challenge, /api/operations/conclusion; GET /healthz and /readyz; POST /api/realtime/session in Task 8.
 
-- [ ] **Step 1: Write failing HTTP and service contract tests**
+- [ ] **Step 1: Install the server adapter and add server scripts**
+
+Run: npm install openai
+
+Add dev:server, build:server, start, and audit scripts while replacing the prototype chatgpt:server entry with the compiled stateless server.
+
+- [ ] **Step 2: Write failing HTTP and service contract tests**
 
 Inject a scripted provider and metadata sink. Prove strict request bounds, origin allowlist, request-size rejection, rate limiting, timeout abort, secure headers and CSP, exactly one repair after invalid output, no repair after valid output, typed invalid_output after two failures, provider_unavailable without OPENAI_API_KEY in production, health without model calls, readiness without billable calls, and no user content in captured logs or telemetry.
 
-- [ ] **Step 2: Verify tests fail**
+- [ ] **Step 3: Verify tests fail**
 
 Run: npm run test -- server/http.test.ts
 
 Expected: FAIL because createHttpServer and createOperationService are missing.
 
-- [ ] **Step 3: Implement privacy-safe configuration and HTTP boundaries**
+- [ ] **Step 4: Implement privacy-safe configuration and HTTP boundaries**
 
 Parse environment once into:
 
@@ -384,19 +395,19 @@ export interface ServerConfig {
 
 Reject unknown JSON fields, cap strings and turns, set Content-Security-Policy, X-Content-Type-Options, Referrer-Policy, Permissions-Policy, and a specific Access-Control-Allow-Origin only after allowlist validation. Never log request bodies.
 
-- [ ] **Step 4: Implement the provider and structured prompts**
+- [ ] **Step 5: Implement the provider and structured prompts**
 
 OpenAIQuestioningProvider is server-only and uses strict structured outputs for the three operations. System instructions must encode one-question, no-why, no filler, user authority, Challenge permission, explicit conclusion, provenance, and safety rules. Model output is parsed with the shared schemas before deterministic validation.
 
-- [ ] **Step 5: Implement one repair attempt and typed errors**
+- [ ] **Step 6: Implement one repair attempt and typed errors**
 
 createOperationService calls the provider once, validates, and on ProductValidationError sends the invalid result plus only stable validator codes to provider.repair once. A second invalid result becomes invalid_output. Record request id, operation, latency, provider/model id, token counts if available, schema outcome, repair count, status, and error code; record no authored content or raw output.
 
-- [ ] **Step 6: Implement a clear crisis/safety path**
+- [ ] **Step 7: Implement a clear crisis/safety path**
 
 Safety handling must not diagnose. It must return a schema-valid, concise safety response with immediate-danger guidance appropriate to the configured region, invite concrete next-step information without asking why, and preserve the user’s ability to continue. Ordinary emotionally charged thoughts remain in the normal reflective path.
 
-- [ ] **Step 7: Verify and commit the model service**
+- [ ] **Step 8: Verify and commit the model service**
 
 Run:
 
@@ -432,33 +443,39 @@ Commit: feat: add stateless Specular model service
 - Consumes: ConversationService and owner-scoped repositories.
 - Produces: the canonical mobile PWA empty and thread surfaces with stable accessible labels and data-testid hooks used by Playwright.
 
-- [ ] **Step 1: Write failing component tests**
+- [ ] **Step 1: Install PWA build support**
+
+Run: npm install -D vite-plugin-pwa
+
+Expected: vite-plugin-pwa is recorded as a development dependency.
+
+- [ ] **Step 2: Write failing component tests**
 
 Tests must prove: all eight approved starters render as interchangeable copy; selecting any starter only focuses the composer and does not send a mode or strategy; reduced motion shows a static list; typing and voice controls are immediately available; sending begins a thread; history remains scrollable; the latest question has current-question semantics; Challenge me and Draft a conclusion remain available; new turns and errors use aria-live without moving focus; and every icon button has an accessible name.
 
-- [ ] **Step 2: Verify tests fail**
+- [ ] **Step 3: Verify tests fail**
 
 Run: npm run test -- src/app/App.test.tsx
 
 Expected: FAIL because the production app components are missing.
 
-- [ ] **Step 3: Configure the PWA and stable bootstrap**
+- [ ] **Step 4: Configure the PWA and stable bootstrap**
 
 Configure VitePWA with display standalone, start_url /, theme/background colors matching the deep black-violet base, generated service worker, offline shell caching, and update prompting. index.html must set viewport-fit=cover, theme-color, description, and manifest. src/main.tsx must render App under StrictMode with no layout-changing async font dependency.
 
-- [ ] **Step 4: Build the empty state and one-plane thread**
+- [ ] **Step 5: Build the empty state and one-plane thread**
 
 The StarterDeck contains the eight exact approved lines. CSS motion uses only translate and opacity, pauses after focus/pointer/keyboard interaction, and becomes a static list under prefers-reduced-motion. The thread uses one primary glass plane, quiet typographic turns, a compact title/capsules header, strong current-question emphasis, and no modes, lens names, dashboard, cards-on-cards, orb, or continuous blur animation.
 
-- [ ] **Step 5: Build the composer and persistent actions**
+- [ ] **Step 6: Build the composer and persistent actions**
 
 Composer supports multiline text, submit, disabled/pending/retry labels, voice affordance, safe-area padding, and 44-pixel targets. ThreadActions contains persistent Challenge me and Draft a conclusion controls with text labels. Ambient cyan/ultraviolet/lime light settles while the composer is focused or content is being read.
 
-- [ ] **Step 6: Implement accessible state and mobile CSS**
+- [ ] **Step 7: Implement accessible state and mobile CSS**
 
 Use warm-white type on deep black-violet, ember shift with explicit Challenge label, and pearl conclusion state. Include :focus-visible, forced-colors, prefers-contrast, prefers-reduced-motion, low-power class, 200% text zoom, min/max width handling, and env(safe-area-inset-*). Do not render user or model content as HTML.
 
-- [ ] **Step 7: Verify and commit the core PWA**
+- [ ] **Step 8: Verify and commit the core PWA**
 
 Run:
 
