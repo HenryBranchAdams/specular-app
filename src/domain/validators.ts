@@ -19,6 +19,7 @@ export type ProductValidationErrorCode =
   | 'word_limit'
   | 'filler'
   | 'unsolicited_synthesis'
+  | 'question_independence'
   | 'challenge_shape'
   | 'conclusion_shape';
 
@@ -61,6 +62,11 @@ const UNSOLICITED_SYNTHESIS_PATTERNS = [
   /\byou\s+(?:should|need\s+to|must)\b/iu,
 ];
 
+const UNQUALIFIED_REFERENCE_PATTERN = /\b(?:this|that|these|those|it|its|they|them|their|theirs|he|him|his|she|her|hers|here|there|former|latter)\b/iu;
+const SENTENCE_SEGMENTER = new Intl.Segmenter('en', { granularity: 'sentence' });
+const SENTENCE_ABBREVIATION_PATTERN = /\b(?:Dr|Mr|Mrs|Ms|Mx|Prof|Sr|Jr|St|vs|etc)\.|\b(?:e\.g|i\.e)\./giu;
+const PROTECTED_PERIOD = '\uE000';
+
 export function wordCount(value: string): number {
   const normalized = value.trim();
   return normalized.length === 0 ? 0 : normalized.split(/\s+/u).length;
@@ -93,14 +99,22 @@ function setupSentenceCount(value: string): number {
     return 0;
   }
 
-  return normalized.split(/(?<=[.!。！])\s+/u).filter(Boolean).length;
+  const abbreviationAware = normalized.replace(
+    SENTENCE_ABBREVIATION_PATTERN,
+    (abbreviation) => abbreviation.replaceAll('.', PROTECTED_PERIOD),
+  );
+  const boundedMissingSpaceNormalization = abbreviationAware.replace(
+    /([.!?。！？])(?=[\p{Lu}\p{Lt}\d])/gu,
+    '$1 ',
+  );
+
+  return Array.from(SENTENCE_SEGMENTER.segment(boundedMissingSpaceNormalization))
+    .filter(({ segment }) => segment.trim().length > 0)
+    .length;
 }
 
-function dependsOnVagueSetupReference(value: string): boolean {
-  const normalized = value.trim();
-  return /^(?:and|so|then)\b/iu.test(normalized)
-    || /^what\s+about\s+(?:that|this|it|these|those)\b/iu.test(normalized)
-    || /^(?:what|how)\s+(?:does|did|would|could|should|is|are|was|were)\s+(?:that|this|it|these|those)\s+(?:mean|change|matter|work|affect)\b/iu.test(normalized);
+function containsUnqualifiedReference(value: string): boolean {
+  return UNQUALIFIED_REFERENCE_PATTERN.test(value);
 }
 
 function fail(
@@ -150,8 +164,8 @@ function validateNextQuestion(value: unknown): NextQuestionResult {
   if (containsUnsolicitedSynthesis(combined)) {
     fail('unsolicited_synthesis', 'next_question', 'The response synthesizes before the user requested a conclusion.');
   }
-  if (dependsOnVagueSetupReference(parsed.data.question)) {
-    fail('schema_invalid', 'next_question', 'The question must remain understandable without its setup sentence.');
+  if (containsUnqualifiedReference(parsed.data.question)) {
+    fail('question_independence', 'next_question', 'The question must use explicit noun phrases instead of unqualified referents.');
   }
 
   return parsed.data;
@@ -194,14 +208,17 @@ function validateConclusion(value: unknown): WorkingConclusionResult {
     fail('word_limit', 'conclusion', 'The working thesis exceeds 150 words.');
   }
 
-  const allText = [
+  const generatedText = [
     parsed.data.thesis,
     ...parsed.data.insights,
     ...parsed.data.observations,
     ...parsed.data.tensions,
     ...parsed.data.caveats,
   ].join(' ');
-  if (containsFiller(allText)) {
+  if (containsProhibitedQuestion(generatedText)) {
+    fail('prohibited_question', 'conclusion', 'The generated conclusion contains prohibited justification phrasing.');
+  }
+  if (containsFiller(generatedText)) {
     fail('filler', 'conclusion', 'The response contains conversational filler.');
   }
 

@@ -208,6 +208,26 @@ describe('validateOperationResult', () => {
     )).toThrow(/schema_invalid/);
   });
 
+  it('rejects adjacent setup sentences without whitespace', () => {
+    expect(() => validateOperationResult(
+      'next_question',
+      normalResult(
+        'Which launch constraint matters most?',
+        'First sentence.Second sentence.',
+      ),
+    )).toThrow(/schema_invalid/);
+  });
+
+  it('treats an honorific abbreviation as part of one setup sentence', () => {
+    expect(validateOperationResult(
+      'next_question',
+      normalResult(
+        'Which launch constraint matters most?',
+        'Dr. Patel disagreed.',
+      ),
+    ).kind).toBe('question');
+  });
+
   it('requires the normal question to end in its only question mark', () => {
     expect(() => validateOperationResult(
       'next_question',
@@ -219,7 +239,26 @@ describe('validateOperationResult', () => {
     expect(() => validateOperationResult(
       'next_question',
       normalResult('What does that mean?', 'One boundary is visible.'),
-    )).toThrow(/schema_invalid/);
+    )).toThrow(/question_independence/);
+  });
+
+  it.each([
+    'Which part of that matters most?',
+    'Who owns this?',
+    'What happens if it fails?',
+    'Which of these constraints matters most?',
+  ])('rejects an unqualified referent with question_independence: %s', (question) => {
+    expect(() => validateOperationResult(
+      'next_question',
+      normalResult(question),
+    )).toThrow(/question_independence/);
+  });
+
+  it('accepts an independently understandable question with an explicit noun phrase', () => {
+    expect(validateOperationResult(
+      'next_question',
+      normalResult('Which launch constraint matters most?'),
+    ).kind).toBe('question');
   });
 
   it('accepts a normal turn at 45 words and rejects one at 46 words', () => {
@@ -298,5 +337,58 @@ describe('validateOperationResult', () => {
       'conclusion',
       conclusionWith(insights, [...threeTensions, 'Tension 4.']),
     )).toThrow(/conclusion_shape/);
+  });
+
+  it.each([
+    {
+      field: 'thesis',
+      result: {
+        ...conclusionWith(['Insight 1.', 'Insight 2.', 'Insight 3.'], []),
+        thesis: 'Why the launch stalled remains the central uncertainty.',
+      },
+    },
+    {
+      field: 'insights',
+      result: conclusionWith([
+        'What makes you think the boundary is stable?',
+        'Insight 2.',
+        'Insight 3.',
+      ], []),
+    },
+    {
+      field: 'observations',
+      result: {
+        ...conclusionWith(['Insight 1.', 'Insight 2.', 'Insight 3.'], []),
+        observations: ['What led you to believe the handoff failed?'],
+      },
+    },
+    {
+      field: 'tensions',
+      result: conclusionWith(
+        ['Insight 1.', 'Insight 2.', 'Insight 3.'],
+        ['How come nobody objected?'],
+      ),
+    },
+    {
+      field: 'caveats',
+      result: {
+        ...conclusionWith(['Insight 1.', 'Insight 2.', 'Insight 3.'], []),
+        caveats: ['The thread does not establish why the launch stalled.'],
+      },
+    },
+  ])('rejects prohibited phrasing in generated conclusion $field', ({ result }) => {
+    expect(() => validateOperationResult('conclusion', result)).toThrow(/prohibited_question/);
+  });
+
+  it('does not scan user-authored conclusion provenance for prohibited phrasing', () => {
+    const result = {
+      ...conclusionWith(['Insight 1.', 'Insight 2.', 'Insight 3.'], []),
+      provenance: [{
+        turnId: 'turn-1',
+        excerpt: 'Why did nobody object, and what makes you think the launch failed?',
+      }],
+    };
+
+    expect(validateOperationResult('conclusion', result).kind).toBe('working_conclusion');
   });
 });
