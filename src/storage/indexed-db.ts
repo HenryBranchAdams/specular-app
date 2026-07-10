@@ -69,10 +69,15 @@ export interface SpecularDbSchema extends DBSchema {
   };
 }
 
-export interface OpenSpecularDatabaseOptions {
+interface OpenSpecularDatabaseOptions {
   databaseName?: string;
   version?: number;
   indexedDBFactory?: IDBFactory;
+  migrations?: readonly Migration[];
+}
+
+export interface RepositoryInitializationOptions {
+  version?: number;
   migrations?: readonly Migration[];
 }
 
@@ -133,6 +138,18 @@ function rememberMigrationFailure(
   migrationFailures.set(factory, failures);
 }
 
+function clearFailedFirstMigration(factory: IDBFactory, databaseName: string): void {
+  const failures = migrationFailures.get(factory);
+  const failure = failures?.get(databaseName);
+  if (failures === undefined || failure?.fromVersion !== 0) {
+    return;
+  }
+  failures.delete(databaseName);
+  if (failures.size === 0) {
+    migrationFailures.delete(factory);
+  }
+}
+
 function assertWritesAllowed(factory: IDBFactory, databaseName: string): void {
   const failure = migrationFailureFor(factory, databaseName);
   if (failure !== undefined) {
@@ -156,7 +173,7 @@ function applyMigrations(
   }
 }
 
-export function openSpecularDatabase(
+function openSpecularDatabase(
   options: OpenSpecularDatabaseOptions = {},
 ): Promise<IDBPDatabase<SpecularDbSchema>> {
   const databaseName = options.databaseName ?? DATABASE_NAME;
@@ -567,6 +584,31 @@ function transactionComplete(transaction: IDBTransaction): Promise<void> {
   });
 }
 
+function openExistingDatabase(
+  factory: IDBFactory,
+  databaseName: string,
+): Promise<IDBDatabase | undefined> {
+  return new Promise((resolve, reject) => {
+    const request = factory.open(databaseName);
+    let preventedCreation = false;
+
+    request.addEventListener('upgradeneeded', () => {
+      preventedCreation = true;
+      request.transaction?.abort();
+    });
+    request.addEventListener('success', () => {
+      resolve(request.result);
+    });
+    request.addEventListener('error', () => {
+      if (preventedCreation) {
+        resolve(undefined);
+        return;
+      }
+      reject(request.error ?? new Error('Unable to open existing IndexedDB database.'));
+    });
+  });
+}
+
 function recoveryValuesForOwner(values: unknown[], ownerScope: OwnerScope): unknown[] {
   return values.filter((value) => hasOwnerScope(value, ownerScope));
 }
@@ -581,13 +623,26 @@ export async function exportRecoverySnapshot(
     throw new StorageValidationError('Invalid recovery owner scope.');
   }
   const factory = indexedDBFactoryOrDefault(indexedDBFactory);
-  const database = await requestResult(factory.open(databaseName));
+  const database = await openExistingDatabase(factory, databaseName);
   const stores: RecoveryStores = {
     threads: [],
     turns: [],
     capsules: [],
     preferences: [],
   };
+
+  if (database === undefined) {
+    clearFailedFirstMigration(factory, databaseName);
+    return {
+      format: RECOVERY_FORMAT,
+      version: RECOVERY_VERSION,
+      exportedAt: Date.now(),
+      ownerScope: parsedOwnerScope.data,
+      databaseName,
+      databaseVersion: 0,
+      stores,
+    };
+  }
 
   try {
     const availableStoreNames = STORE_NAMES.filter((name) => database.objectStoreNames.contains(name));
@@ -621,6 +676,7 @@ export async function exportRecoverySnapshot(
 export async function createLocalRepositories(
   ownerScope: OwnerScope,
   indexedDBFactory?: IDBFactory,
+  initialization: RepositoryInitializationOptions = {},
 ): Promise<LocalRepositories> {
   const parsedOwnerScope = ownerScopeSchema.safeParse(ownerScope);
   if (!parsedOwnerScope.success) {
@@ -630,9 +686,9 @@ export async function createLocalRepositories(
   assertWritesAllowed(factory, DATABASE_NAME);
   const database = await openSpecularDatabase({
     databaseName: DATABASE_NAME,
-    version: SPECULAR_DB_VERSION,
+    version: initialization.version ?? SPECULAR_DB_VERSION,
     indexedDBFactory: factory,
-    migrations: schemaMigrations,
+    migrations: initialization.migrations ?? schemaMigrations,
   });
   const assertWritable = () => {
     assertWritesAllowed(factory, DATABASE_NAME);

@@ -109,9 +109,7 @@ const specularExportSchema = z.object({
   capsules: z.array(capsuleSchema),
   preferences: z.array(userPreferenceSchema),
 }).strict().superRefine((archive, refinement) => {
-  addDuplicateIdIssues(archive.threads, 'thread', refinement);
-  addDuplicateIdIssues(archive.turns, 'turn', refinement);
-  addDuplicateIdIssues(archive.capsules, 'capsule', refinement);
+  addDuplicateAggregateIdIssues(archive, refinement);
   addDuplicateKeyIssues(
     archive.preferences,
     'preference',
@@ -121,12 +119,27 @@ const specularExportSchema = z.object({
   addArchiveIntegrityIssues(archive, refinement);
 });
 
-function addDuplicateIdIssues(
-  values: { id: string }[],
-  label: string,
+function addDuplicateAggregateIdIssues(
+  archive: Pick<SpecularExport, 'threads' | 'turns' | 'capsules'>,
   refinement: z.RefinementCtx,
 ): void {
-  addDuplicateKeyIssues(values, label, refinement, (value) => value.id);
+  const seen = new Set<string>();
+  const inspect = (values: { id: string }[], path: string): void => {
+    values.forEach((value, index) => {
+      if (seen.has(value.id)) {
+        refinement.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: 'Duplicate aggregate identifier.',
+          path: [path, index, 'id'],
+        });
+      }
+      seen.add(value.id);
+    });
+  };
+
+  inspect(archive.threads, 'threads');
+  inspect(archive.turns, 'turns');
+  inspect(archive.capsules, 'capsules');
 }
 
 function addDuplicateKeyIssues<T>(

@@ -14,13 +14,13 @@ import {
   serializeExport,
   type SpecularExport,
 } from './export';
+import * as indexedDbModule from './indexed-db';
 import {
   DATABASE_NAME,
   SPECULAR_DB_VERSION,
   StorageMigrationError,
   createLocalRepositories,
   exportRecoverySnapshot,
-  openSpecularDatabase,
 } from './indexed-db';
 import { migrations, type Migration } from './migrations';
 import type { LocalRepositories } from './repositories';
@@ -200,6 +200,10 @@ afterEach(() => {
 });
 
 describe('versioned owner-scoped IndexedDB persistence', () => {
+  it('does not export the raw unscoped database opener', () => {
+    expect(Object.hasOwn(indexedDbModule, 'openSpecularDatabase')).toBe(false);
+  });
+
   it('creates the explicit version 1 schema', async () => {
     const factory = new IDBFactory();
     const repositories = await createLocalRepositories('local', factory);
@@ -224,6 +228,50 @@ describe('versioned owner-scoped IndexedDB persistence', () => {
     expect([...transaction.objectStore('preferences').indexNames]).toEqual([]);
     transaction.abort();
 
+    database.close();
+    repositories.close();
+  });
+
+  it('recovers a failed first migration without creating a database before a clean retry', async () => {
+    const factory = new IDBFactory();
+    const failingFirstMigration: Migration = {
+      version: 1,
+      migrate(database, transaction) {
+        migrations[0]?.migrate(database, transaction);
+        throw new Error('first migration failure');
+      },
+    };
+
+    await expect(createLocalRepositories('local', factory, {
+      version: 1,
+      migrations: [failingFirstMigration],
+    })).rejects.toBeInstanceOf(StorageMigrationError);
+    expect((await factory.databases()).map((database) => database.name)).not.toContain(
+      DATABASE_NAME,
+    );
+
+    const recovery = await exportRecoverySnapshot('local', factory);
+
+    expect(recovery.databaseVersion).toBe(0);
+    expect(recovery.stores).toEqual({
+      threads: [],
+      turns: [],
+      capsules: [],
+      preferences: [],
+    });
+    expect((await factory.databases()).map((database) => database.name)).not.toContain(
+      DATABASE_NAME,
+    );
+
+    const repositories = await createLocalRepositories('local', factory);
+    const database = await openRawDatabase(factory);
+    expect(database.version).toBe(SPECULAR_DB_VERSION);
+    expect([...database.objectStoreNames]).toEqual([
+      'capsules',
+      'preferences',
+      'threads',
+      'turns',
+    ]);
     database.close();
     repositories.close();
   });
@@ -381,6 +429,105 @@ describe('versioned owner-scoped IndexedDB persistence', () => {
     repositories.close();
   });
 
+  it('rejects ids reused across aggregate kinds before an import writes', async () => {
+    const factory = new IDBFactory();
+    const repositories = await createLocalRepositories('local', factory);
+    await repositories.threads.put(makeThread({ id: 'thread-existing' }));
+
+    const sharedThreadTurnId = 'shared-thread-turn';
+    const sharedThreadTurn = makeTurn({
+      id: sharedThreadTurnId,
+      threadId: sharedThreadTurnId,
+    });
+
+    const sharedThreadCapsuleId = 'shared-thread-capsule';
+    const threadCapsuleFirstTurn = makeTurn({
+      id: 'thread-capsule-turn-1',
+      threadId: sharedThreadCapsuleId,
+    });
+    const threadCapsuleSecondTurn = makeTurn({
+      id: 'thread-capsule-turn-2',
+      threadId: sharedThreadCapsuleId,
+      position: 1,
+    });
+    const threadCapsuleConclusion = {
+      ...makeCapsule().conclusion,
+      provenance: [{
+        turnId: threadCapsuleFirstTurn.id,
+        excerpt: 'A thought worth examining.',
+      }],
+    };
+
+    const sharedTurnCapsuleId = 'shared-turn-capsule';
+    const turnCapsuleThreadId = 'thread-for-turn-capsule';
+    const sharedTurnCapsule = makeTurn({
+      id: sharedTurnCapsuleId,
+      threadId: turnCapsuleThreadId,
+    });
+    const turnCapsuleSecondTurn = makeTurn({
+      id: 'turn-capsule-turn-2',
+      threadId: turnCapsuleThreadId,
+      position: 1,
+    });
+    const turnCapsuleConclusion = {
+      ...makeCapsule().conclusion,
+      provenance: [{
+        turnId: sharedTurnCapsule.id,
+        excerpt: 'A thought worth examining.',
+      }],
+    };
+
+    const invalidArchives = [
+      makeArchive({
+        threads: [makeThread({
+          id: sharedThreadTurnId,
+          turnIds: [sharedThreadTurn.id],
+        })],
+        turns: [sharedThreadTurn],
+      }),
+      makeArchive({
+        threads: [makeThread({
+          id: sharedThreadCapsuleId,
+          turnIds: [threadCapsuleFirstTurn.id, threadCapsuleSecondTurn.id],
+        })],
+        turns: [threadCapsuleFirstTurn, threadCapsuleSecondTurn],
+        capsules: [makeCapsule({
+          id: sharedThreadCapsuleId,
+          sourceThreadId: sharedThreadCapsuleId,
+          sourceTurnRange: {
+            startTurnId: threadCapsuleFirstTurn.id,
+            endTurnId: threadCapsuleSecondTurn.id,
+          },
+          conclusion: threadCapsuleConclusion,
+        })],
+      }),
+      makeArchive({
+        threads: [makeThread({
+          id: turnCapsuleThreadId,
+          turnIds: [sharedTurnCapsule.id, turnCapsuleSecondTurn.id],
+        })],
+        turns: [sharedTurnCapsule, turnCapsuleSecondTurn],
+        capsules: [makeCapsule({
+          id: sharedTurnCapsuleId,
+          sourceThreadId: turnCapsuleThreadId,
+          sourceTurnRange: {
+            startTurnId: sharedTurnCapsule.id,
+            endTurnId: turnCapsuleSecondTurn.id,
+          },
+          conclusion: turnCapsuleConclusion,
+        })],
+      }),
+    ];
+
+    for (const archive of invalidArchives) {
+      await expect(repositories.export.importAll(archive)).rejects.toThrow(/duplicate|unique/i);
+    }
+    expect((await repositories.threads.list()).map((thread) => thread.id)).toEqual([
+      'thread-existing',
+    ]);
+    repositories.close();
+  });
+
   it('rejects relationally corrupt archives before replacing valid local data', async () => {
     const factory = new IDBFactory();
     const repositories = await createLocalRepositories('local', factory);
@@ -490,13 +637,8 @@ describe('versioned owner-scoped IndexedDB persistence', () => {
 
   it('aborts a failed migration, blocks writes, and exports recovery data non-destructively', async () => {
     const factory = new IDBFactory();
-    const original = await openSpecularDatabase({
-      databaseName: DATABASE_NAME,
-      version: 1,
-      indexedDBFactory: factory,
-      migrations,
-    });
-    await original.put('threads', makeThread({
+    const original = await createLocalRepositories('local', factory);
+    await original.threads.put(makeThread({
       id: 'thread-preserved',
       title: 'private migration sentinel',
     }));
@@ -515,10 +657,8 @@ describe('versioned owner-scoped IndexedDB persistence', () => {
 
     let migrationError: unknown;
     try {
-      await openSpecularDatabase({
-        databaseName: DATABASE_NAME,
+      await createLocalRepositories('local', factory, {
         version: 2,
-        indexedDBFactory: factory,
         migrations: [...migrations, failingMigration],
       });
     } catch (error) {
