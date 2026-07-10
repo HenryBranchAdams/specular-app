@@ -7,6 +7,52 @@ import {
   wordCount,
 } from './validators';
 
+const EMPTY_UNDERSTANDING = {
+  claims: [],
+  observations: [],
+  stakeholders: [],
+  contexts: [],
+  distinctions: [],
+  tensions: [],
+  exploredBlindSpots: [],
+  unexploredBlindSpots: [],
+};
+
+function normalResult(question: string, setup?: string) {
+  return {
+    kind: 'question',
+    ...(setup === undefined ? {} : { setup }),
+    question,
+    understanding: EMPTY_UNDERSTANDING,
+  };
+}
+
+function questionWithWordCount(count: number, terminal = '?'): string {
+  return [
+    ...Array.from({ length: count - 1 }, () => 'word'),
+    `boundary${terminal}`,
+  ].join(' ');
+}
+
+function repeatedWords(count: number, word = 'position'): string {
+  return Array.from({ length: count }, () => word).join(' ');
+}
+
+function conclusionWith(
+  insights: string[],
+  tensions: string[],
+) {
+  return {
+    kind: 'working_conclusion',
+    thesis: 'My current read is that the team needs a smaller reversible launch.',
+    insights,
+    observations: ['Two prior launches stalled during handoff.'],
+    tensions,
+    caveats: ['The thread contains no customer interview evidence.'],
+    provenance: [{ turnId: 'turn-1', excerpt: 'The handoff is where it gets stuck.' }],
+  };
+}
+
 describe('validateOperationResult', () => {
   it('accepts one concise normal question', () => {
     expect(validateOperationResult('next_question', {
@@ -126,5 +172,131 @@ describe('validateOperationResult', () => {
     expect(questionMarkCount('One? Two？')).toBe(2);
     expect(containsProhibitedQuestion('HOW COME nobody objected?')).toBe(true);
     expect(containsFiller('Thanks for sharing. What changed?')).toBe(true);
+  });
+
+  it('accepts an omitted setup and a single-sentence setup', () => {
+    expect(validateOperationResult(
+      'next_question',
+      normalResult('Which customer notices the difference first?'),
+    ).kind).toBe('question');
+    expect(validateOperationResult(
+      'next_question',
+      normalResult(
+        'Which customer notices the difference first?',
+        'Let us make the boundary concrete.',
+      ),
+    ).kind).toBe('question');
+  });
+
+  it('rejects a question mark in setup even when the question has none', () => {
+    expect(() => validateOperationResult(
+      'next_question',
+      normalResult(
+        'Which customer notices the difference first.',
+        'Could this be the boundary?',
+      ),
+    )).toThrow(/question_count/);
+  });
+
+  it('rejects more than one setup sentence', () => {
+    expect(() => validateOperationResult(
+      'next_question',
+      normalResult(
+        'Which customer notices the difference first?',
+        'One boundary is visible. Another remains open.',
+      ),
+    )).toThrow(/schema_invalid/);
+  });
+
+  it('requires the normal question to end in its only question mark', () => {
+    expect(() => validateOperationResult(
+      'next_question',
+      normalResult('Which customer notices first? Compare the result.'),
+    )).toThrow(/question_count/);
+  });
+
+  it('rejects a normal question that depends on a vague setup reference', () => {
+    expect(() => validateOperationResult(
+      'next_question',
+      normalResult('What does that mean?', 'One boundary is visible.'),
+    )).toThrow(/schema_invalid/);
+  });
+
+  it('accepts a normal turn at 45 words and rejects one at 46 words', () => {
+    expect(validateOperationResult(
+      'next_question',
+      normalResult(questionWithWordCount(45)),
+    ).kind).toBe('question');
+    expect(() => validateOperationResult(
+      'next_question',
+      normalResult(questionWithWordCount(46)),
+    )).toThrow(/word_limit/);
+  });
+
+  it('accepts a blind-spot Challenge at 55 words and rejects one at 56 words', () => {
+    expect(validateOperationResult('challenge', {
+      kind: 'blind_spot',
+      question: questionWithWordCount(55),
+    }).kind).toBe('blind_spot');
+    expect(() => validateOperationResult('challenge', {
+      kind: 'blind_spot',
+      question: questionWithWordCount(56),
+    })).toThrow(/word_limit/);
+  });
+
+  it('accepts a counter-position at 100 words and rejects one at 101 words', () => {
+    const question = 'Which concrete signal would change course?';
+    const atLimit = {
+      kind: 'counter_position',
+      counterPosition: repeatedWords(94),
+      question,
+    };
+    const overLimit = {
+      ...atLimit,
+      counterPosition: repeatedWords(95),
+    };
+
+    expect(wordCount(`${atLimit.counterPosition} ${question}`)).toBe(100);
+    expect(validateOperationResult('challenge', atLimit).kind).toBe('counter_position');
+    expect(wordCount(`${overLimit.counterPosition} ${question}`)).toBe(101);
+    expect(() => validateOperationResult('challenge', overLimit)).toThrow(/word_limit/);
+  });
+
+  it('requires a terminal Challenge question mark and accepts either mark style', () => {
+    expect(() => validateOperationResult('challenge', {
+      kind: 'counter_position',
+      counterPosition: 'A credible alternative is that the boundary is premature.',
+      question: 'Which concrete signal changes course? Compare the outcomes.',
+    })).toThrow(/challenge_shape/);
+    expect(validateOperationResult('challenge', {
+      kind: 'counter_position',
+      counterPosition: 'A credible alternative is that the boundary is premature.',
+      question: 'Which concrete signal changes course？',
+    }).kind).toBe('counter_position');
+  });
+
+  it('accepts five conclusion insights and rejects six', () => {
+    const fiveInsights = Array.from({ length: 5 }, (_, index) => `Insight ${String(index + 1)}.`);
+    expect(validateOperationResult(
+      'conclusion',
+      conclusionWith(fiveInsights, []),
+    ).kind).toBe('working_conclusion');
+    expect(() => validateOperationResult(
+      'conclusion',
+      conclusionWith([...fiveInsights, 'Insight 6.'], []),
+    )).toThrow(/conclusion_shape/);
+  });
+
+  it('accepts three conclusion tensions and rejects four', () => {
+    const insights = ['Insight 1.', 'Insight 2.', 'Insight 3.'];
+    const threeTensions = ['Tension 1.', 'Tension 2.', 'Tension 3.'];
+    expect(validateOperationResult(
+      'conclusion',
+      conclusionWith(insights, threeTensions),
+    ).kind).toBe('working_conclusion');
+    expect(() => validateOperationResult(
+      'conclusion',
+      conclusionWith(insights, [...threeTensions, 'Tension 4.']),
+    )).toThrow(/conclusion_shape/);
   });
 });

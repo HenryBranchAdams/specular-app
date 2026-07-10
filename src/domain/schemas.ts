@@ -147,12 +147,49 @@ export const capsuleSchema = z.object({
   sourceTurnRange: sourceTurnRangeSchema,
 }).strict();
 
+export const threadContextThreadSchema = z.object({
+  id: threadIdSchema,
+}).strict();
+
 export const threadContextSchema = z.object({
+  thread: threadContextThreadSchema,
   turns: z.array(turnSchema).max(MAX_CONTEXT_TURNS),
   understanding: threadUnderstandingSchema,
   provisionalConclusion: workingConclusionSchema.optional(),
   operation: operationSchema,
-}).strict();
+}).strict().superRefine((context, refinement) => {
+  const positions = new Set<number>();
+  let previousPosition: number | undefined;
+
+  context.turns.forEach((turn, index) => {
+    if (turn.threadId !== context.thread.id) {
+      refinement.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: 'Every context turn must belong to thread.id.',
+        path: ['turns', index, 'threadId'],
+      });
+    }
+
+    if (positions.has(turn.position)) {
+      refinement.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: 'Context turn positions must be unique.',
+        path: ['turns', index, 'position'],
+      });
+    }
+
+    if (previousPosition !== undefined && turn.position <= previousPosition) {
+      refinement.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: 'Context turns must be strictly ordered by increasing position.',
+        path: ['turns', index, 'position'],
+      });
+    }
+
+    positions.add(turn.position);
+    previousPosition = turn.position;
+  });
+});
 
 export const specularErrorCodeSchema = z.enum([
   'offline',
@@ -195,6 +232,7 @@ export type Turn = z.infer<typeof turnSchema>;
 export type Thread = z.infer<typeof threadSchema>;
 export type SourceTurnRange = z.infer<typeof sourceTurnRangeSchema>;
 export type Capsule = z.infer<typeof capsuleSchema>;
+export type ThreadContextThread = z.infer<typeof threadContextThreadSchema>;
 export type ThreadContext = z.infer<typeof threadContextSchema>;
 export type SpecularErrorCode = z.infer<typeof specularErrorCodeSchema>;
 export type SpecularError = z.infer<typeof specularErrorSchema>;

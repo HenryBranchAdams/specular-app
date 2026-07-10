@@ -30,11 +30,7 @@ h3 { margin: 0; letter-spacing: -.035em; color: #111827; }
 .windowBar span { width: 11px; height: 11px; border-radius: 999px; background: #e5e7eb; }
 .windowBar span:first-child { background: #f87171; } .windowBar span:nth-child(2) { background: #fbbf24; } .windowBar span:nth-child(3) { background: #34d399; }
 .windowBar p { margin-left: 12px; color: #64748b; font-size: 13px; font-weight: 650; }
-.mockGrid { display: grid; grid-template-columns: 220px 1fr; min-height: 390px; background: #f8faf9; }
-.rail { padding: 22px; border-right: 1px solid rgba(15,23,42,.08); background: #fff; }
-.rail p { color: #94a3b8; font-size: 12px; text-transform: uppercase; letter-spacing: .12em; font-weight: 800; margin: 0 0 14px; }
-.rail button { width: 100%; display: block; margin-bottom: 8px; padding: 12px 13px; border-radius: 12px; border: 1px solid transparent; background: transparent; color: #475569; text-align: left; font-weight: 650; }
-.rail button.active { background: #ecfdf5; border-color: #bbf7d0; color: #047857; }
+.mockGrid { display: grid; grid-template-columns: 1fr; min-height: 390px; background: #f8faf9; }
 .mockMain { padding: clamp(24px, 5vw, 54px); display: flex; flex-direction: column; justify-content: center; }
 .promptHeader { display: flex; align-items: center; justify-content: space-between; color: #16a36f; margin-bottom: 18px; }
 .mockMain p { max-width: 690px; color: #475569; font-size: 20px; line-height: 1.55; }
@@ -52,11 +48,6 @@ h3 { margin: 0; letter-spacing: -.035em; color: #111827; }
 .workbench > :not(.panelIntro) { grid-column: 2; }
 .panelIntro { grid-row: 1 / span 6; padding-right: 18px; position: sticky; top: 20px; }
 .panelIntro p:not(.eyebrow) { color: #64748b; line-height: 1.58; font-size: 17px; }
-.modes { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
-.mode { text-align: left; border: 1px solid rgba(15,23,42,.08); border-radius: 16px; padding: 15px; color: #111827; background: #fbfaf7; cursor: pointer; min-height: 124px; display: flex; flex-direction: column; gap: 8px; transition: border-color .16s ease, background .16s ease, transform .16s ease; }
-.mode:hover { transform: translateY(-1px); }
-.mode span { color: #64748b; font-size: 13px; line-height: 1.35; }
-.mode.active { border-color: #86efac; background: #ecfdf5; }
 .idea, .reflection { width: 100%; resize: vertical; border: 1px solid rgba(15,23,42,.1); border-radius: 16px; padding: 16px; color: #111827; background: #fbfaf7; outline: none; line-height: 1.5; box-shadow: 0 1px 0 rgba(15,23,42,.02) inset; }
 .idea { min-height: 112px; }
 .reflection { min-height: 154px; }
@@ -73,12 +64,9 @@ h3 { margin: 0; letter-spacing: -.035em; color: #111827; }
   .hero { min-height: auto; padding-bottom: 50px; }
   .heroCopy { margin: 60px auto 34px; }
   .mockGrid, .workbench { grid-template-columns: 1fr; }
-  .rail { display: none; }
   .workbench > :not(.panelIntro) { grid-column: 1; }
   .strip { grid-template-columns: 1fr; margin: 0 0 52px; }
   .panelIntro { position: static; padding-right: 0; }
-  .modes { grid-template-columns: 1fr; }
-  .mode { min-height: auto; }
   .cursor { display: none; }
   h1 { font-size: clamp(46px, 14vw, 72px); }
 }

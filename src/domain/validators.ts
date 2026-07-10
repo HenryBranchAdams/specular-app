@@ -70,6 +70,11 @@ export function questionMarkCount(value: string): number {
   return Array.from(value).filter((character) => character === '?' || character === '？').length;
 }
 
+function endsWithQuestionMark(value: string): boolean {
+  const terminal = value.trimEnd().at(-1);
+  return terminal === '?' || terminal === '？';
+}
+
 export function containsProhibitedQuestion(value: string): boolean {
   return PROHIBITED_QUESTION_PATTERNS.some((pattern) => pattern.test(value));
 }
@@ -80,6 +85,22 @@ export function containsFiller(value: string): boolean {
 
 function containsUnsolicitedSynthesis(value: string): boolean {
   return UNSOLICITED_SYNTHESIS_PATTERNS.some((pattern) => pattern.test(value));
+}
+
+function setupSentenceCount(value: string): number {
+  const normalized = value.trim();
+  if (normalized.length === 0) {
+    return 0;
+  }
+
+  return normalized.split(/(?<=[.!。！])\s+/u).filter(Boolean).length;
+}
+
+function dependsOnVagueSetupReference(value: string): boolean {
+  const normalized = value.trim();
+  return /^(?:and|so|then)\b/iu.test(normalized)
+    || /^what\s+about\s+(?:that|this|it|these|those)\b/iu.test(normalized)
+    || /^(?:what|how)\s+(?:does|did|would|could|should|is|are|was|were)\s+(?:that|this|it|these|those)\s+(?:mean|change|matter|work|affect)\b/iu.test(normalized);
 }
 
 function fail(
@@ -117,8 +138,20 @@ function validateNextQuestion(value: unknown): NextQuestionResult {
 
   const combined = [parsed.data.setup, parsed.data.question].filter(Boolean).join(' ');
   validateQuestionText('next_question', combined, 45);
+  if (parsed.data.setup !== undefined && questionMarkCount(parsed.data.setup) !== 0) {
+    fail('question_count', 'next_question', 'A normal-turn setup cannot contain a question mark.');
+  }
+  if (parsed.data.setup !== undefined && setupSentenceCount(parsed.data.setup) > 1) {
+    fail('schema_invalid', 'next_question', 'A normal-turn setup can contain at most one sentence.');
+  }
+  if (questionMarkCount(parsed.data.question) !== 1 || !endsWithQuestionMark(parsed.data.question)) {
+    fail('question_count', 'next_question', 'The normal-turn question must contain and end in exactly one question mark.');
+  }
   if (containsUnsolicitedSynthesis(combined)) {
     fail('unsolicited_synthesis', 'next_question', 'The response synthesizes before the user requested a conclusion.');
+  }
+  if (dependsOnVagueSetupReference(parsed.data.question)) {
+    fail('schema_invalid', 'next_question', 'The question must remain understandable without its setup sentence.');
   }
 
   return parsed.data;
@@ -133,7 +166,7 @@ function validateChallenge(value: unknown): ChallengeResult {
   switch (parsed.data.kind) {
     case 'blind_spot': {
       validateQuestionText('challenge', parsed.data.question, 55);
-      if (!parsed.data.question.trimEnd().endsWith('?')) {
+      if (!endsWithQuestionMark(parsed.data.question)) {
         fail('challenge_shape', 'challenge', 'A blind-spot Challenge must end with its question.');
       }
       return parsed.data;
@@ -141,7 +174,7 @@ function validateChallenge(value: unknown): ChallengeResult {
     case 'counter_position': {
       const combined = `${parsed.data.counterPosition} ${parsed.data.question}`;
       validateQuestionText('challenge', combined, 100);
-      if (!parsed.data.question.trimEnd().endsWith('?')) {
+      if (!endsWithQuestionMark(parsed.data.question)) {
         fail('challenge_shape', 'challenge', 'A counter-position Challenge must end with its question.');
       }
       return parsed.data;

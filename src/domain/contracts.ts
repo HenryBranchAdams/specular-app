@@ -26,6 +26,7 @@ export type {
   SpecularErrorCode,
   Thread,
   ThreadContext,
+  ThreadContextThread,
   ThreadId,
   ThreadLifecycleState,
   ThreadUnderstanding,
