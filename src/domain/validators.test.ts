@@ -244,6 +244,7 @@ describe('validateOperationResult', () => {
     'A concrete example may help, e.g. a delayed launch.',
     'A concrete distinction may help, i.e. demand versus timing.',
     'One emphatic sentence!!!',
+    'Version 2.0 remains stable.',
   ])('accepts one setup sentence with an internal abbreviation or terminator cluster: %s', (setup) => {
     expect(validateOperationResult(
       'next_question',
@@ -307,6 +308,16 @@ describe('validateOperationResult', () => {
     'Who owns that one?',
     'Which result proves that?',
   ])('keeps rejecting an unqualified demonstrative or locative reference: %s', (question) => {
+    expect(() => validateOperationResult(
+      'next_question',
+      normalResult(question),
+    )).toThrow(/question_independence/);
+  });
+
+  it.each([
+    'Which result proves that a?',
+    'Is there a?',
+  ])('rejects a truncated determiner clause with question_independence: %s', (question) => {
     expect(() => validateOperationResult(
       'next_question',
       normalResult(question),

@@ -78,7 +78,8 @@ const EXISTENTIAL_AUXILIARIES = new Set([
   'are', 'can', 'could', 'is', 'might', 'was', 'were', 'would',
 ]);
 const EXISTENTIAL_DETERMINERS = new Set([
-  'a', 'an', 'another', 'any', 'each', 'every', 'no', 'one', 'some', 'the',
+  'a', 'an', 'another', 'any', 'each', 'either', 'every', 'neither', 'no',
+  'one', 'some', 'that', 'the', 'these', 'this', 'those',
 ]);
 const EXPLICIT_NOUN_DETERMINERS = new Set([
   ...EXISTENTIAL_DETERMINERS,
@@ -186,6 +187,7 @@ function setupSentenceCount(value: string): number {
       internalAbbreviationPeriods.has(index)
       || isHonorificPeriod(normalized, index)
       || isContinuingEtcPeriod(normalized, index)
+      || isNumericSeparatorPeriod(normalized, index)
     )) {
       index = clusterEnd;
       continue;
@@ -224,6 +226,15 @@ function isContinuingEtcPeriod(value: string, periodIndex: number): boolean {
   return nextCharacter !== undefined && !/[\p{Lu}\p{Lt}\d]/u.test(nextCharacter);
 }
 
+function isNumericSeparatorPeriod(value: string, periodIndex: number): boolean {
+  const previous = value[periodIndex - 1];
+  const next = value[periodIndex + 1];
+  return previous !== undefined
+    && next !== undefined
+    && /\d/u.test(previous)
+    && /\d/u.test(next);
+}
+
 function tokenizeQuestion(value: string): ReferenceToken[] {
   return (value.match(/[\p{L}\d]+(?:['’][\p{L}\d]+)*/gu) ?? []).map((original) => ({
     normalized: original.toLocaleLowerCase('en-US'),
@@ -233,6 +244,7 @@ function tokenizeQuestion(value: string): ReferenceToken[] {
 
 function isNounLike(token: string): boolean {
   return !NON_NOUN_TOKENS.has(token)
+    && !EXPLICIT_NOUN_DETERMINERS.has(token)
     && !GENERIC_REFERENCE_NOUNS.has(token)
     && !REFERENCE_PRONOUNS.has(token)
     && !DEMONSTRATIVES.has(token)
@@ -273,11 +285,27 @@ function qualifiesExplicitNoun(tokens: ReferenceToken[], referenceIndex: number)
 
 function isLicensedThat(tokens: ReferenceToken[], referenceIndex: number): boolean {
   const previous = tokens[referenceIndex - 1]?.normalized;
-  const next = tokens[referenceIndex + 1]?.normalized;
-  const introducesClause = next !== undefined
-    && (EXISTENTIAL_DETERMINERS.has(next) || REFERENCE_PRONOUNS.has(next) || isNounLike(next));
+  const introducesClause = hasExplicitClauseSubject(tokens, referenceIndex + 1);
   return (previous !== undefined && REPORTING_AND_EVIDENCE_VERBS.has(previous) && introducesClause)
     || qualifiesExplicitNoun(tokens, referenceIndex);
+}
+
+function hasExplicitClauseSubject(tokens: ReferenceToken[], subjectIndex: number): boolean {
+  const subject = tokens[subjectIndex]?.normalized;
+  if (subject === undefined) {
+    return false;
+  }
+  if (REFERENCE_PRONOUNS.has(subject)) {
+    return true;
+  }
+  if (EXISTENTIAL_DETERMINERS.has(subject)) {
+    const noun = tokens[subjectIndex + 1]?.normalized;
+    return noun !== undefined
+      && !EXPLICIT_NOUN_DETERMINERS.has(noun)
+      && isNounLike(noun);
+  }
+
+  return isNounLike(subject);
 }
 
 function isExistentialThere(tokens: ReferenceToken[], referenceIndex: number): boolean {
@@ -286,15 +314,11 @@ function isExistentialThere(tokens: ReferenceToken[], referenceIndex: number): b
 
   if (previous !== undefined && EXISTENTIAL_AUXILIARIES.has(previous)) {
     const subjectIndex = next === 'be' || next === 'been' ? referenceIndex + 2 : referenceIndex + 1;
-    const subject = tokens[subjectIndex]?.normalized;
-    return subject !== undefined
-      && (EXISTENTIAL_DETERMINERS.has(subject) || isNounLike(subject));
+    return hasExplicitClauseSubject(tokens, subjectIndex);
   }
 
   if (next !== undefined && EXISTENTIAL_AUXILIARIES.has(next)) {
-    const subject = tokens[referenceIndex + 2]?.normalized;
-    return subject !== undefined
-      && (EXISTENTIAL_DETERMINERS.has(subject) || isNounLike(subject));
+    return hasExplicitClauseSubject(tokens, referenceIndex + 2);
   }
 
   return false;
