@@ -110,7 +110,8 @@ describe('CapsuleLibrary', () => {
       expect.stringContaining('Newer conclusion'),
       expect.stringContaining('Older conclusion'),
     ]);
-    const lastAction = within(dialog).getByRole('button', { name: 'Delete all local content' });
+    await user.click(within(dialog).getByRole('button', { name: 'More capsule actions' }));
+    const lastAction = within(dialog).getByRole('menuitem', { name: 'Delete all local content' });
     lastAction.focus();
     await user.tab();
     expect(within(dialog).getByRole('button', { name: 'Close capsule library' })).toHaveFocus();
@@ -162,7 +163,8 @@ describe('CapsuleLibrary', () => {
     const trigger = screen.getByRole('button', { name: 'Capsules' });
     await user.click(trigger);
     const library = screen.getByRole('dialog', { name: 'Capsules' });
-    const deleteThread = within(library).getByRole('button', {
+    await user.click(within(library).getByRole('button', { name: 'More capsule actions' }));
+    const deleteThread = within(library).getByRole('menuitem', {
       name: 'Delete current thread',
     });
     const header = library.querySelector('.capsule-library__header');
@@ -254,6 +256,35 @@ describe('CapsuleLibrary', () => {
     );
   });
 
+  it('presents an explanatory empty state and keeps destructive actions in overflow', async () => {
+    const triggerRef = createRef<HTMLButtonElement>();
+    const user = userEvent.setup();
+    render(
+      <CapsuleLibrary
+        busy={false}
+        capsules={[]}
+        currentThread={currentThread}
+        onClose={vi.fn()}
+        onDeleteAll={vi.fn()}
+        onDeleteCapsule={vi.fn()}
+        onDeleteThread={vi.fn()}
+        onExport={vi.fn()}
+        onUpdateCapsule={vi.fn()}
+        open
+        triggerRef={triggerRef}
+      />,
+    );
+
+    expect(screen.getByText('No capsules yet.')).toBeVisible();
+    expect(screen.getByText('Finished conclusions you save will collect here.')).toBeVisible();
+    expect(screen.queryByRole('button', { name: 'Delete all local content' }))
+      .not.toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: 'More capsule actions' }));
+    expect(screen.getByRole('menuitem', { name: 'Delete current thread' })).toBeVisible();
+    expect(screen.getByRole('menuitem', { name: 'Delete all local content' })).toBeVisible();
+  });
+
   it('announces export failure without changing content and renders capsule text literally', async () => {
     const capsule = makeCapsule(
       'capsule-literal',
@@ -326,7 +357,8 @@ describe('CapsuleLibrary', () => {
       />,
     );
 
-    await user.click(screen.getByRole('button', { name: 'Delete current thread' }));
+    await user.click(screen.getByRole('button', { name: 'More capsule actions' }));
+    await user.click(screen.getByRole('menuitem', { name: 'Delete current thread' }));
     expect(screen.getByRole('alertdialog', { name: /Confirmed old thread/u })).toBeVisible();
 
     rerender(
@@ -391,8 +423,7 @@ describe('CapsuleLibrary', () => {
     );
 
     expect(screen.getByRole('button', { name: 'Export' })).toBeDisabled();
-    expect(screen.getByRole('button', { name: 'Delete current thread' })).toBeDisabled();
-    expect(screen.getByRole('button', { name: 'Delete all local content' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: 'More capsule actions' })).toBeDisabled();
     const capsuleButton = screen.getByRole('button', { name: /Busy capsule/u });
     expect(capsuleButton).toBeDisabled();
     await user.click(capsuleButton);

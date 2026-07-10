@@ -165,7 +165,9 @@ export function App({
         ) : hasConversation ? (
           <Transcript
             pendingUserTurn={specular.pendingUserTurn}
+            retrying={specular.activity === 'retry'}
             turns={specular.turns}
+            {...(specular.canRetry ? { onRetry: specular.retry } : {})}
           />
         ) : (
           <StarterDeck onActivate={focusComposer} />
@@ -196,24 +198,6 @@ export function App({
             />
           ) : null}
 
-          {specular.canRetry ? (
-            <div
-              aria-label="Saved thought recovery"
-              aria-live="polite"
-              className="recovery-notice"
-              role="status"
-            >
-              <span>Your saved thought is ready to retry.</span>
-              <button
-                className="retry-button touch-target"
-                disabled={specular.activity === 'retry'}
-                onClick={specular.retry}
-                type="button"
-              >
-                {specular.activity === 'retry' ? 'Retrying…' : 'Retry saved thought'}
-              </button>
-            </div>
-          ) : null}
         </div>
       ) : null}
 

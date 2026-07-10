@@ -303,7 +303,8 @@ describe('Task 6 application flow', () => {
     await user.type(composer, 'An unsent draft tied to the thread being deleted.');
     await user.click(await screen.findByRole('button', { name: /Open capsule library/u }));
     const library = screen.getByRole('dialog', { name: 'Capsules' });
-    const deleteThread = within(library).getByRole('button', { name: 'Delete current thread' });
+    await user.click(within(library).getByRole('button', { name: 'More capsule actions' }));
+    const deleteThread = within(library).getByRole('menuitem', { name: 'Delete current thread' });
     await user.click(deleteThread);
 
     let confirmation = screen.getByRole('alertdialog', { name: /Delete this thread/u });
@@ -375,7 +376,8 @@ describe('Task 6 application flow', () => {
 
     await user.click(await screen.findByRole('button', { name: /Open capsule library/u }));
     const library = screen.getByRole('dialog', { name: 'Capsules' });
-    await user.click(within(library).getByRole('button', { name: 'Delete all local content' }));
+    await user.click(within(library).getByRole('button', { name: 'More capsule actions' }));
+    await user.click(within(library).getByRole('menuitem', { name: 'Delete all local content' }));
 
     const confirmation = screen.getByRole('alertdialog', { name: /All local content/u });
     expect(confirmation).toHaveTextContent(/cannot be undone/i);

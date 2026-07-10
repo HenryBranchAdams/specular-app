@@ -72,6 +72,11 @@ describe('PwaUpdatePrompt', () => {
     expect(remFontSize('.pwa-prompt__button')).toBeGreaterThanOrEqual(1);
   });
 
+  it('uses a compact overlay without reflowing the application shell', () => {
+    expect(styles).not.toContain('#root:has(.pwa-prompt)');
+    expect(styles).toMatch(/\.pwa-prompt\s*\{[^}]*bottom:/u);
+  });
+
   it('offers an accessible update choice without stealing focus', async () => {
     const user = userEvent.setup();
     render(

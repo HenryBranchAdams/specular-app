@@ -7,7 +7,9 @@ import type {
 import type { PendingUserTurn } from '../app/use-specular';
 
 export interface TranscriptProps {
+  onRetry?: () => void;
   pendingUserTurn: PendingUserTurn | null;
+  retrying?: boolean;
   turns: readonly Turn[];
 }
 
@@ -31,7 +33,7 @@ function deliveryLabel(state: DeliveryState): string | null {
     case 'failed':
       return 'Not sent';
     case 'pending':
-      return 'Interrupted — ready to retry';
+      return 'Interrupted';
     default:
       return assertNever(state);
   }
@@ -41,12 +43,20 @@ function isTranscriptTurn(turn: Turn): boolean {
   return turn.operation !== 'conclusion';
 }
 
-export function Transcript({ pendingUserTurn, turns }: TranscriptProps) {
+export function Transcript({ onRetry, pendingUserTurn, retrying = false, turns }: TranscriptProps) {
   const visibleTurns = turns.filter(isTranscriptTurn);
   let currentQuestionId: string | null = null;
+  let retryableTurnId: string | null = null;
   for (const turn of visibleTurns) {
     if (turn.role === 'specular') {
       currentQuestionId = turn.id;
+    }
+    if (
+      turn.role === 'user'
+      && turn.operation === 'next_question'
+      && (turn.deliveryState === 'failed' || turn.deliveryState === 'pending')
+    ) {
+      retryableTurnId = turn.id;
     }
   }
 
@@ -62,6 +72,7 @@ export function Transcript({ pendingUserTurn, turns }: TranscriptProps) {
       {visibleTurns.map((turn) => {
         const current = turn.id === currentQuestionId;
         const status = deliveryLabel(turn.deliveryState);
+        const recoverable = turn.id === retryableTurnId && onRetry !== undefined;
         return (
           <article
             aria-current={current ? 'true' : undefined}
@@ -71,7 +82,25 @@ export function Transcript({ pendingUserTurn, turns }: TranscriptProps) {
             key={turn.id}
           >
             <p className="turn__content">{turn.content}</p>
-            {status === null ? null : (
+            {recoverable ? (
+              <div
+                aria-label="Saved thought recovery"
+                className="turn__recovery"
+                role="group"
+              >
+                <span className={`turn__delivery turn__delivery--${turn.deliveryState}`}>
+                  {status}
+                </span>
+                <button
+                  className="turn__retry touch-target"
+                  disabled={retrying}
+                  onClick={onRetry}
+                  type="button"
+                >
+                  {retrying ? 'Retrying…' : 'Retry'}
+                </button>
+              </div>
+            ) : status === null ? null : (
               <span className={`turn__delivery turn__delivery--${turn.deliveryState}`}>
                 {status}
               </span>

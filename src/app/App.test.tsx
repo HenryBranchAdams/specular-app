@@ -618,7 +618,9 @@ describe('Specular mobile thinking loop', () => {
     expect(within(transcript).getByText('<img src=x onerror=alert(1)> unfinished'))
       .toBeVisible();
     expect(transcript.querySelector('img')).toBeNull();
-    expect(screen.getByRole('button', { name: 'Retry saved thought' })).toBeVisible();
+    const recovery = within(transcript).getByRole('group', { name: 'Saved thought recovery' });
+    expect(recovery).toHaveTextContent('Not sent');
+    expect(within(recovery).getByRole('button', { name: 'Retry' })).toBeVisible();
     expect(composer).toHaveFocus();
   });
 
@@ -668,7 +670,7 @@ describe('Specular mobile thinking loop', () => {
     await user.click(await screen.findByRole('button', { name: 'Challenge me' }));
 
     expect(await screen.findByRole('alert')).toBeVisible();
-    expect(screen.queryByRole('button', { name: 'Retry saved thought' }))
+    expect(screen.queryByRole('button', { name: 'Retry' }))
       .not.toBeInTheDocument();
   });
 
@@ -683,7 +685,7 @@ describe('Specular mobile thinking loop', () => {
     await user.click(await screen.findByRole('button', { name: 'Draft a conclusion' }));
 
     expect(await screen.findByRole('alert')).toBeVisible();
-    expect(screen.queryByRole('button', { name: 'Retry saved thought' }))
+    expect(screen.queryByRole('button', { name: 'Retry' }))
       .not.toBeInTheDocument();
   });
 
@@ -705,14 +707,13 @@ describe('Specular mobile thinking loop', () => {
 
     render(<App dependencies={fixture.dependencies} />);
 
-    expect(await screen.findByText('Not sent')).toBeVisible();
-    const recovery = screen.getByRole('status', { name: 'Saved thought recovery' });
-    expect(recovery).toHaveTextContent('Your saved thought is ready to retry.');
-    await user.click(within(recovery).getByRole('button', { name: 'Retry saved thought' }));
+    const recovery = await screen.findByRole('group', { name: 'Saved thought recovery' });
+    expect(recovery).toHaveTextContent('Not sent');
+    await user.click(within(recovery).getByRole('button', { name: 'Retry' }));
 
     expect(retryTurn).toHaveBeenCalledWith(savedTurn?.id);
     expect(await screen.findByText(VALID_QUESTION.question)).toBeVisible();
-    expect(screen.queryByRole('status', { name: 'Saved thought recovery' }))
+    expect(screen.queryByRole('group', { name: 'Saved thought recovery' }))
       .not.toBeInTheDocument();
   });
 
@@ -736,14 +737,14 @@ describe('Specular mobile thinking loop', () => {
 
     render(<App dependencies={fixture.dependencies} />);
 
-    expect(await screen.findByText('Interrupted — ready to retry')).toBeVisible();
+    expect(await screen.findByText('Interrupted')).toBeVisible();
     expect(screen.queryByText('Sending…')).not.toBeInTheDocument();
-    const recovery = screen.getByRole('status', { name: 'Saved thought recovery' });
-    await user.click(within(recovery).getByRole('button', { name: 'Retry saved thought' }));
+    const recovery = screen.getByRole('group', { name: 'Saved thought recovery' });
+    await user.click(within(recovery).getByRole('button', { name: 'Retry' }));
 
     expect(retryTurn).toHaveBeenCalledWith(savedTurn?.id);
     expect(await screen.findByText(VALID_QUESTION.question)).toBeVisible();
-    expect(screen.queryByRole('status', { name: 'Saved thought recovery' }))
+    expect(screen.queryByRole('group', { name: 'Saved thought recovery' }))
       .not.toBeInTheDocument();
   });
 

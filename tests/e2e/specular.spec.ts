@@ -87,9 +87,10 @@ test('offline retry, microphone denial, reduced motion, keyboard flow, scaling, 
   await page.getByRole('textbox', { name: 'Your thought' }).fill(thought);
   await page.getByRole('button', { name: 'Send thought' }).click();
   await expect(page.getByText(thought, { exact: true })).toBeVisible();
-  await expect(page.getByText('Your saved thought is ready to retry.')).toBeVisible();
+  const recovery = page.getByRole('group', { name: 'Saved thought recovery' });
+  await expect(recovery).toContainText('Not sent');
   await context.setOffline(false);
-  await page.getByRole('button', { name: 'Retry saved thought' }).click();
+  await recovery.getByRole('button', { name: 'Retry' }).click();
   await expect(page.getByText(
     'Which concrete signal would show the launch handoff is working?',
   )).toBeVisible();

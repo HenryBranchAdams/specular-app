@@ -3,7 +3,12 @@ import {
   useState,
   type RefObject,
 } from 'react';
-import { ArrowLeft, X } from 'lucide-react';
+import {
+  ArrowLeft,
+  Database,
+  Ellipsis,
+  X,
+} from 'lucide-react';
 import { assertNever } from '../domain/contracts';
 import type {
   Capsule,
@@ -37,6 +42,11 @@ interface CapsuleDetailProps {
   onSave: (capsuleId: CapsuleId, conclusion: WorkingConclusion) => Promise<void>;
 }
 
+const LOCAL_DATE_FORMATTER = new Intl.DateTimeFormat(undefined, {
+  dateStyle: 'medium',
+  timeStyle: 'short',
+});
+
 type DeleteRequest =
   | {
     artifactTitle: string;
@@ -64,10 +74,7 @@ function parseLines(value: string): string[] {
 }
 
 function localDate(timestamp: number): string {
-  return new Intl.DateTimeFormat(undefined, {
-    dateStyle: 'medium',
-    timeStyle: 'short',
-  }).format(new Date(timestamp));
+  return LOCAL_DATE_FORMATTER.format(new Date(timestamp));
 }
 
 function CapsuleDetail({ busy, capsule, onSave }: CapsuleDetailProps) {
@@ -173,6 +180,7 @@ export function CapsuleLibrary({
   const closeRef = useRef<HTMLButtonElement>(null);
   const modalRef = useRef<HTMLDivElement>(null);
   const [selectedId, setSelectedId] = useState<CapsuleId | null>(null);
+  const [actionsOpen, setActionsOpen] = useState(false);
   const [deleteRequest, setDeleteRequest] = useState<DeleteRequest | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -274,20 +282,76 @@ export function CapsuleLibrary({
           </button>
         )}
         <h2 id="capsule-library-title">Capsules</h2>
-        <button
-          aria-label="Close capsule library"
-          className="icon-button touch-target"
-          onClick={onClose}
-          ref={closeRef}
-          type="button"
-        >
-          <X aria-hidden="true" size={24} />
-        </button>
+        <div className="capsule-library__header-actions">
+          {selected === null ? (
+            <div className="capsule-library__actions-menu-wrap">
+              <button
+                aria-expanded={actionsOpen}
+                aria-haspopup="menu"
+                aria-label="More capsule actions"
+                className="icon-button touch-target"
+                disabled={busy}
+                onClick={() => { setActionsOpen((current) => !current); }}
+                type="button"
+              >
+                <Ellipsis aria-hidden="true" size={24} />
+              </button>
+              {actionsOpen ? (
+                <div aria-label="Capsule actions" className="capsule-library__actions-menu" role="menu">
+                  {currentThread === null ? null : (
+                    <button
+                      className="capsule-library__menu-danger touch-target"
+                      onClick={(event) => {
+                        setDeleteRequest({
+                          artifactTitle: currentThread.title,
+                          kind: 'thread',
+                          restoreFocusTo: event.currentTarget,
+                          threadId: currentThread.id,
+                        });
+                      }}
+                      role="menuitem"
+                      type="button"
+                    >
+                      Delete current thread
+                    </button>
+                  )}
+                  <button
+                    className="capsule-library__menu-danger touch-target"
+                    onClick={(event) => {
+                      setDeleteRequest({
+                        artifactTitle: 'All local content',
+                        kind: 'all',
+                        restoreFocusTo: event.currentTarget,
+                      });
+                    }}
+                    role="menuitem"
+                    type="button"
+                  >
+                    Delete all local content
+                  </button>
+                </div>
+              ) : null}
+            </div>
+          ) : null}
+          <button
+            aria-label="Close capsule library"
+            className="icon-button touch-target"
+            onClick={onClose}
+            ref={closeRef}
+            type="button"
+          >
+            <X aria-hidden="true" size={24} />
+          </button>
+        </div>
       </header>
 
       <div className="capsule-library__body">
         {orderedCapsules.length === 0 ? (
-          <p className="capsule-library__empty">No capsules yet.</p>
+          <div className="capsule-library__empty">
+            <Database aria-hidden="true" size={34} strokeWidth={1.4} />
+            <p>No capsules yet.</p>
+            <span>Finished conclusions you save will collect here.</span>
+          </div>
         ) : selected === null ? (
           <ol aria-label="Saved capsules" className="capsule-library__list">
             {orderedCapsules.map((capsule) => (
@@ -346,39 +410,6 @@ export function CapsuleLibrary({
             Permanently delete capsule
           </button>
         )}
-        {selected !== null || currentThread === null ? null : (
-          <button
-            className="capsule-library__danger touch-target"
-            disabled={busy}
-            onClick={(event) => {
-              setDeleteRequest({
-                artifactTitle: currentThread.title,
-                kind: 'thread',
-                restoreFocusTo: event.currentTarget,
-                threadId: currentThread.id,
-              });
-            }}
-            type="button"
-          >
-            Delete current thread
-          </button>
-        )}
-        {selected === null ? (
-          <button
-            className="capsule-library__danger touch-target"
-            disabled={busy}
-            onClick={(event) => {
-              setDeleteRequest({
-                artifactTitle: 'All local content',
-                kind: 'all',
-                restoreFocusTo: event.currentTarget,
-              });
-            }}
-            type="button"
-          >
-            Delete all local content
-          </button>
-        ) : null}
       </footer>
 
       {deleteRequest === null ? null : (

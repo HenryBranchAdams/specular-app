@@ -116,7 +116,10 @@ export function Composer({
         {voice === undefined ? null : (
           <div className="composer__voice">
             <button
-              className="voice-button touch-target"
+              aria-label={voiceButtonLabel(voice.status)}
+              className={`voice-button touch-target${voice.status === 'unavailable'
+                ? ' voice-button--icon'
+                : ''}`}
               disabled={voice.status === 'connecting'
                 || voice.status === 'unavailable'
                 || (busy && voice.status !== 'listening')}
@@ -124,16 +127,20 @@ export function Composer({
               type="button"
             >
               <Mic aria-hidden="true" size={19} strokeWidth={1.8} />
-              <span>{voiceButtonLabel(voice.status)}</span>
+              {voice.status === 'unavailable' ? null : (
+                <span>{voiceButtonLabel(voice.status)}</span>
+              )}
             </button>
-            <span
-              aria-label="Voice status"
-              aria-live="polite"
-              className="composer__voice-status"
-              role="status"
-            >
-              {voiceStatusText(voice.status)}
-            </span>
+            {voice.status === 'unavailable' ? null : (
+              <span
+                aria-label="Voice status"
+                aria-live="polite"
+                className="composer__voice-status"
+                role="status"
+              >
+                {voiceStatusText(voice.status)}
+              </span>
+            )}
             {voice.error === null ? null : (
               <span
                 aria-live="assertive"

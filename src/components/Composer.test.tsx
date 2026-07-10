@@ -45,7 +45,7 @@ describe('Composer voice affordance', () => {
     ['connecting', 'Connecting', true],
     ['listening', 'Stop voice', false],
     ['unavailable', 'Voice unavailable', true],
-  ] as const)('renders the %s voice state as explicit text', (status, label, disabled) => {
+  ] as const)('renders the %s voice state with an accessible control', (status, label, disabled) => {
     render(
       <Composer
         {...BASE_PROPS}
@@ -54,7 +54,13 @@ describe('Composer voice affordance', () => {
     );
 
     const voiceButton = screen.getByRole('button', { name: label });
-    expect(voiceButton).toHaveTextContent(label);
+    if (status === 'unavailable') {
+      expect(voiceButton).toHaveClass('voice-button--icon');
+      expect(voiceButton).not.toHaveTextContent(label);
+      expect(screen.queryByRole('status', { name: 'Voice status' })).not.toBeInTheDocument();
+    } else {
+      expect(voiceButton).toHaveTextContent(label);
+    }
     expect(voiceButton).toHaveClass('touch-target');
     expect(voiceButton).toHaveAttribute('type', 'button');
     if (disabled) {
