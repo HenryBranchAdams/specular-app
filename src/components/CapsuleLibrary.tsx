@@ -178,7 +178,7 @@ export function CapsuleLibrary({
   triggerRef,
 }: CapsuleLibraryProps) {
   const closeRef = useRef<HTMLButtonElement>(null);
-  const modalRef = useRef<HTMLDivElement>(null);
+  const modalRef = useRef<HTMLDialogElement>(null);
   const [selectedId, setSelectedId] = useState<CapsuleId | null>(null);
   const [actionsOpen, setActionsOpen] = useState(false);
   const [deleteRequest, setDeleteRequest] = useState<DeleteRequest | null>(null);
@@ -263,12 +263,11 @@ export function CapsuleLibrary({
       : 'Permanently delete all local content';
 
   return (
-    <div
+    <dialog
       aria-labelledby="capsule-library-title"
-      aria-modal="true"
       className="capsule-library"
+      open
       ref={modalRef}
-      role="dialog"
     >
       <header className="capsule-library__header">
         {selected === null ? null : (
@@ -422,6 +421,6 @@ export function CapsuleLibrary({
           restoreFocusTo={deleteRequest.restoreFocusTo}
         />
       )}
-    </div>
+    </dialog>
   );
 }

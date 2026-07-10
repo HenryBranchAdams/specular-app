@@ -324,8 +324,10 @@ function validatePreflight(request: IncomingMessage): void {
   }
   const normalized = requestedHeaders
     .split(',')
-    .map((header) => header.trim().toLocaleLowerCase('en-US'))
-    .filter(Boolean);
+    .flatMap((header) => {
+      const value = header.trim().toLocaleLowerCase('en-US');
+      return value.length === 0 ? [] : [value];
+    });
   if (normalized.some((header) => header !== 'content-type')) {
     throw new HttpBoundaryError(400, 'invalid_output');
   }
@@ -343,8 +345,10 @@ function validateMcpPreflight(request: IncomingMessage): void {
   const allowedHeaders = new Set(['accept', 'content-type', 'mcp-protocol-version']);
   const normalized = requestedHeaders
     .split(',')
-    .map((header) => header.trim().toLocaleLowerCase('en-US'))
-    .filter(Boolean);
+    .flatMap((header) => {
+      const value = header.trim().toLocaleLowerCase('en-US');
+      return value.length === 0 ? [] : [value];
+    });
   if (normalized.some((header) => !allowedHeaders.has(header))) {
     throw new HttpBoundaryError(400, 'invalid_output');
   }

@@ -25,7 +25,7 @@ export function ConfirmDeleteDialog({
   const titleId = useId();
   const warningId = useId();
   const cancelRef = useRef<HTMLButtonElement>(null);
-  const modalRef = useRef<HTMLDivElement>(null);
+  const modalRef = useRef<HTMLDialogElement>(null);
   const confirmingRef = useRef(false);
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -59,11 +59,11 @@ export function ConfirmDeleteDialog({
   };
 
   return (
-    <div
+    <dialog
       aria-describedby={warningId}
       aria-labelledby={titleId}
-      aria-modal="true"
       className="confirm-delete"
+      open
       ref={modalRef}
       role="alertdialog"
     >
@@ -93,6 +93,6 @@ export function ConfirmDeleteDialog({
           </button>
         </div>
       </div>
-    </div>
+    </dialog>
   );
 }

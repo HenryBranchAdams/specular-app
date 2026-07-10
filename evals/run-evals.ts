@@ -377,6 +377,11 @@ function hasPrematureSynthesis(text: string): boolean {
   return PREMATURE_SYNTHESIS_PATTERNS.some((pattern) => pattern.test(text));
 }
 
+function containsLiteralText(text: string, fragment: string): boolean {
+  const escaped = fragment.replace(/[.*+?^${}()|[\]\\]/gu, '\\$&');
+  return new RegExp(escaped, 'u').test(text);
+}
+
 function isUsefulNextQuestion(evaluation: OperationEvaluation): boolean {
   if (!evaluation.serviceOk) {
     return false;
@@ -396,10 +401,17 @@ function isGroundedConclusion(entry: FixedEvalCase, evaluation: OperationEvaluat
     return false;
   }
 
-  return parsed.data.provenance.length === entry.conclusionProvenance.length
-    && parsed.data.provenance.every((actual) => entry.input.includes(actual.excerpt)
-      && entry.conclusionProvenance.some((expected) => expected.turnId === actual.turnId
-        && expected.excerpt === actual.excerpt));
+  const expectedProvenance = new Set(entry.conclusionProvenance.map((item) => (
+    `${item.turnId}\u0000${item.excerpt}`
+  )));
+  const expectedExcerptsAreGrounded = entry.conclusionProvenance.every((expected) => (
+    containsLiteralText(entry.input, expected.excerpt)
+  ));
+  return expectedExcerptsAreGrounded
+    && parsed.data.provenance.length === entry.conclusionProvenance.length
+    && parsed.data.provenance.every((actual) => (
+      expectedProvenance.has(`${actual.turnId}\u0000${actual.excerpt}`)
+    ));
 }
 
 function preservesUncertaintyAndAuthority(evaluation: OperationEvaluation): boolean {
@@ -603,12 +615,15 @@ async function runEvals(
   };
 
   for (const entry of entries) {
-    for (const operation of OPERATIONS) {
-      const evaluation = await evaluateOperation(
+    const evaluations = await Promise.all(OPERATIONS.map(async (operation) => ({
+      evaluation: await evaluateOperation(
         entry,
         operation,
         createExecution(entry, operation),
-      );
+      ),
+      operation,
+    })));
+    for (const { evaluation, operation } of evaluations) {
       report.operationsExecuted += 1;
       recordEvaluation(report, entry, operation, evaluation);
     }

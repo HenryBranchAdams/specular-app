@@ -49,9 +49,10 @@ export function ConclusionEditor({
     ...draft,
     insights: draft.insights.map((insight) => insight.trim()),
     observations: parseLines(observations),
-    tensions: draft.tensions.map((tension) => tension.trim()).filter((tension) => (
-      tension.length > 0
-    )),
+    tensions: draft.tensions.flatMap((tension) => {
+      const trimmed = tension.trim();
+      return trimmed.length === 0 ? [] : [trimmed];
+    }),
     caveats: parseLines(caveats),
   });
 

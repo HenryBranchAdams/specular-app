@@ -1058,6 +1058,7 @@ textarea:focus-visible,
     linear-gradient(25deg, rgb(140 99 255 / 8%), transparent 36%),
     rgb(7 7 17 / 98%);
   box-shadow: 0 0 4rem rgb(0 0 0 / 60%);
+  margin: 0;
 }
 
 .capsule-library__header {
@@ -1265,6 +1266,12 @@ textarea:focus-visible,
   justify-items: center;
   overflow-y: auto;
   background: rgb(0 0 0 / 70%);
+  width: 100%;
+  max-width: none;
+  height: 100%;
+  max-height: none;
+  margin: 0;
+  border: 0;
 }
 
 .confirm-delete__surface {
