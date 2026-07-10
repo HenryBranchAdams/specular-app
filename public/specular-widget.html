@@ -1,0 +1,95 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Specular</title>
+    <style>
+      :root { font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; color: #111827; background: #fbfaf7; }
+      * { box-sizing: border-box; }
+      body { margin: 0; padding: 16px; background: radial-gradient(circle at 10% 0%, rgba(31, 171, 126, .14), transparent 20rem), #fbfaf7; }
+      main { width: 100%; max-width: 760px; margin: 0 auto; border: 1px solid rgba(15,23,42,.08); border-radius: 24px; background: rgba(255,255,255,.9); box-shadow: 0 22px 70px rgba(15,23,42,.12); overflow: hidden; }
+      header { padding: 20px 22px 14px; border-bottom: 1px solid rgba(15,23,42,.07); display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; }
+      .brand { display: flex; gap: 12px; align-items: center; }
+      .mark { width: 34px; height: 34px; border-radius: 12px; display: grid; place-items: center; background: #111827; color: #b9f4d8; font-weight: 800; }
+      h1 { font-size: 20px; margin: 0; letter-spacing: -.03em; }
+      .sub { margin: 4px 0 0; color: #64748b; font-size: 13px; line-height: 1.4; }
+      .mode { color: #047857; background: #ecfdf5; border: 1px solid #bbf7d0; border-radius: 999px; padding: 7px 10px; font-size: 12px; font-weight: 750; text-transform: uppercase; letter-spacing: .08em; white-space: nowrap; }
+      section { padding: 22px; }
+      .thought { padding: 14px 16px; border-radius: 16px; background: #f8faf9; border: 1px solid rgba(15,23,42,.07); color: #334155; line-height: 1.45; margin: 0 0 16px; }
+      .prompt { border: 1px solid rgba(15,23,42,.08); border-radius: 18px; background: linear-gradient(180deg, #fff, #f8faf9); padding: 18px; }
+      .prompt span { display: inline-flex; color: #047857; background: #ecfdf5; border: 1px solid #bbf7d0; border-radius: 999px; padding: 6px 9px; font-size: 11px; font-weight: 780; text-transform: uppercase; letter-spacing: .08em; }
+      h2 { margin: 14px 0 8px; font-size: 26px; line-height: 1; letter-spacing: -.055em; }
+      .question { margin: 0; color: #475569; font-size: 16px; line-height: 1.55; }
+      .grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-top: 16px; }
+      button { border: 1px solid rgba(15,23,42,.1); background: white; border-radius: 13px; padding: 11px 10px; cursor: pointer; color: #111827; font-weight: 680; box-shadow: 0 8px 20px rgba(15,23,42,.06); }
+      button:hover { background: #f8faf9; }
+      textarea { margin-top: 16px; width: 100%; min-height: 110px; resize: vertical; border: 1px solid rgba(15,23,42,.1); border-radius: 16px; padding: 14px; outline: none; line-height: 1.5; color: #111827; background: #fbfaf7; }
+      textarea:focus { border-color: #34d399; box-shadow: 0 0 0 4px rgba(52,211,153,.14); }
+      .footer { display: flex; justify-content: space-between; gap: 10px; align-items: center; padding: 0 22px 20px; color: #64748b; font-size: 12px; }
+      .noteSaved { color: #047857; font-weight: 700; }
+      @media (max-width: 620px) { body { padding: 10px; } header, section { padding: 16px; } .grid { grid-template-columns: 1fr; } .footer { padding: 0 16px 16px; flex-direction: column; align-items: flex-start; } }
+    </style>
+  </head>
+  <body>
+    <main>
+      <header>
+        <div class="brand"><div class="mark">✦</div><div><h1>Specular</h1><p class="sub">A thinking surface inside ChatGPT.</p></div></div>
+        <div class="mode" id="mode">Clarify</div>
+      </header>
+      <section>
+        <p class="thought" id="thought">Bring any thought you want to make sharper.</p>
+        <div class="prompt">
+          <span id="lens">core question</span>
+          <h2 id="title">What are you actually trying to understand?</h2>
+          <p class="question" id="question">Take the thought in front of you and zoom out one level. Is the real question about facts, values, timing, fear, taste, obligation, or identity?</p>
+        </div>
+        <div class="grid">
+          <button data-mode="clarify">Clarify</button>
+          <button data-mode="invert">Invert</button>
+          <button data-mode="distill">Distill</button>
+        </div>
+        <textarea id="note" placeholder="Write the rough answer. Precision beats polish."></textarea>
+      </section>
+      <div class="footer"><span>Saved locally in this ChatGPT widget only.</span><span id="status"></span></div>
+    </main>
+    <script type="module">
+      const el = (id) => document.getElementById(id);
+      const state = window.openai?.widgetState || {};
+      const output = window.openai?.toolOutput || {};
+      const input = window.openai?.toolInput || {};
+
+      function apply(data = {}) {
+        const d = { ...input, ...output, ...data };
+        el('mode').textContent = d.mode || 'Clarify';
+        el('thought').textContent = d.thought || 'Bring any thought you want to make sharper.';
+        el('lens').textContent = d.lens || 'core question';
+        el('title').textContent = d.title || 'What are you actually trying to understand?';
+        el('question').textContent = d.question || 'Take the thought in front of you and zoom out one level. Is the real question about facts, values, timing, fear, taste, obligation, or identity?';
+      }
+
+      apply();
+      el('note').value = state.note || '';
+      el('note').addEventListener('input', (event) => {
+        window.openai?.setWidgetState?.({ ...window.openai?.widgetState, note: event.target.value });
+        el('status').textContent = event.target.value.trim() ? 'Note kept' : '';
+        el('status').className = event.target.value.trim() ? 'noteSaved' : '';
+      });
+
+      document.querySelectorAll('button[data-mode]').forEach((button) => {
+        button.addEventListener('click', async () => {
+          const thought = output.thought || input.thought || el('thought').textContent;
+          const mode = button.dataset.mode;
+          const result = await window.openai?.callTool?.('sharpen_thought', { thought, mode });
+          if (result?.structuredContent) apply(result.structuredContent);
+        });
+      });
+
+      window.addEventListener('openai:set_globals', (event) => {
+        const globals = event.detail?.globals || {};
+        if (globals.toolOutput) apply(globals.toolOutput);
+        if (globals.widgetState?.note !== undefined) el('note').value = globals.widgetState.note;
+      }, { passive: true });
+    </script>
+  </body>
+</html>
