@@ -80,7 +80,9 @@ export function App({ dependencies }: AppProps) {
 
       <div className="interaction-dock">
         <Composer
-          busy={specular.activity === 'submit' || specular.activity === 'retry'}
+          busy={!specular.initialized
+            || specular.activity === 'submit'
+            || specular.activity === 'retry'}
           onFocusChange={setComposerFocused}
           onSubmit={specular.submit}
           onValueChange={specular.setDraft}

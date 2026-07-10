@@ -299,6 +299,51 @@ describe('Specular mobile thinking loop', () => {
     await screen.findByRole('button', { name: STARTERS[0] });
   });
 
+  it('keeps a pre-initialization draft but waits to send until repositories load', async () => {
+    const fixture = await createFixture();
+    const initialThreads = deferred<Thread[]>();
+    const listThreads = vi.spyOn(fixture.repositories.threads, 'list')
+      .mockImplementationOnce(() => initialThreads.promise);
+    const startThread = vi.spyOn(fixture.service, 'startThread');
+    const submitUserTurn = vi.spyOn(fixture.service, 'submitUserTurn');
+    const user = userEvent.setup();
+    render(<App dependencies={fixture.dependencies} />);
+
+    await waitFor(() => {
+      expect(listThreads).toHaveBeenCalledOnce();
+    });
+    expect(screen.getByText('Loading your private local thread.')).toBeInTheDocument();
+
+    const composer = screen.getByRole('textbox', { name: 'Your thought' });
+    const send = screen.getByRole('button', { name: 'Send thought' });
+    await user.type(composer, 'Keep this draft while local history loads.');
+
+    expect(composer).toHaveValue('Keep this draft while local history loads.');
+    expect(send).toBeDisabled();
+    await user.click(send);
+    expect(startThread).not.toHaveBeenCalled();
+    expect(submitUserTurn).not.toHaveBeenCalled();
+    expect(fixture.provider.nextQuestionCalls).toBe(0);
+
+    await act(async () => {
+      initialThreads.resolve([]);
+      await initialThreads.promise;
+    });
+
+    await waitFor(() => {
+      expect(send).toBeEnabled();
+    });
+    expect(composer).toHaveValue('Keep this draft while local history loads.');
+    expect(screen.queryByText('Loading your private local thread.')).not.toBeInTheDocument();
+
+    await user.click(send);
+
+    expect(await screen.findByText(VALID_QUESTION.question)).toBeVisible();
+    expect(startThread).toHaveBeenCalledOnce();
+    expect(submitUserTurn).toHaveBeenCalledOnce();
+    expect(fixture.provider.nextQuestionCalls).toBe(1);
+  });
+
   it('persists a pending first turn before a delayed response and then renders the question', async () => {
     const response = deferred<NextQuestionResult>();
     const provider = new DeterministicQuestioningProvider();
