@@ -1,17 +1,30 @@
 import { PencilLine, Zap } from 'lucide-react';
 
 export interface ThreadActionsProps {
-  activity: 'challenge' | 'conclusion' | 'retry' | 'submit' | null;
+  activity:
+    | 'challenge'
+    | 'conclusion'
+    | 'delete'
+    | 'export'
+    | 'finish'
+    | 'keep'
+    | 'retry'
+    | 'save'
+    | 'submit'
+    | 'update'
+    | null;
+  disabled?: boolean;
   onChallenge: () => void;
   onDraftConclusion: () => void;
 }
 
 export function ThreadActions({
   activity,
+  disabled = false,
   onChallenge,
   onDraftConclusion,
 }: ThreadActionsProps) {
-  const busy = activity !== null;
+  const busy = disabled || activity !== null;
   return (
     <nav aria-label="Thread actions" className="thread-actions">
       <button

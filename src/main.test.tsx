@@ -7,7 +7,7 @@ describe('production Specular bootstrap', () => {
     expect(await screen.findByRole('heading', { name: 'Specular' })).toBeVisible();
     expect(screen.getByRole('button', { name: 'What are you thinking about?' })).toBeVisible();
     expect(screen.getByRole('textbox', { name: 'Your thought' })).toBeVisible();
-    expect(screen.getByRole('button', { name: 'Start voice input' })).toBeVisible();
+    expect(screen.queryByRole('button', { name: /voice/iu })).not.toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Send thought' })).toBeVisible();
 
     expect(screen.queryAllByText(/^Clarify$/u)).toHaveLength(0);

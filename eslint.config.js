@@ -12,7 +12,15 @@ const nodeGlobals = {
 
 export default tseslint.config(
   {
-    ignores: ['dist', 'dist-server', 'node_modules', 'public'],
+    ignores: [
+      'dist',
+      'dist-evals',
+      'dist-server',
+      'node_modules',
+      'playwright-report',
+      'public',
+      'test-results',
+    ],
   },
   {
     files: ['**/*.js'],
@@ -32,7 +40,12 @@ export default tseslint.config(
     ],
     languageOptions: {
       parserOptions: {
-        project: ['./tsconfig.json', './tsconfig.node.json'],
+        project: [
+          './tsconfig.json',
+          './tsconfig.node.json',
+          './tsconfig.evals.json',
+          './tsconfig.e2e.json',
+        ],
         tsconfigRootDir: import.meta.dirname,
       },
     },

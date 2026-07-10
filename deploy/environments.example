@@ -1,0 +1,10 @@
+# Non-secret configuration belongs in the corresponding tracked environment file.
+# Inject secrets through the deployment platform rather than committing them.
+OPENAI_API_KEY=<secret-store-reference>
+OPENAI_MODEL=gpt-5.5
+OPENAI_REALTIME_MODEL=gpt-realtime
+REALTIME_CREDENTIAL_TTL_SECONDS=60
+REQUEST_TIMEOUT_MS=15000
+REQUEST_BYTES=524288
+RATE_LIMIT_WINDOW_MS=60000
+RATE_LIMIT_MAX=30

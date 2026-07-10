@@ -138,10 +138,9 @@ function rememberMigrationFailure(
   migrationFailures.set(factory, failures);
 }
 
-function clearFailedFirstMigration(factory: IDBFactory, databaseName: string): void {
+function clearMigrationFailure(factory: IDBFactory, databaseName: string): void {
   const failures = migrationFailures.get(factory);
-  const failure = failures?.get(databaseName);
-  if (failures === undefined || failure?.fromVersion !== 0) {
+  if (failures === undefined) {
     return;
   }
   failures.delete(databaseName);
@@ -845,7 +844,6 @@ export async function exportRecoverySnapshot(
   };
 
   if (database === undefined) {
-    clearFailedFirstMigration(factory, databaseName);
     return {
       format: RECOVERY_FORMAT,
       version: RECOVERY_VERSION,
@@ -884,6 +882,35 @@ export async function exportRecoverySnapshot(
   } finally {
     database.close();
   }
+}
+
+export async function resetLocalDatabase(
+  ownerScope: OwnerScope,
+  indexedDBFactory?: IDBFactory,
+): Promise<void> {
+  const parsedOwnerScope = ownerScopeSchema.safeParse(ownerScope);
+  if (!parsedOwnerScope.success) {
+    throw new StorageValidationError('Reset requires local ownership.');
+  }
+  const factory = indexedDBFactoryOrDefault(indexedDBFactory);
+
+  await new Promise<void>((resolve, reject) => {
+    const request = factory.deleteDatabase(DATABASE_NAME);
+    let settled = false;
+    request.addEventListener('success', () => {
+      clearMigrationFailure(factory, DATABASE_NAME);
+      if (!settled) {
+        settled = true;
+        resolve();
+      }
+    });
+    request.addEventListener('error', () => {
+      if (!settled) {
+        settled = true;
+        reject(request.error ?? new Error('Local data reset failed.'));
+      }
+    });
+  });
 }
 
 export async function createLocalRepositories(

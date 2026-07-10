@@ -119,6 +119,43 @@ const specularExportSchema = z.object({
   addArchiveIntegrityIssues(archive, refinement);
 });
 
+const recoveryRecordSchema = z.unknown().superRefine((value, refinement) => {
+  if (!isJsonValue(value)) {
+    refinement.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: 'Recovery records must be JSON-safe.',
+    });
+    return;
+  }
+  if (
+    typeof value !== 'object'
+    || value === null
+    || Array.isArray(value)
+    || !('ownerScope' in value)
+    || value.ownerScope !== 'local'
+  ) {
+    refinement.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: 'Recovery records must use local ownership.',
+    });
+  }
+});
+
+const recoverySnapshotSchema = z.object({
+  format: z.literal(RECOVERY_FORMAT),
+  version: z.literal(RECOVERY_VERSION),
+  exportedAt: z.number().int().nonnegative().finite(),
+  ownerScope: ownerScopeSchema,
+  databaseName: z.string().min(1).max(256),
+  databaseVersion: z.number().int().nonnegative().finite(),
+  stores: z.object({
+    threads: z.array(recoveryRecordSchema),
+    turns: z.array(recoveryRecordSchema),
+    capsules: z.array(recoveryRecordSchema),
+    preferences: z.array(recoveryRecordSchema),
+  }).strict(),
+}).strict();
+
 function addDuplicateAggregateIdIssues(
   archive: Pick<SpecularExport, 'threads' | 'turns' | 'capsules'>,
   refinement: z.RefinementCtx,
@@ -359,10 +396,35 @@ export function createExportFilename(exportedAt: number): string {
   return `specular-export-${date.toISOString().slice(0, 10)}.json`;
 }
 
-export function serializeExport(archive: SpecularExport): string {
-  const validated = parseSpecularExport(archive);
-  return JSON.stringify(validated, null, 2).replace(
+export function createRecoveryFilename(exportedAt: number): string {
+  if (!Number.isInteger(exportedAt) || exportedAt < 0) {
+    throw new ExportValidationError('Invalid recovery timestamp.');
+  }
+
+  const date = new Date(exportedAt);
+  if (!Number.isFinite(date.getTime())) {
+    throw new ExportValidationError('Invalid recovery timestamp.');
+  }
+
+  return `specular-recovery-${date.toISOString().slice(0, 10)}.json`;
+}
+
+function serializeJsonSafely(value: unknown): string {
+  return JSON.stringify(value, null, 2).replace(
     /[<>&\u2028\u2029]/gu,
     (character) => SAFE_JSON_CHARACTER_ESCAPES[character] ?? character,
   );
+}
+
+export function serializeExport(archive: SpecularExport): string {
+  const validated = parseSpecularExport(archive);
+  return serializeJsonSafely(validated);
+}
+
+export function serializeRecoverySnapshot(snapshot: RecoverySnapshot): string {
+  const result = recoverySnapshotSchema.safeParse(snapshot);
+  if (!result.success) {
+    throw new ExportValidationError('Invalid Specular recovery copy.');
+  }
+  return serializeJsonSafely(result.data);
 }

@@ -1,3 +1,7 @@
+/// <reference types="node" />
+
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import {
   act,
   render,
@@ -13,6 +17,18 @@ import {
 } from 'vitest';
 import type { RegisterSWOptions } from 'vite-plugin-pwa/types';
 import { PwaUpdatePrompt } from './PwaUpdatePrompt';
+
+const styles = readFileSync(join(process.cwd(), 'src/styles.css'), 'utf8');
+
+function remFontSize(selector: string): number {
+  const escapedSelector = selector.replace(/[.*+?^${}()|[\]\\]/gu, '\\$&');
+  const rule = new RegExp(`${escapedSelector}\\s*\\{[^}]*font-size:\\s*(\\d+(?:\\.\\d+)?)rem;`, 'u');
+  const match = styles.match(rule);
+  if (match?.[1] === undefined) {
+    throw new Error(`Expected ${selector} to declare a rem font size.`);
+  }
+  return Number.parseFloat(match[1]);
+}
 
 const pwaHarness = vi.hoisted(() => ({
   options: undefined as RegisterSWOptions | undefined,
@@ -46,6 +62,14 @@ describe('PwaUpdatePrompt', () => {
   beforeEach(() => {
     pwaHarness.options = undefined;
     pwaHarness.updateServiceWorker.mockClear();
+  });
+
+  it('keeps prompt messages at the minimum body type size', () => {
+    expect(remFontSize('.pwa-prompt__message')).toBeGreaterThanOrEqual(1);
+  });
+
+  it('keeps prompt controls at the minimum body type size', () => {
+    expect(remFontSize('.pwa-prompt__button')).toBeGreaterThanOrEqual(1);
   });
 
   it('offers an accessible update choice without stealing focus', async () => {

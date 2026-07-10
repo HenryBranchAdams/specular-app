@@ -1,5 +1,4 @@
 export type CrisisRegion = 'AU' | 'CA' | 'EU' | 'GB' | 'US' | 'other';
-
 export interface ServerConfig {
   nodeEnv: 'development' | 'test' | 'production';
   port: number;
@@ -11,7 +10,14 @@ export interface ServerConfig {
   rateLimitWindowMs: number;
   rateLimitMax: number;
   enableRealtime: boolean;
+  realtimeModel?: string;
+  realtimeCredentialTtlSeconds?: number;
   crisisRegion: CrisisRegion;
+}
+
+export interface LoadedServerConfig extends ServerConfig {
+  realtimeModel: string;
+  realtimeCredentialTtlSeconds: number;
 }
 
 type Environment = Readonly<Record<string, string | undefined>>;
@@ -123,23 +129,27 @@ function parseCrisisRegion(value: string | undefined): CrisisRegion {
   }
 }
 
-function parseModel(value: string | undefined): string {
+function parseModel(
+  name: 'OPENAI_MODEL' | 'OPENAI_REALTIME_MODEL',
+  value: string | undefined,
+  fallback: string,
+): string {
   const normalized = value?.trim();
-  const model = normalized === undefined || normalized === '' ? 'gpt-5.5' : normalized;
+  const model = normalized === undefined || normalized === '' ? fallback : normalized;
   if (model.length > 128 || !/^[A-Za-z0-9][A-Za-z0-9._:-]*$/u.test(model)) {
-    throw new Error('OPENAI_MODEL is invalid.');
+    throw new Error(`${name} is invalid.`);
   }
   return model;
 }
 
-export function loadServerConfig(environment: Environment = process.env): ServerConfig {
+export function loadServerConfig(environment: Environment = process.env): LoadedServerConfig {
   const nodeEnv = parseNodeEnvironment(environment.NODE_ENV);
   const openAiApiKey = environment.OPENAI_API_KEY?.trim();
-  const base: ServerConfig = {
+  const base: LoadedServerConfig = {
     nodeEnv,
     port: parseInteger('PORT', environment.PORT, 8788, 0, 65_535),
     allowedOrigins: parseAllowedOrigins(environment.ALLOWED_ORIGINS, nodeEnv),
-    openAiModel: parseModel(environment.OPENAI_MODEL),
+    openAiModel: parseModel('OPENAI_MODEL', environment.OPENAI_MODEL, 'gpt-5.5'),
     requestTimeoutMs: parseInteger(
       'REQUEST_TIMEOUT_MS',
       environment.REQUEST_TIMEOUT_MS,
@@ -169,6 +179,18 @@ export function loadServerConfig(environment: Environment = process.env): Server
       10_000,
     ),
     enableRealtime: parseBoolean('ENABLE_REALTIME', environment.ENABLE_REALTIME, false),
+    realtimeModel: parseModel(
+      'OPENAI_REALTIME_MODEL',
+      environment.OPENAI_REALTIME_MODEL,
+      'gpt-realtime',
+    ),
+    realtimeCredentialTtlSeconds: parseInteger(
+      'REALTIME_CREDENTIAL_TTL_SECONDS',
+      environment.REALTIME_CREDENTIAL_TTL_SECONDS,
+      60,
+      10,
+      7_200,
+    ),
     crisisRegion: parseCrisisRegion(environment.CRISIS_REGION),
   };
 

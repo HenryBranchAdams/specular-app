@@ -41,6 +41,14 @@ import {
 } from '../domain/schemas';
 import { createLocalRepositories } from '../storage/indexed-db';
 import type { LocalRepositories } from '../storage/repositories';
+import type {
+  RealtimeStartContext,
+  RealtimeVoiceController,
+} from '../voice/realtime-client';
+import type {
+  VoiceControllerCallbacks,
+  VoiceControllerFactory,
+} from '../voice/use-voice';
 import { App } from './App';
 import type { SpecularDependencies } from './use-specular';
 
@@ -60,6 +68,10 @@ const STARTERS = [
 const STARTER_OPACITY_PATTERN = /--starter-opacity:\s*(\d+(?:\.\d+)?)/gu;
 const FOCUSED_STARTER_OPACITY_PATTERN =
   /\.starter-deck__item:hover,\s*\.starter-deck__item:focus-within\s*\{[^}]*opacity:\s*1;/u;
+const SETTLED_STARTER_PAUSE_PATTERN =
+  /\.app-shell--settled\s+\.starter-deck__item\s*\{[^}]*animation-play-state:\s*paused;/u;
+const LOCAL_STARTER_PAUSE_PATTERN =
+  /\.starter-deck\[data-motion="paused"\]\s+\.starter-deck__item,\s*\.starter-deck\[data-motion="static"\]\s+\.starter-deck__item\s*\{[^}]*animation-play-state:\s*paused;/u;
 
 const EMPTY_UNDERSTANDING: ThreadUnderstanding = {
   claims: [],
@@ -155,6 +167,39 @@ interface Fixture {
   provider: DeterministicQuestioningProvider;
   repositories: LocalRepositories;
   service: ConversationService;
+}
+
+interface VoiceHarness {
+  readonly callbacks: VoiceControllerCallbacks | null;
+  readonly factory: VoiceControllerFactory;
+  readonly start: ReturnType<typeof vi.fn>;
+  readonly stop: ReturnType<typeof vi.fn>;
+}
+
+function createVoiceHarness(): VoiceHarness {
+  let callbacks: VoiceControllerCallbacks | null = null;
+  const start = vi.fn((context: RealtimeStartContext) => {
+    void context;
+    return Promise.resolve();
+  });
+  const stop = vi.fn();
+  const controller: RealtimeVoiceController = {
+    getStatus: () => 'idle',
+    start,
+    stop,
+  };
+  const factory = vi.fn((nextCallbacks: VoiceControllerCallbacks) => {
+    callbacks = nextCallbacks;
+    return controller;
+  });
+  return {
+    get callbacks() {
+      return callbacks;
+    },
+    factory,
+    start,
+    stop,
+  };
 }
 
 const openRepositories: LocalRepositories[] = [];
@@ -285,18 +330,151 @@ describe('Specular mobile thinking loop', () => {
     expect(styles).toMatch(FOCUSED_STARTER_OPACITY_PATTERN);
   });
 
-  it('makes text, microphone, and send controls immediately accessible with touch geometry', async () => {
+  it('pauses starter drift when the settled composer or local deck state requests it', () => {
+    expect(styles).toMatch(SETTLED_STARTER_PAUSE_PATTERN);
+    expect(styles).toMatch(LOCAL_STARTER_PAUSE_PATTERN);
+  });
+
+  it('keeps voice off by default while text and send controls remain accessible', async () => {
     const { dependencies } = await createFixture();
     render(<App dependencies={dependencies} />);
 
     const composer = screen.getByRole('textbox', { name: 'Your thought' });
-    const microphone = screen.getByRole('button', { name: 'Start voice input' });
     const send = screen.getByRole('button', { name: 'Send thought' });
 
     expect(composer).toHaveClass('touch-target');
-    expect(microphone).toHaveClass('touch-target');
     expect(send).toHaveClass('touch-target');
+    expect(screen.queryByRole('button', { name: /voice/iu })).not.toBeInTheDocument();
     await screen.findByRole('button', { name: STARTERS[0] });
+  });
+
+  it('accepts one voice exchange into the active transcript without touching the text draft', async () => {
+    const fixture = await createFixture();
+    const thread = await seedActiveThread(fixture);
+    const harness = createVoiceHarness();
+    const acceptVoiceExchange = vi.spyOn(fixture.service, 'acceptVoiceExchange');
+    const user = userEvent.setup();
+    render(
+      <App
+        dependencies={fixture.dependencies}
+        voiceControllerFactory={harness.factory}
+        voiceEnabled
+      />,
+    );
+    await screen.findByRole('heading', { name: thread.title });
+
+    const composer = screen.getByRole('textbox', { name: 'Your thought' });
+    await user.type(composer, 'A typed thought stays here.');
+    await user.click(screen.getByRole('button', { name: 'Start voice' }));
+
+    expect(harness.factory).toHaveBeenCalledOnce();
+    expect(harness.start).toHaveBeenCalledOnce();
+    const startContext = harness.start.mock.calls[0]?.[0] as RealtimeStartContext | undefined;
+    expect(startContext?.threadId).toBe(thread.id);
+    expect(startContext?.turns).toHaveLength(2);
+    expect(startContext?.turns.every((turn) => turn.deliveryState === 'accepted')).toBe(true);
+    expect(composer).toHaveValue('A typed thought stays here.');
+
+    act(() => {
+      harness.callbacks?.onStatus('connecting');
+    });
+    expect(screen.getByRole('button', { name: 'Connecting' })).toBeDisabled();
+    act(() => {
+      harness.callbacks?.onStatus('listening');
+    });
+    expect(screen.getByRole('button', { name: 'Stop voice' })).toBeEnabled();
+    expect(screen.getByRole('status', { name: 'Voice status' })).toHaveTextContent('Listening');
+
+    const exchange = {
+      threadId: thread.id,
+      userTranscript: 'The handoff keeps getting lost.',
+      assistantTranscript: 'Which handoff owner needs the clearest signal first?',
+    };
+    const callbacks = harness.callbacks;
+    if (callbacks === null) {
+      throw new Error('Voice controller callbacks were not registered.');
+    }
+    await act(async () => {
+      await callbacks.onCompletedExchange(exchange);
+    });
+
+    expect(acceptVoiceExchange).toHaveBeenCalledOnce();
+    expect(acceptVoiceExchange).toHaveBeenCalledWith(
+      thread.id,
+      exchange.userTranscript,
+      exchange.assistantTranscript,
+    );
+    const transcript = screen.getByRole('log', { name: 'Conversation history' });
+    expect(within(transcript).getByText(exchange.userTranscript)).toBeVisible();
+    expect(within(transcript).getByText(exchange.assistantTranscript)).toBeVisible();
+    expect(screen.getAllByRole('log', { name: 'Conversation history' })).toHaveLength(1);
+    expect(composer).toHaveValue('A typed thought stays here.');
+    expect(screen.getByRole('button', { name: 'Challenge me' })).toBeVisible();
+    expect(screen.getByRole('button', { name: 'Draft a conclusion' })).toBeVisible();
+
+    await user.click(screen.getByRole('button', { name: 'Stop voice' }));
+    expect(harness.stop).toHaveBeenCalledOnce();
+    expect(composer).toHaveFocus();
+    expect(composer).toHaveValue('A typed thought stays here.');
+  });
+
+  it('announces voice failure, restores composer focus, and leaves text usable', async () => {
+    const fixture = await createFixture();
+    await seedActiveThread(fixture);
+    const harness = createVoiceHarness();
+    const user = userEvent.setup();
+    render(
+      <App
+        dependencies={fixture.dependencies}
+        voiceControllerFactory={harness.factory}
+        voiceEnabled
+      />,
+    );
+
+    const composer = await screen.findByRole('textbox', { name: 'Your thought' });
+    await user.type(composer, 'Do not erase this draft.');
+    await user.click(screen.getByRole('button', { name: 'Start voice' }));
+    act(() => {
+      harness.callbacks?.onStatus('idle');
+      harness.callbacks?.onFailure({
+        code: 'microphone_unavailable',
+        message: 'Microphone access was not granted.',
+      });
+    });
+
+    expect(screen.getByRole('alert')).toHaveTextContent('Microphone access was not granted.');
+    expect(screen.getByRole('button', { name: 'Start voice' })).toBeEnabled();
+    expect(composer).toHaveValue('Do not erase this draft.');
+    expect(composer).toHaveFocus();
+    expect(screen.getByRole('button', { name: 'Send thought' })).toBeEnabled();
+  });
+
+  it('stops voice before a Challenge or conclusion operation proceeds', async () => {
+    const fixture = await createFixture();
+    await seedActiveThread(fixture);
+    const harness = createVoiceHarness();
+    const user = userEvent.setup();
+    render(
+      <App
+        dependencies={fixture.dependencies}
+        voiceControllerFactory={harness.factory}
+        voiceEnabled
+      />,
+    );
+
+    await user.click(await screen.findByRole('button', { name: 'Start voice' }));
+    act(() => { harness.callbacks?.onStatus('listening'); });
+    const challenge = screen.getByRole('button', { name: 'Challenge me' });
+    const conclusion = screen.getByRole('button', { name: 'Draft a conclusion' });
+    expect(challenge).toBeDisabled();
+    expect(conclusion).toBeDisabled();
+    expect(fixture.provider.challengeCalls).toBe(0);
+    await user.click(screen.getByRole('button', { name: 'Stop voice' }));
+    await waitFor(() => { expect(harness.stop).toHaveBeenCalledOnce(); });
+    expect(challenge).toBeEnabled();
+    await user.click(challenge);
+    expect(await screen.findByRole('button', { name: 'Start voice' })).toBeEnabled();
+    expect(screen.getByRole('button', { name: 'Draft a conclusion' })).toBeVisible();
   });
 
   it('keeps a pre-initialization draft but waits to send until repositories load', async () => {

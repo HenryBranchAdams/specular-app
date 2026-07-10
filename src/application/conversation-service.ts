@@ -22,6 +22,7 @@ import type {
 } from '../domain/contracts';
 import {
   MAX_TITLE_LENGTH,
+  MAX_TURN_CONTENT_LENGTH,
   capsuleIdSchema,
   capsuleSchema,
   threadIdSchema,
@@ -58,6 +59,12 @@ export interface SubmittedTurnResult {
   userTurn: Turn;
   responseTurn: Turn;
   output: NextQuestionResult;
+}
+
+export interface VoiceExchangeResult {
+  thread: Thread;
+  userTurn: Turn;
+  responseTurn: Turn;
 }
 
 export interface ChallengeOperationResult {
@@ -168,6 +175,10 @@ function nextPosition(turns: Turn[]): number {
   return turns.reduce((maximum, turn) => Math.max(maximum, turn.position), -1) + 1;
 }
 
+function isBoundedFinalTranscript(value: string): boolean {
+  return value.trim().length > 0 && value.length <= MAX_TURN_CONTENT_LENGTH;
+}
+
 function appendTurnId(turnIds: TurnId[], turnId: TurnId): TurnId[] {
   return turnIds.includes(turnId) ? turnIds : [...turnIds, turnId];
 }
@@ -259,6 +270,84 @@ export class ConversationService {
 
     await this.recordTelemetry('turn_sent');
     return this.completePendingUserTurn(userTurn);
+  }
+
+  async acceptVoiceExchange(
+    threadId: ThreadId,
+    userTranscript: string,
+    assistantTranscript: string,
+  ): Promise<ServiceResult<VoiceExchangeResult>> {
+    if (
+      !isBoundedFinalTranscript(userTranscript)
+      || !isBoundedFinalTranscript(assistantTranscript)
+    ) {
+      return failure('invalid_output');
+    }
+
+    let thread: Thread;
+    let turns: Turn[];
+    try {
+      thread = threadSchema.parse(await this.requireActiveThread(threadId));
+      turns = await this.repositories.turns.listByThread(threadId);
+    } catch {
+      return failure('storage_failure');
+    }
+
+    let output: NextQuestionResult;
+    try {
+      output = validateOperationResult('next_question', {
+        kind: 'question',
+        question: assistantTranscript,
+        understanding: thread.understanding,
+      });
+    } catch {
+      return failure('invalid_output');
+    }
+
+    try {
+      const timestamp = this.now();
+      const userPosition = nextPosition(turns);
+      const userTurn = turnSchema.parse({
+        id: this.ids.turnId(),
+        ownerScope: OWNER_SCOPE,
+        threadId,
+        role: 'user',
+        content: userTranscript,
+        modality: 'voice',
+        createdAt: timestamp,
+        position: userPosition,
+        operation: 'next_question',
+        deliveryState: 'accepted',
+      });
+      const responseTurn = turnSchema.parse({
+        id: this.ids.turnId(),
+        ownerScope: OWNER_SCOPE,
+        threadId,
+        role: 'specular',
+        content: output.question,
+        modality: 'voice',
+        createdAt: timestamp,
+        position: userPosition + 1,
+        operation: 'next_question',
+        deliveryState: 'accepted',
+      });
+      const updatedThread = threadSchema.parse({
+        ...thread,
+        updatedAt: timestamp,
+        turnIds: appendTurnId(
+          appendTurnId(thread.turnIds, userTurn.id),
+          responseTurn.id,
+        ),
+      });
+      await this.repositories.conversation.acceptExchange({
+        thread: updatedThread,
+        userTurn,
+        responseTurn,
+      });
+      return success({ thread: updatedThread, userTurn, responseTurn });
+    } catch {
+      return failure('storage_failure');
+    }
   }
 
   async retryTurn(turnId: TurnId): Promise<ServiceResult<SubmittedTurnResult>> {
@@ -458,6 +547,78 @@ export class ConversationService {
       await this.repositories.capsules.put(capsule);
       await this.recordTelemetry('capsule_saved');
       return success(capsule);
+    } catch {
+      return failure('storage_failure');
+    }
+  }
+
+  async updateCapsule(
+    capsuleId: CapsuleId,
+    conclusion: WorkingConclusion,
+  ): Promise<ServiceResult<Capsule>> {
+    try {
+      const capsule = await this.repositories.capsules.get(capsuleId);
+      if (capsule === undefined) {
+        return failure('storage_failure');
+      }
+      const provenanceIsUnchanged = conclusion.provenance.length
+        === capsule.conclusion.provenance.length
+        && conclusion.provenance.every((source, index) => {
+          const original = capsule.conclusion.provenance[index];
+          return source.turnId === original?.turnId
+            && source.excerpt === original.excerpt;
+        });
+      if (!provenanceIsUnchanged) {
+        return failure('storage_failure');
+      }
+
+      const sourceThread = await this.repositories.threads.get(capsule.sourceThreadId);
+      const turns = await this.repositories.turns.listByThread(capsule.sourceThreadId);
+      if (sourceThread === undefined) {
+        const retainedSourceIds = new Set<TurnId>([
+          capsule.sourceTurnRange.startTurnId,
+          capsule.sourceTurnRange.endTurnId,
+          ...capsule.conclusion.provenance.map((source) => source.turnId),
+        ]);
+        const retainedSourceTurns = await Promise.all(
+          [...retainedSourceIds].map((turnId) => this.repositories.turns.get(turnId)),
+        );
+        if (turns.length > 0 || retainedSourceTurns.some((turn) => turn !== undefined)) {
+          return failure('storage_failure');
+        }
+      }
+      if (sourceThread !== undefined) {
+        const byId = new Map(turns.map((turn) => [turn.id, turn]));
+        const start = byId.get(capsule.sourceTurnRange.startTurnId);
+        const end = byId.get(capsule.sourceTurnRange.endTurnId);
+        if (start === undefined || end === undefined || start.position > end.position) {
+          return failure('storage_failure');
+        }
+        const provenanceIsWithinRange = capsule.conclusion.provenance.every((source) => {
+          const turn = byId.get(source.turnId);
+          return turn !== undefined
+            && turn.position >= start.position
+            && turn.position <= end.position;
+        });
+        if (!provenanceIsWithinRange) {
+          return failure('storage_failure');
+        }
+      }
+
+      const timestamp = this.now();
+      const editedConclusion = workingConclusionSchema.parse({
+        ...conclusion,
+        provenance: capsule.conclusion.provenance,
+        editState: 'edited',
+        editedAt: timestamp,
+      });
+      const updated = capsuleSchema.parse({
+        ...capsule,
+        conclusion: editedConclusion,
+        updatedAt: timestamp,
+      });
+      await this.repositories.capsules.put(updated);
+      return success(updated);
     } catch {
       return failure('storage_failure');
     }

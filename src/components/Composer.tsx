@@ -7,6 +7,13 @@ import type {
   SyntheticEvent,
 } from 'react';
 import { Mic, Send } from 'lucide-react';
+import { assertNever } from '../domain/contracts';
+import type { VoiceStatus } from '../voice/use-voice';
+
+export interface ComposerVoiceState {
+  error: string | null;
+  status: VoiceStatus;
+}
 
 export interface ComposerProps {
   busy: boolean;
@@ -16,6 +23,39 @@ export interface ComposerProps {
   onSubmit: () => void;
   onValueChange: (value: string) => void;
   onVoice: () => void;
+  voice?: ComposerVoiceState;
+}
+
+function voiceButtonLabel(status: VoiceStatus): string {
+  switch (status) {
+    case 'idle':
+    case 'failure':
+      return 'Start voice';
+    case 'connecting':
+      return 'Connecting';
+    case 'listening':
+      return 'Stop voice';
+    case 'unavailable':
+      return 'Voice unavailable';
+    default:
+      return assertNever(status);
+  }
+}
+
+function voiceStatusText(status: VoiceStatus): string {
+  switch (status) {
+    case 'idle':
+      return 'Voice ready';
+    case 'connecting':
+      return 'Connecting';
+    case 'listening':
+      return 'Listening';
+    case 'failure':
+    case 'unavailable':
+      return 'Voice unavailable';
+    default:
+      return assertNever(status);
+  }
 }
 
 export function Composer({
@@ -26,6 +66,7 @@ export function Composer({
   onVoice,
   ref,
   value,
+  voice,
 }: ComposerProps) {
   const localRef = useRef<HTMLTextAreaElement | null>(null);
   const setComposerRef = (element: HTMLTextAreaElement | null) => {
@@ -72,14 +113,38 @@ export function Composer({
         value={value}
       />
       <div className="composer__controls">
-        <button
-          aria-label="Start voice input"
-          className="icon-button touch-target"
-          onClick={onVoice}
-          type="button"
-        >
-          <Mic aria-hidden="true" size={22} strokeWidth={1.8} />
-        </button>
+        {voice === undefined ? null : (
+          <div className="composer__voice">
+            <button
+              className="voice-button touch-target"
+              disabled={voice.status === 'connecting'
+                || voice.status === 'unavailable'
+                || (busy && voice.status !== 'listening')}
+              onClick={onVoice}
+              type="button"
+            >
+              <Mic aria-hidden="true" size={19} strokeWidth={1.8} />
+              <span>{voiceButtonLabel(voice.status)}</span>
+            </button>
+            <span
+              aria-label="Voice status"
+              aria-live="polite"
+              className="composer__voice-status"
+              role="status"
+            >
+              {voiceStatusText(voice.status)}
+            </span>
+            {voice.error === null ? null : (
+              <span
+                aria-live="assertive"
+                className="composer__voice-error"
+                role="alert"
+              >
+                {voice.error}
+              </span>
+            )}
+          </div>
+        )}
         <button
           aria-label="Send thought"
           className="icon-button icon-button--send touch-target"

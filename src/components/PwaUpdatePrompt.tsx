@@ -21,7 +21,7 @@ export function PwaUpdatePrompt() {
   const updateAvailable = promptKind === 'update';
 
   return (
-    <aside
+    <div
       aria-label={updateAvailable ? 'Application update' : 'Offline availability'}
       aria-live="polite"
       className="pwa-prompt"
@@ -54,6 +54,6 @@ export function PwaUpdatePrompt() {
           {updateAvailable ? 'Later' : 'Dismiss'}
         </button>
       </div>
-    </aside>
+    </div>
   );
 }

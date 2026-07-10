@@ -1,0 +1,46 @@
+services:
+  development-web:
+    profiles: [development]
+    build:
+      context: .
+      target: development
+    env_file: deploy/development.env
+    ports:
+      - "5173:5173"
+    command: npm run dev -- --host 0.0.0.0
+
+  development-server:
+    profiles: [development]
+    build:
+      context: .
+      target: development
+    env_file: deploy/development.env
+    ports:
+      - "8788:8788"
+    command: npm run dev:server
+
+  preview:
+    profiles: [preview]
+    build:
+      context: .
+      target: production
+    env_file: deploy/preview.env
+    ports:
+      - "8789:8788"
+    read_only: true
+    tmpfs: [/tmp]
+    init: true
+
+  production:
+    profiles: [production]
+    image: ${SPECULAR_IMAGE:-specular:production}
+    build:
+      context: .
+      target: production
+    env_file: deploy/production.env
+    ports:
+      - "8788:8788"
+    read_only: true
+    tmpfs: [/tmp]
+    init: true
+    restart: unless-stopped

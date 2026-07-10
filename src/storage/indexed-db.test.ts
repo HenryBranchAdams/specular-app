@@ -14,7 +14,10 @@ import {
 } from '../domain/schemas';
 import {
   createExportFilename,
+  createRecoveryFilename,
   serializeExport,
+  serializeRecoverySnapshot,
+  type RecoverySnapshot,
   type SpecularExport,
 } from './export';
 import * as indexedDbModule from './indexed-db';
@@ -24,6 +27,7 @@ import {
   StorageMigrationError,
   createLocalRepositories,
   exportRecoverySnapshot,
+  resetLocalDatabase,
 } from './indexed-db';
 import {
   AbortNextUpgradeFactory,
@@ -34,6 +38,39 @@ import {
 import type { LocalRepositories } from './repositories';
 
 const EXPORTED_AT = Date.UTC(2026, 6, 9, 12);
+
+class ObserveBlockedDeleteFactory implements IDBFactory {
+  readonly blocked: Promise<void>;
+  private resolveBlocked: (() => void) | undefined;
+
+  constructor(private readonly factory: IDBFactory) {
+    this.blocked = new Promise((resolve) => {
+      this.resolveBlocked = resolve;
+    });
+  }
+
+  cmp(first: IDBValidKey, second: IDBValidKey): number {
+    return this.factory.cmp(first, second);
+  }
+
+  databases(): Promise<IDBDatabaseInfo[]> {
+    return this.factory.databases();
+  }
+
+  deleteDatabase(name: string): IDBOpenDBRequest {
+    const request = this.factory.deleteDatabase(name);
+    request.addEventListener('blocked', () => {
+      this.resolveBlocked?.();
+    });
+    return request;
+  }
+
+  open(name: string, version?: number): IDBOpenDBRequest {
+    return version === undefined
+      ? this.factory.open(name)
+      : this.factory.open(name, version);
+  }
+}
 
 type CreateParameterCount = Parameters<typeof createLocalRepositories>['length'];
 const HAS_EXACT_TWO_ARGUMENT_API: CreateParameterCount extends 1 | 2 ? true : false = true;
@@ -185,6 +222,7 @@ describe('versioned owner-scoped IndexedDB persistence', () => {
       'StorageValidationError',
       'createLocalRepositories',
       'exportRecoverySnapshot',
+      'resetLocalDatabase',
     ]);
     expect(HAS_EXACT_TWO_ARGUMENT_API).toBe(true);
   });
@@ -236,7 +274,7 @@ describe('versioned owner-scoped IndexedDB persistence', () => {
     repositories.close();
   });
 
-  it('recovers a failed first migration without creating a database before a clean retry', async () => {
+  it('keeps a failed first migration locked until an explicit reset permits a clean retry', async () => {
     const baseFactory = new IDBFactory();
     const factory = new AbortNextUpgradeFactory(baseFactory);
 
@@ -260,6 +298,10 @@ describe('versioned owner-scoped IndexedDB persistence', () => {
       DATABASE_NAME,
     );
 
+    await expect(createLocalRepositories('local', factory)).rejects.toBeInstanceOf(
+      StorageMigrationError,
+    );
+    await resetLocalDatabase('local', factory);
     const repositories = await createLocalRepositories('local', factory);
     const database = await openRawDatabase(baseFactory, DATABASE_NAME);
     expect(database.version).toBe(SPECULAR_DB_VERSION);
@@ -696,6 +738,42 @@ describe('versioned owner-scoped IndexedDB persistence', () => {
     expect(JSON.parse(serialized)).toEqual(archive);
   });
 
+  it('validates and safely serializes an owner-scoped recovery copy', () => {
+    const snapshot: RecoverySnapshot = {
+      format: 'specular-recovery',
+      version: 1,
+      exportedAt: EXPORTED_AT,
+      ownerScope: 'local',
+      databaseName: DATABASE_NAME,
+      databaseVersion: 1,
+      stores: {
+        threads: [{
+          ownerScope: 'local',
+          id: 'thread-recovery',
+          title: '</script><script>alert(1)</script>\u2028unsafe\u2029',
+        }],
+        turns: [],
+        capsules: [],
+        preferences: [],
+      },
+    };
+
+    const serialized = serializeRecoverySnapshot(snapshot);
+
+    expect(createRecoveryFilename(EXPORTED_AT)).toBe('specular-recovery-2026-07-09.json');
+    expect(serialized).not.toContain('<script>');
+    expect(serialized).not.toContain('\u2028');
+    expect(serialized).not.toContain('\u2029');
+    expect(JSON.parse(serialized)).toEqual(snapshot);
+    expect(() => serializeRecoverySnapshot({
+      ...snapshot,
+      stores: {
+        ...snapshot.stores,
+        threads: [{ ownerScope: 'other', id: 'foreign' }],
+      },
+    })).toThrow(/invalid/i);
+  });
+
   it('deletes all local content permanently without deleting another owner', async () => {
     const factory = new IDBFactory();
     const repositories = await createLocalRepositories('local', factory);
@@ -782,5 +860,80 @@ describe('versioned owner-scoped IndexedDB persistence', () => {
     const preservedDatabase = await openRawDatabase(baseFactory, DATABASE_NAME);
     expect(preservedDatabase.version).toBe(1);
     preservedDatabase.close();
+  });
+
+  it('preserves the failed database until authorized reset and then initializes fresh storage', async () => {
+    const baseFactory = new IDBFactory();
+    const original = await createLocalRepositories('local', baseFactory);
+    await original.threads.put(makeThread({
+      id: 'thread-preserved-until-reset',
+      title: 'Preserve before explicit reset',
+    }));
+    original.close();
+    const factory = new AbortNextUpgradeFactory(baseFactory, 2);
+
+    await expect(createLocalRepositories('local', factory)).rejects.toBeInstanceOf(
+      StorageMigrationError,
+    );
+    expect(await getRawAggregates(baseFactory, DATABASE_NAME, 'threads')).toEqual([
+      expect.objectContaining({ id: 'thread-preserved-until-reset' }),
+    ]);
+
+    await resetLocalDatabase('local', factory);
+    const fresh = await createLocalRepositories('local', factory);
+
+    expect(await fresh.threads.list()).toEqual([]);
+    expect(await fresh.capsules.list()).toEqual([]);
+    fresh.close();
+  });
+
+  it('rejects an invalid reset owner without deleting local data', async () => {
+    const factory = new IDBFactory();
+    const repositories = await createLocalRepositories('local', factory);
+    await repositories.threads.put(makeThread({ id: 'thread-blocked-reset' }));
+    repositories.close();
+
+    await expect(
+      resetLocalDatabase('other' as unknown as 'local', factory),
+    ).rejects.toThrow(/local ownership/i);
+    expect(await getRawAggregates(factory, DATABASE_NAME, 'threads')).toEqual([
+      expect.objectContaining({ id: 'thread-blocked-reset' }),
+    ]);
+  });
+
+  it('keeps a blocked reset pending until the delete request reaches terminal success', async () => {
+    const baseFactory = new IDBFactory();
+    const repositories = await createLocalRepositories('local', baseFactory);
+    await repositories.threads.put(makeThread({ id: 'thread-blocked-reset' }));
+    repositories.close();
+    const blocker = await openRawDatabase(baseFactory, DATABASE_NAME);
+    const factory = new ObserveBlockedDeleteFactory(baseFactory);
+    let outcome: 'pending' | 'rejected' | 'resolved' = 'pending';
+
+    const reset = resetLocalDatabase('local', factory);
+    void reset.then(
+      () => { outcome = 'resolved'; },
+      () => { outcome = 'rejected'; },
+    );
+    await factory.blocked;
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect(outcome).toBe('pending');
+    const transaction = blocker.transaction('threads', 'readonly');
+    const records = await new Promise<unknown[]>((resolve, reject) => {
+      const request = transaction.objectStore('threads').getAll();
+      request.addEventListener('success', () => { resolve(request.result); });
+      request.addEventListener('error', () => {
+        reject(request.error ?? new Error('Unable to inspect blocked reset data.'));
+      });
+    });
+    expect(records).toEqual([
+      expect.objectContaining({ id: 'thread-blocked-reset' }),
+    ]);
+
+    blocker.close();
+    await expect(reset).resolves.toBeUndefined();
+    expect(outcome).toBe('resolved');
   });
 });

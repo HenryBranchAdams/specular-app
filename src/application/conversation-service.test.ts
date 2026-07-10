@@ -202,12 +202,14 @@ function createClock(start = 1_000): () => number {
 
 interface ServiceFixture {
   client: CompleteTestQuestioningProvider;
+  indexedDBFactory: IDBFactory;
   repositories: LocalRepositories;
   service: ConversationService;
 }
 
 async function createServiceFixture(): Promise<ServiceFixture> {
-  const repositories = await createLocalRepositories('local', new IDBFactory());
+  const indexedDBFactory = new IDBFactory();
+  const repositories = await createLocalRepositories('local', indexedDBFactory);
   const client = new CompleteTestQuestioningProvider();
   const now = createClock();
   const telemetry = new ProductTelemetry(repositories.preferences, { now });
@@ -219,7 +221,7 @@ async function createServiceFixture(): Promise<ServiceFixture> {
     telemetry,
   });
   openRepositories.push(repositories);
-  return { client, repositories, service };
+  return { client, indexedDBFactory, repositories, service };
 }
 
 function unwrap<T>(result: ServiceResult<T>): T {
@@ -273,6 +275,211 @@ afterEach(() => {
 });
 
 describe('ConversationService orchestration', () => {
+  it('atomically accepts one ordered voice exchange after existing turns without a provider call', async () => {
+    const {
+      client,
+      indexedDBFactory,
+      repositories,
+      service,
+    } = await createServiceFixture();
+    const thread = unwrap(await service.startThread('Shared voice thread'));
+    const existing = unwrap(await service.submitUserTurn(
+      thread.id,
+      'The launch handoff is still the constraint.',
+    ));
+    const nextQuestion = vi.spyOn(client, 'nextQuestion');
+
+    const exchange = unwrap(await service.acceptVoiceExchange(
+      thread.id,
+      'The support team hears the uncertainty first.',
+      'Which launch assumption needs the strongest evidence first?',
+    ));
+
+    expect(nextQuestion).not.toHaveBeenCalled();
+    expect(exchange.userTurn).toMatchObject({
+      ownerScope: 'local',
+      threadId: thread.id,
+      role: 'user',
+      content: 'The support team hears the uncertainty first.',
+      modality: 'voice',
+      position: 2,
+      operation: 'next_question',
+      deliveryState: 'accepted',
+    });
+    expect(exchange.responseTurn).toMatchObject({
+      ownerScope: 'local',
+      threadId: thread.id,
+      role: 'specular',
+      content: 'Which launch assumption needs the strongest evidence first?',
+      modality: 'voice',
+      position: 3,
+      operation: 'next_question',
+      deliveryState: 'accepted',
+    });
+    expect(exchange.thread).toMatchObject({
+      id: thread.id,
+      understanding: existing.thread.understanding,
+      turnIds: [
+        existing.userTurn.id,
+        existing.responseTurn.id,
+        exchange.userTurn.id,
+        exchange.responseTurn.id,
+      ],
+    });
+    expect(exchange.thread.updatedAt).toBeGreaterThan(existing.thread.updatedAt);
+    expect(await repositories.turns.listByThread(thread.id)).toEqual([
+      existing.userTurn,
+      existing.responseTurn,
+      exchange.userTurn,
+      exchange.responseTurn,
+    ]);
+    expect(await repositories.threads.get(thread.id)).toEqual(exchange.thread);
+
+    repositories.close();
+    const reopened = await createLocalRepositories('local', indexedDBFactory);
+    openRepositories.push(reopened);
+    expect(await reopened.turns.listByThread(thread.id)).toEqual([
+      existing.userTurn,
+      existing.responseTurn,
+      exchange.userTurn,
+      exchange.responseTurn,
+    ]);
+    expect(await reopened.threads.get(thread.id)).toEqual(exchange.thread);
+  });
+
+  it.each([
+    { label: 'empty', transcript: '' },
+    { label: 'whitespace-only', transcript: '   ' },
+    { label: 'oversized', transcript: 'x'.repeat(MAX_TURN_CONTENT_LENGTH + 1) },
+  ])('rejects a $label final user voice transcript without writing', async ({ transcript }) => {
+    const { repositories, service } = await createServiceFixture();
+    const thread = unwrap(await service.startThread('Invalid voice input'));
+    const acceptExchange = vi.spyOn(repositories.conversation, 'acceptExchange');
+
+    const result = await service.acceptVoiceExchange(
+      thread.id,
+      transcript,
+      'Which launch assumption needs the strongest evidence first?',
+    );
+
+    expect(result).toMatchObject({ ok: false, error: { code: 'invalid_output' } });
+    expect(acceptExchange).not.toHaveBeenCalled();
+    expect(await repositories.turns.listByThread(thread.id)).toEqual([]);
+    expect((await repositories.threads.get(thread.id))?.turnIds).toEqual([]);
+  });
+
+  it.each([
+    { label: 'empty', transcript: '' },
+    { label: 'invalid', transcript: 'This transcript contains no question.' },
+    { label: 'why-question', transcript: 'Why does the launch assumption matter?' },
+    {
+      label: 'multi-question',
+      transcript: 'Which assumption is weakest? Which evidence would change the decision?',
+    },
+    {
+      label: 'over-45-word',
+      transcript: `${Array.from({ length: 46 }, () => 'boundary').join(' ')}?`,
+    },
+    { label: 'oversized', transcript: `${'x'.repeat(MAX_TURN_CONTENT_LENGTH)}?` },
+  ])('rejects a $label final assistant voice transcript without writing', async ({ transcript }) => {
+    const { repositories, service } = await createServiceFixture();
+    const thread = unwrap(await service.startThread('Invalid voice response'));
+    const acceptExchange = vi.spyOn(repositories.conversation, 'acceptExchange');
+
+    const result = await service.acceptVoiceExchange(
+      thread.id,
+      'The support team hears the uncertainty first.',
+      transcript,
+    );
+
+    expect(result).toMatchObject({ ok: false, error: { code: 'invalid_output' } });
+    expect(acceptExchange).not.toHaveBeenCalled();
+    expect(await repositories.turns.listByThread(thread.id)).toEqual([]);
+    expect((await repositories.threads.get(thread.id))?.turnIds).toEqual([]);
+  });
+
+  it('rejects missing, inactive, and wrong-owner threads without writing', async () => {
+    const { repositories, service } = await createServiceFixture();
+    const active = unwrap(await service.startThread('Voice ownership'));
+    const inactive = threadSchema.parse({
+      ...active,
+      lifecycleState: 'completed',
+      completedAt: active.updatedAt + 1,
+    });
+    await repositories.threads.put(inactive);
+    const acceptExchange = vi.spyOn(repositories.conversation, 'acceptExchange');
+    const validUser = 'The support team hears the uncertainty first.';
+    const validAssistant = 'Which launch assumption needs the strongest evidence first?';
+
+    const missing = await service.acceptVoiceExchange(
+      threadIdSchema.parse('missing-thread'),
+      validUser,
+      validAssistant,
+    );
+    const completed = await service.acceptVoiceExchange(active.id, validUser, validAssistant);
+    vi.spyOn(repositories.threads, 'get').mockResolvedValueOnce({
+      ...active,
+      ownerScope: 'another-owner',
+    } as unknown as Thread);
+    const wrongOwner = await service.acceptVoiceExchange(active.id, validUser, validAssistant);
+
+    for (const result of [missing, completed, wrongOwner]) {
+      expect(result).toMatchObject({ ok: false, error: { code: 'storage_failure' } });
+    }
+    expect(acceptExchange).not.toHaveBeenCalled();
+    expect(await repositories.turns.listByThread(active.id)).toEqual([]);
+  });
+
+  it('rolls back both voice turns when the atomic accepted exchange fails', async () => {
+    const { repositories, service } = await createServiceFixture();
+    const thread = unwrap(await service.startThread('Atomic voice exchange'));
+    abortOnNthPut('turns', 2);
+
+    const result = await service.acceptVoiceExchange(
+      thread.id,
+      'The support team hears the uncertainty first.',
+      'Which launch assumption needs the strongest evidence first?',
+    );
+
+    expect(result).toMatchObject({ ok: false, error: { code: 'storage_failure' } });
+    expect(await repositories.turns.listByThread(thread.id)).toEqual([]);
+    expect((await repositories.threads.get(thread.id))?.turnIds).toEqual([]);
+  });
+
+  it('feeds accepted voice turns into the existing Challenge and conclusion contexts', async () => {
+    const { client, service } = await createServiceFixture();
+    const thread = unwrap(await service.startThread('Voice context'));
+    const exchange = unwrap(await service.acceptVoiceExchange(
+      thread.id,
+      'The support team hears the uncertainty first.',
+      'Which launch assumption needs the strongest evidence first?',
+    ));
+    let challengeContext: ThreadContext | undefined;
+    let conclusionContext: ThreadContext | undefined;
+    client.challengeHandler = (context) => {
+      challengeContext = context;
+      return Promise.resolve(VALID_CHALLENGE);
+    };
+    client.conclusionHandler = (context) => {
+      conclusionContext = context;
+      return Promise.resolve(validConclusion(exchange.userTurn.id));
+    };
+
+    unwrap(await service.challenge(thread.id));
+    unwrap(await service.draftConclusion(thread.id));
+
+    expect(challengeContext?.operation).toBe('challenge');
+    expect(challengeContext?.turns.slice(0, 2)).toEqual([
+      exchange.userTurn,
+      exchange.responseTurn,
+    ]);
+    expect(conclusionContext?.operation).toBe('conclusion');
+    expect(conclusionContext?.turns).toEqual(expect.arrayContaining([
+      exchange.userTurn,
+      exchange.responseTurn,
+    ]));
+  });
+
   it('rolls back the full pending exchange and does not dispatch after a write failure', async () => {
     const { client, repositories, service } = await createServiceFixture();
     const thread = unwrap(await service.startThread('Atomic pending exchange'));
@@ -579,6 +786,153 @@ describe('ConversationService orchestration', () => {
         editState: 'edited',
       },
     });
+    expect(await repositories.capsules.get(capsule.id)).toEqual(capsule);
+  });
+
+  it('updates only editable capsule content while preserving identity and provenance', async () => {
+    const { repositories, service } = await createServiceFixture();
+    const thread = unwrap(await service.startThread('Editable capsule source'));
+    const submission = unwrap(await service.submitUserTurn(
+      thread.id,
+      'The source remains attached to this exact thread.',
+    ));
+    const drafted = unwrap(await service.draftConclusion(thread.id));
+    const capsule = unwrap(await service.saveCapsule({
+      threadId: thread.id,
+      title: 'Stable capsule title',
+      conclusion: drafted.output,
+      sourceTurnRange: {
+        startTurnId: submission.userTurn.id,
+        endTurnId: drafted.responseTurn.id,
+      },
+    }));
+
+    const updated = unwrap(await service.updateCapsule(capsule.id, {
+      ...capsule.conclusion,
+      thesis: 'The edited capsule remains provisional and locally owned.',
+      insights: [
+        'The source identity stays stable.',
+        'The edit remains local.',
+        'The original range remains inspectable.',
+      ],
+    }));
+
+    expect(updated).toMatchObject({
+      id: capsule.id,
+      ownerScope: capsule.ownerScope,
+      title: capsule.title,
+      createdAt: capsule.createdAt,
+      sourceThreadId: capsule.sourceThreadId,
+      sourceTurnRange: capsule.sourceTurnRange,
+      conclusion: {
+        thesis: 'The edited capsule remains provisional and locally owned.',
+        provenance: capsule.conclusion.provenance,
+        editState: 'edited',
+      },
+    });
+    expect(updated.updatedAt).toBeGreaterThan(capsule.updatedAt);
+    expect(updated.conclusion.editedAt).toBe(updated.updatedAt);
+    expect(await repositories.capsules.get(capsule.id)).toEqual(updated);
+  });
+
+  it('keeps a retained capsule editable after its source thread is permanently deleted', async () => {
+    const { repositories, service } = await createServiceFixture();
+    const thread = unwrap(await service.startThread('Durable capsule source'));
+    const submission = unwrap(await service.submitUserTurn(
+      thread.id,
+      'The capsule must outlive the inquiry that produced it.',
+    ));
+    const drafted = unwrap(await service.draftConclusion(thread.id));
+    const capsule = unwrap(await service.saveCapsule({
+      threadId: thread.id,
+      title: 'Independent retained capsule',
+      conclusion: drafted.output,
+      sourceTurnRange: {
+        startTurnId: submission.userTurn.id,
+        endTurnId: drafted.responseTurn.id,
+      },
+    }));
+
+    unwrap(await service.deleteThread(thread.id));
+    const updated = unwrap(await service.updateCapsule(capsule.id, {
+      ...capsule.conclusion,
+      thesis: 'The retained capsule remains useful after its source is removed.',
+    }));
+
+    expect(updated).toMatchObject({
+      id: capsule.id,
+      ownerScope: capsule.ownerScope,
+      title: capsule.title,
+      createdAt: capsule.createdAt,
+      sourceThreadId: capsule.sourceThreadId,
+      sourceTurnRange: capsule.sourceTurnRange,
+      conclusion: {
+        thesis: 'The retained capsule remains useful after its source is removed.',
+      },
+    });
+    expect(updated.conclusion.provenance).toEqual(capsule.conclusion.provenance);
+    expect(await repositories.capsules.get(capsule.id)).toEqual(updated);
+    expect(await repositories.threads.get(thread.id)).toBeUndefined();
+    expect(await repositories.turns.listByThread(thread.id)).toEqual([]);
+  });
+
+  it('rejects an orphaned capsule edit when a retained source id belongs to another thread', async () => {
+    const { repositories, service } = await createServiceFixture();
+    const sourceThread = unwrap(await service.startThread('Orphan source'));
+    const submission = unwrap(await service.submitUserTurn(
+      sourceThread.id,
+      'This exact source id must not be reassigned across threads.',
+    ));
+    const drafted = unwrap(await service.draftConclusion(sourceThread.id));
+    const capsule = unwrap(await service.saveCapsule({
+      threadId: sourceThread.id,
+      title: 'Cross-thread guard',
+      conclusion: drafted.output,
+      sourceTurnRange: {
+        startTurnId: submission.userTurn.id,
+        endTurnId: drafted.responseTurn.id,
+      },
+    }));
+    unwrap(await service.deleteThread(sourceThread.id));
+    const foreignThread = unwrap(await service.startThread('Foreign thread'));
+    await repositories.turns.put(turnSchema.parse({
+      ...submission.userTurn,
+      threadId: foreignThread.id,
+    }));
+
+    const result = await service.updateCapsule(capsule.id, {
+      ...capsule.conclusion,
+      thesis: 'This edit must not cross a thread boundary.',
+    });
+
+    expect(result).toMatchObject({ ok: false, error: { code: 'storage_failure' } });
+    expect(await repositories.capsules.get(capsule.id)).toEqual(capsule);
+  });
+
+  it('rejects a capsule edit whose provenance no longer resolves inside its source range', async () => {
+    const { repositories, service } = await createServiceFixture();
+    const thread = unwrap(await service.startThread('Validated capsule source'));
+    const submission = unwrap(await service.submitUserTurn(thread.id, 'Keep the range exact.'));
+    const drafted = unwrap(await service.draftConclusion(thread.id));
+    const capsule = unwrap(await service.saveCapsule({
+      threadId: thread.id,
+      title: 'Validated capsule',
+      conclusion: drafted.output,
+      sourceTurnRange: {
+        startTurnId: submission.userTurn.id,
+        endTurnId: drafted.responseTurn.id,
+      },
+    }));
+
+    const result = await service.updateCapsule(capsule.id, {
+      ...capsule.conclusion,
+      provenance: [{
+        turnId: turnIdSchema.parse('turn-outside-source-range'),
+        excerpt: 'This source does not exist in the capsule thread.',
+      }],
+    });
+
+    expect(result).toMatchObject({ ok: false, error: { code: 'storage_failure' } });
     expect(await repositories.capsules.get(capsule.id)).toEqual(capsule);
   });
 
