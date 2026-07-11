@@ -13,7 +13,7 @@ test.beforeEach(async ({ page }) => {
 
 test('first run, delayed persistence, reload, challenge, conclusion, and continued development', async ({ page }) => {
   await expect(page.getByRole('list', { name: 'Ways to begin' })).toBeVisible();
-  await expect(page.getByRole('button', { name: 'What idea do you want to develop?' })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Something unfinished.' })).toBeVisible();
   const mocks = await installOperationMocks(page);
   mocks.delayNextQuestion();
 
@@ -144,10 +144,10 @@ test('offline retry, microphone denial, reduced motion, keyboard flow, scaling, 
   expect((dock?.x ?? 0) + (dock?.width ?? 0)).toBeLessThanOrEqual(viewport?.width ?? 0);
 });
 
-test('starter motion becomes a static list under reduced-motion preference', async ({ page }) => {
-  const animated = page.locator('.starter-deck__item').first();
-  await expect(animated).toBeVisible();
-  expect(await animated.evaluate((element) => getComputedStyle(element).animationName)).not.toBe('none');
+test('starter surface remains still under every motion preference', async ({ page }) => {
+  const starter = page.locator('.starter-deck__item').first();
+  await expect(starter).toBeVisible();
+  expect(await starter.evaluate((element) => getComputedStyle(element).animationName)).toBe('none');
 
   await page.emulateMedia({ reducedMotion: 'reduce' });
   await page.reload();
@@ -158,4 +158,40 @@ test('starter motion becomes a static list under reduced-motion preference', asy
   });
   expect(staticStyle.durationSeconds).toBeLessThanOrEqual(0.001);
   expect(staticStyle.transform).toBe('none');
+
+  const composer = page.getByRole('textbox', { name: 'Idea, context, or response' });
+  for (let step = 0; step < 8; step += 1) {
+    await page.keyboard.press('Tab');
+    if (await composer.evaluate((element) => document.activeElement === element)) {
+      break;
+    }
+  }
+  await expect(composer).toBeFocused();
+  const readComposerDatum = async () => page.locator('.composer').evaluate((element) => {
+    const style = getComputedStyle(element, '::before');
+    return {
+      color: style.backgroundColor,
+      height: Number.parseFloat(style.height),
+    };
+  });
+  await expect.poll(async () => (await readComposerDatum()).height).toBeGreaterThanOrEqual(2);
+  const composerDatum = await readComposerDatum();
+  expect(composerDatum.height).toBeGreaterThanOrEqual(2);
+  expect(composerDatum.color).not.toBe('transparent');
+
+  await page.addStyleTag({ content: ':root { font-size: 200% !important; }' });
+  const rows = await page.locator('.starter-deck__item').evaluateAll((elements) => (
+    elements.map((element) => {
+      const bounds = element.getBoundingClientRect();
+      return { bottom: bounds.bottom, height: bounds.height, top: bounds.top };
+    })
+  ));
+  expect(rows).toHaveLength(4);
+  for (const [index, row] of rows.entries()) {
+    expect(row.height).toBeGreaterThanOrEqual(44);
+    if (index > 0) {
+      expect(row.top).toBeGreaterThanOrEqual((rows[index - 1]?.bottom ?? 0) - 1);
+    }
+  }
+  await expectNoHorizontalOverflow(page);
 });

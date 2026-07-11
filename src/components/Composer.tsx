@@ -107,7 +107,7 @@ export function Composer({
         onChange={(event) => { onValueChange(event.target.value); }}
         onFocus={() => { onFocusChange(true); }}
         onKeyDown={handleKeyDown}
-        placeholder="Add an idea, question, thesis, or context…"
+        placeholder="Write it as it stands…"
         ref={setComposerRef}
         rows={1}
         value={value}

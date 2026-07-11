@@ -55,23 +55,14 @@ import type { SpecularDependencies } from './use-specular';
 const styles = readFileSync(join(process.cwd(), 'src/styles.css'), 'utf8');
 
 const STARTERS = [
-  'What idea do you want to develop?',
-  'Clarify a difficult concept.',
-  'Pressure-test an investment thesis.',
-  'Work through a strategic decision.',
-  'Shape a creative direction.',
-  'Strengthen an argument.',
-  'Find the load-bearing assumption.',
-  'Turn scattered notes into a working position.',
+  'Something unfinished.',
+  'A decision still open',
+  'An untested assumption',
+  'Notes that don’t yet agree',
 ] as const;
 
-const STARTER_OPACITY_PATTERN = /--starter-opacity:\s*(\d+(?:\.\d+)?)/gu;
 const FOCUSED_STARTER_OPACITY_PATTERN =
   /\.starter-deck__item:hover,\s*\.starter-deck__item:focus-within\s*\{[^}]*opacity:\s*1;/u;
-const SETTLED_STARTER_PAUSE_PATTERN =
-  /\.app-shell--settled\s+\.starter-deck__item\s*\{[^}]*animation-play-state:\s*paused;/u;
-const LOCAL_STARTER_PAUSE_PATTERN =
-  /\.starter-deck\[data-motion="paused"\]\s+\.starter-deck__item,\s*\.starter-deck\[data-motion="static"\]\s+\.starter-deck__item\s*\{[^}]*animation-play-state:\s*paused;/u;
 
 const EMPTY_UNDERSTANDING: ThreadUnderstanding = {
   claims: [],
@@ -283,7 +274,7 @@ afterEach(() => {
 });
 
 describe('Specular mobile thinking loop', () => {
-  it('renders all eight exact interchangeable starters', async () => {
+  it('renders the four restrained interchangeable starters', async () => {
     const { dependencies } = await createFixture();
     render(<App dependencies={dependencies} />);
 
@@ -322,17 +313,12 @@ describe('Specular mobile thinking loop', () => {
   });
 
   it('keeps starter hierarchy accessible and fully reveals the targeted item', () => {
-    const starterOpacities = [...styles.matchAll(STARTER_OPACITY_PATTERN)]
-      .map((match) => Number.parseFloat(match[1] ?? '0'));
-
-    expect(starterOpacities.length).toBeGreaterThan(0);
-    expect(Math.min(...starterOpacities)).toBeGreaterThanOrEqual(0.5);
     expect(styles).toMatch(FOCUSED_STARTER_OPACITY_PATTERN);
   });
 
-  it('pauses starter drift when the settled composer or local deck state requests it', () => {
-    expect(styles).toMatch(SETTLED_STARTER_PAUSE_PATTERN);
-    expect(styles).toMatch(LOCAL_STARTER_PAUSE_PATTERN);
+  it('keeps the starter surface still instead of simulating thought with ambient motion', () => {
+    expect(styles).not.toContain('@keyframes starter-drift');
+    expect(styles).not.toContain('animation: starter-drift');
   });
 
   it('keeps voice off by default while text and send controls remain accessible', async () => {

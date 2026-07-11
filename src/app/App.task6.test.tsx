@@ -277,7 +277,7 @@ describe('Task 6 application flow', () => {
     await user.click(screen.getByRole('button', { name: 'Save & finish' }));
 
     expect(await screen.findByText('Saved and finished.')).toBeVisible();
-    expect(await screen.findByRole('button', { name: 'What idea do you want to develop?' }))
+    expect(await screen.findByRole('button', { name: 'Something unfinished.' }))
       .toBeVisible();
     expect(screen.queryByRole('textbox', { name: 'Working conclusion' }))
       .not.toBeInTheDocument();
@@ -374,7 +374,7 @@ describe('Task 6 application flow', () => {
       name: 'Permanently delete thread',
     }));
 
-    expect(await screen.findByRole('button', { name: 'What idea do you want to develop?' }))
+    expect(await screen.findByRole('button', { name: 'Something unfinished.' }))
       .toBeVisible();
     expect(screen.getByRole('textbox', { name: 'Idea, context, or response' })).toHaveValue('');
     expect(await fixture.repositories.threads.get(thread.id)).toBeUndefined();
@@ -441,7 +441,7 @@ describe('Task 6 application flow', () => {
       name: 'Permanently delete all local content',
     }));
 
-    expect(await screen.findByRole('button', { name: 'What idea do you want to develop?' }))
+    expect(await screen.findByRole('button', { name: 'Something unfinished.' }))
       .toBeVisible();
     expect(await fixture.repositories.threads.list()).toEqual([]);
     expect(await fixture.repositories.turns.listByThread(thread.id)).toEqual([]);
@@ -506,7 +506,7 @@ describe('Task 6 application flow', () => {
       name: 'Permanently reset local data',
     }));
 
-    expect(await screen.findByRole('button', { name: 'What idea do you want to develop?' }))
+    expect(await screen.findByRole('button', { name: 'Something unfinished.' }))
       .toBeVisible();
     await act(async () => {
       expect(await cleanRepositories?.threads.list()).toEqual([]);

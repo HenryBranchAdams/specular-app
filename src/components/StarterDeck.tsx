@@ -1,66 +1,35 @@
-import {
-  useEffect,
-  useState,
-} from 'react';
 import { STARTER_PROMPTS } from './starter-prompts';
 
 export interface StarterDeckProps {
   onActivate: () => void;
 }
 
-function reducedMotionQuery(): MediaQueryList | null {
-  return typeof window.matchMedia === 'function'
-    ? window.matchMedia('(prefers-reduced-motion: reduce)')
-    : null;
-}
-
-function useReducedMotion(): boolean {
-  const [reduced, setReduced] = useState(() => reducedMotionQuery()?.matches ?? false);
-
-  useEffect(() => {
-    const query = reducedMotionQuery();
-    if (query === null) {
-      return undefined;
-    }
-    const update = (event: MediaQueryListEvent) => {
-      setReduced(event.matches);
-    };
-    query.addEventListener('change', update);
-    return () => {
-      query.removeEventListener('change', update);
-    };
-  }, []);
-
-  return reduced;
-}
-
 export function StarterDeck({ onActivate }: StarterDeckProps) {
-  const reducedMotion = useReducedMotion();
-  const [paused, setPaused] = useState(false);
-  const motion = reducedMotion ? 'static' : paused ? 'paused' : 'drifting';
-  const pause = () => {
-    setPaused(true);
-  };
-
   return (
-    <div className="starter-deck" data-motion={motion}>
+    <div className="starter-deck" data-motion="static">
       <ul
         aria-label="Ways to begin"
         className="starter-deck__list"
-        data-motion={motion}
-        onFocusCapture={pause}
-        onKeyDown={pause}
-        onPointerDown={pause}
-        onPointerEnter={pause}
+        data-motion="static"
       >
-        {STARTER_PROMPTS.map((prompt) => (
+        {STARTER_PROMPTS.map((prompt, index) => (
           <li className="starter-deck__item" key={prompt}>
             <button
               className="starter-deck__prompt"
               onClick={onActivate}
               type="button"
             >
-              {prompt}
+              {index === 0 ? (
+                <span className="starter-deck__heading">{prompt}</span>
+              ) : (
+                <>
+                  <span aria-hidden="true" className="starter-deck__index">
+                    {String(index).padStart(2, '0')}
+                  </span>
+                  <span aria-hidden="true" className="starter-deck__rule" />
+                  <span className="starter-deck__copy">{prompt}</span>
+                </>
+              )}
             </button>
           </li>
         ))}
