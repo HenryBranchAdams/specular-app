@@ -27,7 +27,7 @@
     "chatgpt:inspect": "npx @modelcontextprotocol/inspector http://localhost:8788/mcp"
   },
   "dependencies": {
-    "@modelcontextprotocol/ext-apps": "^1.7.2",
+    "@modelcontextprotocol/ext-apps": "^1.7.4",
     "@modelcontextprotocol/sdk": "^1.29.0",
     "openai": "^6.46.0",
     "ws": "8.21.0",
