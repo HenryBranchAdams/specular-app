@@ -185,7 +185,7 @@ describe('deterministic fixed eval runner', () => {
     expect(report).toMatchObject({
       mode: 'fixed',
       status: 'passed',
-      corpusVersion: '2026-07-10.v1',
+      corpusVersion: '2026-07-11.v2',
       casesEvaluated: 16,
       operationsExecuted: 48,
       hardViolations: 0,

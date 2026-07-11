@@ -1,9 +1,9 @@
 # Subtle Mystery Refinement
 
-**Status:** Active design direction on 2026-07-10
-**Mobile reference:** `assets/specular-subtle-mystery-mobile.png`
-**Desktop reference:** `assets/specular-subtle-mystery-desktop.png`
-**Thread reference:** `assets/specular-subtle-mystery-thread-mobile.png`
+**Status:** Active design direction on 2026-07-11
+**Mobile reference:** `assets/specular-subtle-mystery-mobile.png` (palette and datum)
+**Desktop reference:** `assets/specular-subtle-mystery-desktop.png` (palette and measure)
+**Thread reference:** `assets/specular-subtle-mystery-thread-mobile.png` (open typography)
 **Scope:** Fresh starter, active inquiry, ambient treatment, composer, and thread actions
 
 ## Intent
@@ -25,6 +25,8 @@ around it.
 - `An untested assumption`
 - `Notes that don’t yet agree`
 - `Write it as it stands…`
+- `Test this`
+- `Gather this thread`
 
 There is no explanatory subtitle. The first model response proves the product thesis by
 asking one precise question instead of supplying an answer.
@@ -42,15 +44,17 @@ asking one precise question instead of supplying an answer.
   datum system, separated by one horizontal hairline rather than a rounded glass card.
 - **Controls:** Lucide icons remain code-native. Send is neutral, unglowing, and only
   gains contrast when enabled.
-- **Motion:** no looping starter drift and no simulated thinking. Hover and focus may
-  shift a row by two pixels; reduced motion removes that shift.
+- **Motion:** no looping starter drift, simulated thinking, or ambient movement in the
+  starter cues.
 
 ## Layout
 
 Mobile uses 16–20px safe gutters. The datum sits just inside the working column; the
 copy begins roughly 40px to its right. `Something unfinished.` occupies the lower part
-of the open field, followed by three indexed 44px-or-larger starter rows. The composer
-remains visible within 375 × 812 and 320 × 700 first viewports.
+of the open field. The composer follows immediately, so writing is the first available
+interaction. Three unnumbered, non-interactive fragments sit beneath it with slight
+asymmetry; they suggest unfinished material without presenting categories or modes.
+The entire composition remains visible within 375 × 812 and 320 × 700 first viewports.
 
 Desktop expands only the empty starter workspace to an approximately 37.5rem working
 column. It does not become a landing page, dashboard, sidebar layout, or feature grid.
@@ -59,13 +63,15 @@ Conversation and artifact states retain their focused reading measure.
 ## Active inquiry
 
 The starter's datum continues into the thread. User thoughts and Specular questions are
-open typography, never chat bubbles. The user's line remains present rather than being
-demoted to a faint outgoing bubble; the current question is stronger but uses regular,
-human-scale type rather than an answer-like display treatment.
+open typography, never chat bubbles. The latest user line is the strongest text in the
+thread. The current Specular question is smaller, quieter, and slightly inset: clear
+enough to use, but visually subordinate to the user's words.
 
 The inquiry plane is borderless. The composer and secondary actions are separated by
-mineral hairlines, with no glowing card or rainbow frame. `Challenge this` and
-`Draft a working conclusion` remain available as quiet secondary controls.
+mineral hairlines, with no glowing card or rainbow frame. `Test this` asks one sharper
+question. `Gather this thread` appears only after two accepted user turns and organizes
+distinct exact excerpts from those turns. It cannot paraphrase, synthesize, recommend,
+or introduce a position; the user may edit the gathered working position afterward.
 
 ## Asset treatment
 
@@ -76,17 +82,18 @@ state-specific fallbacks may hide or replace it.
 
 ## Product and accessibility invariants
 
-- Every starter only focuses the composer; it never selects a hidden mode or strategy.
+- Starter fragments are static text, not controls, categories, or hidden strategies.
 - Text and controls remain code-native and keyboard accessible.
 - Interactive targets remain at least 44 × 44 CSS pixels.
 - Visible focus, increased contrast, forced colors, safe areas, 200% text scaling, and
   zero horizontal overflow remain release gates.
-- The existing local-first thread, Challenge, conclusion, Capsule, voice, and privacy
-  contracts do not change.
+- Local-first thread, Capsule, voice, export, edit, and privacy contracts remain intact.
+- Ordinary model turns and tests return exactly one question. Gathering is opt-in,
+  delayed, and extractive-only; provenance must resolve to accepted user turns.
 
 ## Superseded starter details
 
-This direction supersedes the previous starter's eight-item capability list, dominant
-serif question, rainbow conic edge, ambient prompt drift, large rounded plane, and
-glowing send treatment. It does not supersede the active-thread, recovery, conclusion,
-or Capsule behavior specified elsewhere.
+This direction excludes capability lists, numbered starter taxonomies, dominant model
+responses, serif manifestos, rainbow conic edges, ambient prompt drift, large rounded
+planes, glowing send treatments, and model-authored working conclusions. Internal
+storage shapes remain backward-compatible for existing local threads and Capsules.

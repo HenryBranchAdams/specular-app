@@ -13,7 +13,7 @@ test.beforeEach(async ({ page }) => {
 
 test('first run, delayed persistence, reload, challenge, conclusion, and continued development', async ({ page }) => {
   await expect(page.getByRole('list', { name: 'Ways to begin' })).toBeVisible();
-  await expect(page.getByRole('button', { name: 'Something unfinished.' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Something unfinished.' })).toBeVisible();
   const mocks = await installOperationMocks(page);
   mocks.delayNextQuestion();
 
@@ -30,24 +30,43 @@ test('first run, delayed persistence, reload, challenge, conclusion, and continu
   await expect(page.getByText(
     'Which concrete signal would show the launch handoff is working?',
   )).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Gather this thread' })).toHaveCount(0);
+  const hierarchy = await page.locator('.transcript').evaluate((transcript) => {
+    const user = transcript.querySelector<HTMLElement>('.turn--latest-user .turn__content');
+    const question = transcript.querySelector<HTMLElement>('.turn--current .turn__content');
+    if (user === null || question === null) {
+      throw new Error('Expected a latest user turn and current Specular question.');
+    }
+    return {
+      questionSize: Number.parseFloat(getComputedStyle(question).fontSize),
+      userSize: Number.parseFloat(getComputedStyle(user).fontSize),
+    };
+  });
+  expect(hierarchy.userSize).toBeGreaterThan(hierarchy.questionSize);
 
-  await page.getByRole('button', { name: 'Challenge this' }).click();
+  await page.getByRole('button', { name: 'Test this' }).click();
   await expect(page.getByText(
     'Which stakeholder absorbs the cost if the launch assumption fails?',
   )).toBeVisible();
-  await page.getByRole('button', { name: 'Draft a working conclusion' }).click();
-  const thesis = page.getByRole('textbox', { name: 'Working conclusion' });
+  await page.getByRole('textbox', { name: 'Idea, context, or response' })
+    .fill('The owner needs to be visible at the handoff itself.');
+  await page.getByRole('button', { name: 'Send input' }).click();
+  await page.getByRole('button', { name: 'Gather this thread' }).click();
+  const thesis = page.getByRole('textbox', { name: 'Working position' });
   await expect(thesis).toBeVisible();
   await thesis.fill('My edited read keeps ownership provisional and testable.');
-  await page.getByRole('button', { name: 'Continue developing' }).click();
+  await page.getByRole('button', { name: 'Return to thread' }).click();
   await expect(page.getByRole('log', { name: 'Conversation history' })).toBeVisible();
   await expectNoHorizontalOverflow(page);
 });
 
 test('capsule edit, export, permanent deletion, Save & finish, and a clean new thread', async ({ page }) => {
   await submitThought(page, 'The launch handoff is still the constraint.');
-  await page.getByRole('button', { name: 'Draft a working conclusion' }).click();
-  await page.getByRole('textbox', { name: 'Working conclusion' })
+  await page.getByRole('textbox', { name: 'Idea, context, or response' })
+    .fill('The owner should be named before the handoff begins.');
+  await page.getByRole('button', { name: 'Send input' }).click();
+  await page.getByRole('button', { name: 'Gather this thread' }).click();
+  await page.getByRole('textbox', { name: 'Working position' })
     .fill('My edited capsule thesis is still provisional.');
   await page.getByRole('button', { name: 'Save as capsule' }).click();
   await expect(page.getByText('Capsule saved.')).toBeVisible();
@@ -55,7 +74,7 @@ test('capsule edit, export, permanent deletion, Save & finish, and a clean new t
   await page.getByRole('button', { name: /Open capsule library/u }).click();
   await page.getByRole('button', { name: /The launch handoff is still the constraint,/u }).click();
   const capsuleThesis = page.getByRole('dialog', { name: 'Capsules' })
-    .getByRole('textbox', { name: 'Working conclusion' });
+    .getByRole('textbox', { name: 'Working position' });
   await capsuleThesis.fill('A locally edited capsule thesis.');
   await page.getByRole('button', { name: 'Save capsule edits' }).click();
   await expect(page.getByRole('dialog', { name: 'Capsules' }).getByText('Capsule updated.'))
@@ -145,14 +164,14 @@ test('offline retry, microphone denial, reduced motion, keyboard flow, scaling, 
 });
 
 test('starter surface remains still under every motion preference', async ({ page }) => {
-  const starter = page.locator('.starter-deck__item').first();
+  const starter = page.locator('.starter-lead');
   await expect(starter).toBeVisible();
   expect(await starter.evaluate((element) => getComputedStyle(element).animationName)).toBe('none');
 
   await page.emulateMedia({ reducedMotion: 'reduce' });
   await page.reload();
-  await expect(page.locator('.starter-deck[data-motion="static"]')).toBeVisible();
-  const staticStyle = await page.locator('.starter-deck__item').first().evaluate((element) => {
+  await expect(page.locator('.starter-cues[data-motion="static"]')).toBeVisible();
+  const staticStyle = await page.locator('.starter-cues__item').first().evaluate((element) => {
     const style = getComputedStyle(element);
     return { durationSeconds: Number.parseFloat(style.animationDuration), transform: style.transform };
   });
@@ -180,13 +199,13 @@ test('starter surface remains still under every motion preference', async ({ pag
   expect(composerDatum.color).not.toBe('transparent');
 
   await page.addStyleTag({ content: ':root { font-size: 200% !important; }' });
-  const rows = await page.locator('.starter-deck__item').evaluateAll((elements) => (
+  const rows = await page.locator('.starter-cues__item').evaluateAll((elements) => (
     elements.map((element) => {
       const bounds = element.getBoundingClientRect();
       return { bottom: bounds.bottom, height: bounds.height, top: bounds.top };
     })
   ));
-  expect(rows).toHaveLength(4);
+  expect(rows).toHaveLength(3);
   for (const [index, row] of rows.entries()) {
     expect(row.height).toBeGreaterThanOrEqual(44);
     if (index > 0) {

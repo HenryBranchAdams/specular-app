@@ -715,12 +715,30 @@ describe('ConversationService orchestration', () => {
     const concluded = unwrap(await service.draftConclusion(thread.id));
     expect(concluded.output).toMatchObject({
       kind: 'working_conclusion',
-      editState: 'generated',
+      editState: 'organized',
     });
     expect(concluded.responseTurn.operation).toBe('conclusion');
     expect((await repositories.threads.get(thread.id))?.provisionalConclusion).toEqual(
       concluded.output,
     );
+  });
+
+  it('rejects gathered notes whose provenance points to Specular-authored text', async () => {
+    const { client, service } = await createServiceFixture();
+    const thread = unwrap(await service.startThread('Authorship boundary'));
+    await service.submitUserTurn(thread.id, 'The handoff is where ownership disappears.');
+    client.conclusionHandler = (context) => {
+      const specularTurn = context.turns.find((turn) => turn.role === 'specular');
+      if (specularTurn === undefined) {
+        return Promise.reject(new Error('Expected a Specular turn.'));
+      }
+      return Promise.resolve(validConclusion(specularTurn.id));
+    };
+
+    await expect(service.draftConclusion(thread.id)).resolves.toMatchObject({
+      ok: false,
+      error: { code: 'invalid_output' },
+    });
   });
 
   it('preserves an edited provisional conclusion on the same thread when digging deeper', async () => {
@@ -760,7 +778,7 @@ describe('ConversationService orchestration', () => {
       ...drafted.output,
       thesis: 'The user-edited thesis replaces the provider wording.',
       caveats: ['The source range is intentionally inclusive.'],
-      editState: 'generated',
+      editState: 'organized',
     };
 
     const capsule = unwrap(await service.saveCapsule({

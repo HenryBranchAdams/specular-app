@@ -25,17 +25,20 @@ test.beforeEach(async ({ page }) => {
   await openSpecular(page);
 });
 
-test('empty, thread, Challenge, conclusion, and capsule states are accessible', async ({ page }) => {
+test('empty, thread, test, gathered-position, and capsule states are accessible', async ({ page }) => {
   await expectAccessible(page, 'empty');
   await submitThought(page, 'The launch handoff is still the constraint.');
   await expectAccessible(page, 'thread');
 
-  await page.getByRole('button', { name: 'Challenge this' }).click();
+  await page.getByRole('button', { name: 'Test this' }).click();
   await expect(page.getByText(/stakeholder absorbs the cost/iu)).toBeVisible();
   await expectAccessible(page, 'challenge');
 
-  await page.getByRole('button', { name: 'Draft a working conclusion' }).click();
-  await expectAccessible(page, 'conclusion');
+  await page.getByRole('textbox', { name: 'Idea, context, or response' })
+    .fill('The owner should be explicit before the handoff begins.');
+  await page.getByRole('button', { name: 'Send input' }).click();
+  await page.getByRole('button', { name: 'Gather this thread' }).click();
+  await expectAccessible(page, 'gathered position');
   await page.getByRole('button', { name: 'Save as capsule' }).click();
   await page.getByRole('button', { name: /Open capsule library/u }).click();
   await expectAccessible(page, 'capsule');

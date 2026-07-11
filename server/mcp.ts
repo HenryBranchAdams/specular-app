@@ -39,8 +39,9 @@ import {
 const RESOURCE_URI = 'ui://widget/specular.html';
 const SERVER_INSTRUCTIONS = [
   'Every tool call is explicit, thread-scoped, and stateless: supply the complete bounded ThreadContext on every request.',
-  'Challenge and working-conclusion operations are opt-in; never invoke either as an automatic follow-up.',
-  'Use next_question for one concise next question, challenge only when the user requests a Challenge, and draft_conclusion only when the user requests a working conclusion.',
+  'Testing and gathering operations are opt-in; never invoke either as an automatic follow-up.',
+  'Use next_question for one concise next question and challenge only when the user requests to test this thread with one focused question.',
+  'Use draft_conclusion only when the user requests to gather this thread; it organizes distinct exact user-authored excerpts and must not draft new content.',
   'The server retains no transcript, thread, or conversation state between calls.',
 ].join(' ');
 
@@ -189,11 +190,11 @@ function textFallback(value: OperationResult): string {
         ? value.question
         : `${value.setup} ${value.question}`;
     case 'blind_spot':
-      return `Challenge — blind spot: ${value.question}`;
+      return `Test this thread: ${value.question}`;
     case 'counter_position':
-      return `Challenge — counter-position: ${value.counterPosition} ${value.question}`;
+      return `Test this thread: ${value.counterPosition} ${value.question}`;
     case 'working_conclusion':
-      return `Working conclusion: ${value.thesis}`;
+      return `Gather this thread — exact user-authored excerpt organized; no new content drafted: ${value.thesis}`;
     default:
       return assertNever(value);
   }
@@ -257,7 +258,7 @@ export function createSpecularMcpServer(
     'Specular result widget',
     RESOURCE_URI,
     {
-      description: 'Compact Specular question, Challenge, and working-conclusion surface.',
+      description: 'Compact Specular surface for one question, testing a thread, and gathering exact user-authored excerpts.',
       _meta: { ui },
     },
     () => ({
@@ -293,12 +294,12 @@ export function createSpecularMcpServer(
     server,
     'challenge',
     {
-      title: 'Challenge this thread',
-      description: 'Opt in to a credible blind spot or counter-position using only the supplied thread context.',
+      title: 'Test this thread',
+      description: 'Ask one focused blind-spot or testing question using only the supplied thread context.',
       inputSchema: inputSchemaFor('challenge'),
       outputSchema: challengeToolOutputSchema,
       annotations: TOOL_ANNOTATIONS,
-      _meta: toolMetadata('Preparing a Challenge…', 'Challenge ready.'),
+      _meta: toolMetadata('Testing this thread…', 'Testing question ready.'),
     },
     async ({ context }, extra) => await execute(
       options.service,
@@ -312,12 +313,15 @@ export function createSpecularMcpServer(
     server,
     'draft_conclusion',
     {
-      title: 'Draft a working conclusion',
-      description: 'Opt in to a grounded working conclusion using only the supplied thread context.',
+      title: 'Gather this thread',
+      description: 'Organize distinct exact user-authored excerpts from accepted user turns; do not draft, paraphrase, or add content.',
       inputSchema: inputSchemaFor('conclusion'),
       outputSchema: workingConclusionResultSchema,
       annotations: TOOL_ANNOTATIONS,
-      _meta: toolMetadata('Drafting a working conclusion…', 'Working conclusion ready.'),
+      _meta: toolMetadata(
+        'Gathering exact user-authored excerpts without drafting new content…',
+        'Exact user-authored excerpts gathered; no new content drafted.',
+      ),
     },
     async ({ context }, extra) => await execute(
       options.service,

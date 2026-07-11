@@ -4,6 +4,7 @@ import type {
   NextQuestionResult,
   Operation,
   OperationResult,
+  Turn,
   WorkingConclusionResult,
 } from './contracts';
 import {
@@ -21,7 +22,8 @@ export type ProductValidationErrorCode =
   | 'unsolicited_synthesis'
   | 'question_independence'
   | 'challenge_shape'
-  | 'conclusion_shape';
+  | 'conclusion_shape'
+  | 'conclusion_authorship';
 
 export class ProductValidationError extends Error {
   readonly code: ProductValidationErrorCode;
@@ -454,6 +456,73 @@ function validateConclusion(value: unknown): WorkingConclusionResult {
   }
 
   return parsed.data;
+}
+
+function conclusionValues(value: WorkingConclusionResult): string[] {
+  return [
+    value.thesis,
+    ...value.insights,
+    ...value.observations,
+    ...value.tensions,
+    ...value.caveats,
+  ];
+}
+
+export function validateConclusionAuthorship(
+  value: WorkingConclusionResult,
+  turns: readonly Turn[],
+): WorkingConclusionResult {
+  const acceptedUserTurns = new Map(
+    turns
+      .filter((turn) => turn.role === 'user' && turn.deliveryState === 'accepted')
+      .map((turn) => [turn.id, turn] as const),
+  );
+  const sourceKeys = new Set<string>();
+  const excerpts = new Set<string>();
+
+  for (const source of value.provenance) {
+    const turn = acceptedUserTurns.get(source.turnId);
+    const sourceKey = `${source.turnId}\u0000${source.excerpt}`;
+    if (
+      turn === undefined
+      || !turn.content.includes(source.excerpt)
+      || sourceKeys.has(sourceKey)
+      || excerpts.has(source.excerpt)
+    ) {
+      fail(
+        'conclusion_authorship',
+        'conclusion',
+        'Gathered notes must cite distinct exact excerpts from accepted user turns.',
+      );
+    }
+    sourceKeys.add(sourceKey);
+    excerpts.add(source.excerpt);
+  }
+
+  const values = conclusionValues(value);
+  if (new Set(values).size !== values.length) {
+    fail(
+      'conclusion_authorship',
+      'conclusion',
+      'Each gathered excerpt must appear in only one field.',
+    );
+  }
+  if (values.some((fieldValue) => !excerpts.has(fieldValue))) {
+    fail(
+      'conclusion_authorship',
+      'conclusion',
+      'Every gathered field must exactly match cited user-authored text.',
+    );
+  }
+  if (value.provenance.some((source) => !values.includes(source.excerpt))) {
+    fail(
+      'conclusion_authorship',
+      'conclusion',
+      'Every cited user excerpt must appear in the gathered notes.',
+    );
+  }
+
+  return value;
 }
 
 export function validateOperationResult(

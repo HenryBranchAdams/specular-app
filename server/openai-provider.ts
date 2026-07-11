@@ -45,9 +45,8 @@ const openAiNextQuestionSchema = z.object({
 }).strict();
 
 const openAiChallengeSchema = z.object({
-  kind: z.enum(['blind_spot', 'counter_position']),
+  kind: z.literal('blind_spot'),
   question: apiResultTextSchema,
-  counterPosition: apiResultTextSchema.nullable(),
 }).strict();
 
 function responseFormat(operation: Operation) {
@@ -80,26 +79,7 @@ function parseApiOutput(operation: Operation, value: unknown): unknown {
       if (!parsed.success) {
         return value;
       }
-      let sharedValue: unknown;
-      switch (parsed.data.kind) {
-        case 'blind_spot':
-          sharedValue = parsed.data.counterPosition === null
-            ? { kind: parsed.data.kind, question: parsed.data.question }
-            : value;
-          break;
-        case 'counter_position':
-          sharedValue = parsed.data.counterPosition === null
-            ? value
-            : {
-                kind: parsed.data.kind,
-                counterPosition: parsed.data.counterPosition,
-                question: parsed.data.question,
-              };
-          break;
-        default:
-          return assertNever(parsed.data.kind);
-      }
-      const shared = challengeResultSchema.safeParse(sharedValue);
+      const shared = challengeResultSchema.safeParse(parsed.data);
       return shared.success ? shared.data : value;
     }
     case 'conclusion': {

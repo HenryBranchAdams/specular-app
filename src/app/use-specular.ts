@@ -499,6 +499,15 @@ export function useSpecular(
     if (dependencies === null || thread === null || view.activity !== null) {
       return;
     }
+    if (thread.provisionalConclusion !== undefined) {
+      setView((current) => ({
+        ...current,
+        conclusion: thread.provisionalConclusion ?? null,
+        error: null,
+        notice: null,
+      }));
+      return;
+    }
     setView((current) => ({
       ...current,
       activity: 'conclusion',
@@ -516,7 +525,7 @@ export function useSpecular(
         ...current,
         activity: null,
         conclusion: result.value.output,
-        notice: 'Conclusion draft ready.',
+        notice: 'Notes gathered.',
         thread: result.value.thread,
         turns: orderedUniqueTurns(current.turns, [result.value.responseTurn]),
       }));

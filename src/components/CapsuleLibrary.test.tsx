@@ -234,7 +234,7 @@ describe('CapsuleLibrary', () => {
     );
 
     await user.click(screen.getByRole('button', { name: /Decision clarity/u }));
-    const thesis = screen.getByRole('textbox', { name: 'Working conclusion' });
+    const thesis = screen.getByRole('textbox', { name: 'Working position' });
     await user.clear(thesis);
     await user.type(thesis, 'My capsule edit survives refresh.');
 
@@ -291,7 +291,7 @@ describe('CapsuleLibrary', () => {
     );
 
     expect(screen.getByText('No capsules yet.')).toBeVisible();
-    expect(screen.getByText('Saved working conclusions collect here.')).toBeVisible();
+    expect(screen.getByText('Saved working positions collect here.')).toBeVisible();
     expect(screen.queryByRole('button', { name: 'Delete all local content' }))
       .not.toBeInTheDocument();
 
@@ -457,7 +457,7 @@ describe('CapsuleLibrary', () => {
     const capsuleButton = screen.getByRole('button', { name: /Busy capsule/u });
     expect(capsuleButton).toBeDisabled();
     await user.click(capsuleButton);
-    expect(screen.queryByRole('textbox', { name: 'Working conclusion' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('textbox', { name: 'Working position' })).not.toBeInTheDocument();
   });
 
   it('opens a capsule as a continuation, branch, or immediate challenge', async () => {
@@ -488,7 +488,7 @@ describe('CapsuleLibrary', () => {
     );
 
     await user.click(screen.getByRole('button', { name: /Market thesis/u }));
-    await user.click(screen.getByRole('button', { name: 'Continue developing' }));
+    await user.click(screen.getByRole('button', { name: 'Return to thread' }));
     expect(onContinueCapsule).toHaveBeenCalledWith(capsule.id);
     expect(onClose).toHaveBeenCalledOnce();
 
@@ -534,7 +534,7 @@ describe('CapsuleLibrary', () => {
         triggerRef={triggerRef}
       />,
     );
-    await user.click(screen.getByRole('button', { name: 'Challenge this' }));
+    await user.click(screen.getByRole('button', { name: 'Test this' }));
     expect(onChallengeCapsule).toHaveBeenCalledWith(capsule.id);
     expect(onClose).toHaveBeenCalledOnce();
   });

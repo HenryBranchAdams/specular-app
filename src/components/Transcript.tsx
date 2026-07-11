@@ -46,10 +46,14 @@ function isTranscriptTurn(turn: Turn): boolean {
 export function Transcript({ onRetry, pendingUserTurn, retrying = false, turns }: TranscriptProps) {
   const visibleTurns = turns.filter(isTranscriptTurn);
   let currentQuestionId: string | null = null;
+  let latestUserTurnId: string | null = null;
   let retryableTurnId: string | null = null;
   for (const turn of visibleTurns) {
     if (turn.role === 'specular') {
       currentQuestionId = turn.id;
+    }
+    if (turn.role === 'user') {
+      latestUserTurnId = turn.id;
     }
     if (
       turn.role === 'user'
@@ -71,13 +75,14 @@ export function Transcript({ onRetry, pendingUserTurn, retrying = false, turns }
     >
       {visibleTurns.map((turn) => {
         const current = turn.id === currentQuestionId;
+        const latestUser = pendingUserTurn === null && turn.id === latestUserTurnId;
         const status = deliveryLabel(turn.deliveryState);
         const recoverable = turn.id === retryableTurnId && onRetry !== undefined;
         return (
           <article
             aria-current={current ? 'true' : undefined}
             aria-label={current ? 'Current Specular question' : undefined}
-            className={`turn ${roleClass(turn.role)}${current ? ' turn--current' : ''}`}
+            className={`turn ${roleClass(turn.role)}${current ? ' turn--current' : ''}${latestUser ? ' turn--latest-user' : ''}`}
             data-testid={turn.role === 'specular' ? 'specular-turn' : undefined}
             key={turn.id}
           >
@@ -109,7 +114,10 @@ export function Transcript({ onRetry, pendingUserTurn, retrying = false, turns }
         );
       })}
       {pendingUserTurn === null ? null : (
-        <article className="turn turn--user turn--pending" data-testid="pending-user-turn">
+        <article
+          className="turn turn--user turn--latest-user turn--pending"
+          data-testid="pending-user-turn"
+        >
           <p className="turn__content">{pendingUserTurn.content}</p>
           <span className="turn__delivery turn__delivery--pending">Sending…</span>
         </article>

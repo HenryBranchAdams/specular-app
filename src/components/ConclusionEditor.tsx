@@ -64,9 +64,9 @@ export function ConclusionEditor({
     >
       <div className="conclusion-editor__fields">
         <label className="conclusion-field conclusion-field--thesis">
-          <span className="conclusion-field__label">Working conclusion</span>
+          <span className="conclusion-field__label">Working position</span>
           <textarea
-            aria-label="Working conclusion"
+            aria-label="Working position"
             aria-describedby="conclusion-thesis-guide"
             onChange={(event) => {
               const thesis = event.currentTarget.value;
@@ -81,13 +81,13 @@ export function ConclusionEditor({
         </label>
 
         <fieldset className="conclusion-fieldset">
-          <legend>Original insights</legend>
-          <p>Keep 3–5 insights that materially shape this conclusion.</p>
+          <legend>From the thread</legend>
+          <p>Edit the gathered excerpts that matter to this position.</p>
           {draft.insights.map((insight, index) => (
             <label className="conclusion-field" key={`insight-${String(index)}`}>
-              <span className="sr-only">Original insight {String(index + 1)}</span>
+              <span className="sr-only">Thread excerpt {String(index + 1)}</span>
               <textarea
-                aria-label={`Original insight ${String(index + 1)}`}
+                aria-label={`Thread excerpt ${String(index + 1)}`}
                 onChange={(event) => {
                   const insight = event.currentTarget.value;
                   updateListItem('insights', index, insight);
@@ -100,7 +100,7 @@ export function ConclusionEditor({
         </fieldset>
 
         <label className="conclusion-field">
-          <span className="conclusion-field__label">Supporting observations</span>
+          <span className="conclusion-field__label">Observations</span>
           <textarea
             onChange={(event) => {
               setObservations(event.currentTarget.value);
@@ -111,8 +111,8 @@ export function ConclusionEditor({
         </label>
 
         <fieldset className="conclusion-fieldset">
-          <legend>Unresolved tensions</legend>
-          <p>Keep no more than three tensions in view.</p>
+          <legend>Open tensions</legend>
+          <p>Keep no more than three open tensions in view.</p>
           {draft.tensions.map((tension, index) => (
             <label className="conclusion-field" key={`tension-${String(index)}`}>
               <span className="sr-only">Unresolved tension {String(index + 1)}</span>
@@ -130,7 +130,7 @@ export function ConclusionEditor({
         </fieldset>
 
         <label className="conclusion-field">
-          <span className="conclusion-field__label">Caveats</span>
+          <span className="conclusion-field__label">Limits</span>
           <textarea
             onChange={(event) => {
               setCaveats(event.currentTarget.value);
@@ -148,7 +148,7 @@ export function ConclusionEditor({
           onClick={() => { onKeepDigging(conclusionForAction()); }}
           type="button"
         >
-          Continue developing
+          Return to thread
         </button>
         <button
           className="conclusion-editor__action touch-target"

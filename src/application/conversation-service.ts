@@ -190,8 +190,10 @@ function appendTurnId(turnIds: TurnId[], turnId: TurnId): TurnId[] {
   return turnIds.includes(turnId) ? turnIds : [...turnIds, turnId];
 }
 
-function hasThreadProvenance(conclusion: WorkingConclusion, turns: Turn[]): boolean {
-  const turnIds = new Set(turns.map((turn) => turn.id));
+function hasAcceptedUserProvenance(conclusion: WorkingConclusion, turns: Turn[]): boolean {
+  const turnIds = new Set(turns
+    .filter((turn) => turn.role === 'user' && turn.deliveryState === 'accepted')
+    .map((turn) => turn.id));
   return conclusion.provenance.every((source) => turnIds.has(source.turnId));
 }
 
@@ -451,9 +453,9 @@ export class ConversationService {
       );
       output = workingConclusionSchema.parse({
         ...validated,
-        editState: 'generated',
+        editState: 'organized',
       });
-      if (!hasThreadProvenance(output, context.turns)) {
+      if (!hasAcceptedUserProvenance(output, context.turns)) {
         return failure('invalid_output');
       }
     } catch (error) {
@@ -499,7 +501,7 @@ export class ConversationService {
         editState: 'edited',
         editedAt: this.now(),
       });
-      if (!hasThreadProvenance(editedConclusion, turns)) {
+      if (!hasAcceptedUserProvenance(editedConclusion, turns)) {
         return failure('storage_failure');
       }
       const updatedThread = threadSchema.parse({

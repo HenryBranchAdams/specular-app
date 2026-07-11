@@ -70,6 +70,16 @@ const VALID_CHALLENGE = {
   question: 'Which stakeholder bears the greatest cost if the launch misses its timing?',
 } as const;
 
+const CONCLUSION_SOURCE = [
+  'A smaller reversible launch best preserves learning.',
+  'Coordination is the immediate constraint.',
+  'Reversibility protects the learning loop.',
+  'The first cohort can expose the decision boundary.',
+  'Prior launches stalled during handoff.',
+  'Speed may reduce stakeholder confidence.',
+  'The thread contains no customer interview evidence.',
+].join(' ');
+
 const VALID_CONCLUSION = {
   kind: 'working_conclusion',
   thesis: 'A smaller reversible launch best preserves learning.',
@@ -81,7 +91,15 @@ const VALID_CONCLUSION = {
   observations: ['Prior launches stalled during handoff.'],
   tensions: ['Speed may reduce stakeholder confidence.'],
   caveats: ['The thread contains no customer interview evidence.'],
-  provenance: [{ turnId: 'turn-1', excerpt: 'The handoff is where the launch gets stuck.' }],
+  provenance: [
+    { turnId: 'turn-1', excerpt: 'A smaller reversible launch best preserves learning.' },
+    { turnId: 'turn-1', excerpt: 'Coordination is the immediate constraint.' },
+    { turnId: 'turn-1', excerpt: 'Reversibility protects the learning loop.' },
+    { turnId: 'turn-1', excerpt: 'The first cohort can expose the decision boundary.' },
+    { turnId: 'turn-1', excerpt: 'Prior launches stalled during handoff.' },
+    { turnId: 'turn-1', excerpt: 'Speed may reduce stakeholder confidence.' },
+    { turnId: 'turn-1', excerpt: 'The thread contains no customer interview evidence.' },
+  ],
 } as const;
 
 interface NativeHttpResponse {
@@ -538,7 +556,10 @@ describe('stateless model HTTP service', () => {
       provider: new ScriptedRepairingProvider({ generate: [attempt(value)] }),
     });
 
-    const response = await nativeRequest(server, operationRequest(operation));
+    const response = await nativeRequest(
+      server,
+      operationRequest(operation, operation === 'conclusion' ? CONCLUSION_SOURCE : undefined),
+    );
 
     expect(response.body).toEqual({ ok: true, value });
     expect(validateOperationResult(operation, successValue(response))).toEqual(value);
@@ -729,6 +750,68 @@ describe('stateless model HTTP service', () => {
       schemaOutcome: 'valid',
       status: 'success',
     });
+  });
+
+  it('repairs a structurally valid conclusion that invents authored content', async () => {
+    const invented = {
+      ...VALID_CONCLUSION,
+      thesis: 'The model recommends committing to the smaller launch.',
+    };
+    const telemetry = new CapturingMetadataSink();
+    const provider = new ScriptedRepairingProvider({
+      generate: [attempt(invented)],
+      repair: [
+        (request) => {
+          expect(request.validationCodes).toEqual(['conclusion_authorship']);
+          return attempt(VALID_CONCLUSION);
+        },
+      ],
+    });
+    const { server } = await startServer({ provider, telemetry });
+
+    const response = await nativeRequest(
+      server,
+      operationRequest('conclusion', CONCLUSION_SOURCE),
+    );
+
+    expect(successValue(response)).toEqual(VALID_CONCLUSION);
+    expect(provider.generateCalls).toBe(1);
+    expect(provider.repairCalls).toBe(1);
+    expect(telemetry.events[0]).toMatchObject({
+      operation: 'conclusion',
+      repairCount: 1,
+      schemaOutcome: 'valid',
+      status: 'success',
+    });
+  });
+
+  it('rejects a conclusion when the single repair still invents authored content', async () => {
+    const invented = {
+      ...VALID_CONCLUSION,
+      thesis: 'The model recommends committing to the smaller launch.',
+    };
+    const provider = new ScriptedRepairingProvider({
+      generate: [attempt(invented)],
+      repair: [attempt({
+        ...VALID_CONCLUSION,
+        insights: [
+          'Coordination is the immediate constraint.',
+          'The model adds an unstated rationale.',
+          'The first cohort can expose the decision boundary.',
+        ],
+      })],
+    });
+    const { server } = await startServer({ provider });
+
+    const response = await nativeRequest(
+      server,
+      operationRequest('conclusion', CONCLUSION_SOURCE),
+    );
+
+    expect(response.status).toBe(502);
+    expect(failure(response)).toMatchObject({ code: 'invalid_output', retryable: true });
+    expect(provider.generateCalls).toBe(1);
+    expect(provider.repairCalls).toBe(1);
   });
 
   it('does not repair valid output', async () => {
@@ -1133,7 +1216,6 @@ describe('OpenAI server adapter without live access', () => {
           output_text: JSON.stringify({
             kind: 'blind_spot',
             question: VALID_CHALLENGE.question,
-            counterPosition: null,
           }),
         }),
       ]),

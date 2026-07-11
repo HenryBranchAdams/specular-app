@@ -133,7 +133,7 @@ function CapsuleDetail({
           type="button"
         >
           <Play aria-hidden="true" size={17} />
-          Continue developing
+          Return to thread
         </button>
         <button
           className="capsule-detail__revisit-secondary touch-target"
@@ -151,11 +151,11 @@ function CapsuleDetail({
           type="button"
         >
           <MessageCircleQuestion aria-hidden="true" size={17} />
-          Challenge this
+          Test this
         </button>
       </div>
       <label className="capsule-detail__field">
-        <span>Working conclusion</span>
+        <span>Working position</span>
         <textarea
           onChange={(event) => {
             const thesis = event.currentTarget.value;
@@ -166,7 +166,7 @@ function CapsuleDetail({
         />
       </label>
       <label className="capsule-detail__field">
-        <span>Original insights</span>
+        <span>From the thread</span>
         <textarea
           onChange={(event) => { setInsights(event.currentTarget.value); }}
           rows={6}
@@ -174,7 +174,7 @@ function CapsuleDetail({
         />
       </label>
       <label className="capsule-detail__field">
-        <span>Supporting observations</span>
+        <span>Observations</span>
         <textarea
           onChange={(event) => { setObservations(event.currentTarget.value); }}
           rows={5}
@@ -182,7 +182,7 @@ function CapsuleDetail({
         />
       </label>
       <label className="capsule-detail__field">
-        <span>Unresolved tensions</span>
+        <span>Open tensions</span>
         <textarea
           onChange={(event) => { setTensions(event.currentTarget.value); }}
           rows={5}
@@ -190,7 +190,7 @@ function CapsuleDetail({
         />
       </label>
       <label className="capsule-detail__field">
-        <span>Caveats</span>
+        <span>Limits</span>
         <textarea
           onChange={(event) => { setCaveats(event.currentTarget.value); }}
           rows={4}
@@ -415,7 +415,7 @@ export function CapsuleLibrary({
           <div className="capsule-library__empty">
             <Database aria-hidden="true" size={34} strokeWidth={1.4} />
             <p>No capsules yet.</p>
-            <span>Saved working conclusions collect here.</span>
+            <span>Saved working positions collect here.</span>
           </div>
         ) : selected === null ? (
           <ol aria-label="Saved capsules" className="capsule-library__list">

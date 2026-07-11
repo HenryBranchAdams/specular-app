@@ -11,6 +11,7 @@ import type {
 import {
   ProductValidationError,
   type ProductValidationErrorCode,
+  validateConclusionAuthorship,
   validateOperationResult,
 } from '../src/domain/validators';
 import type { CrisisRegion } from './config';
@@ -190,6 +191,20 @@ function validate(operation: Operation, value: unknown): OperationResult {
   return validateOperationResult(operation, value);
 }
 
+function validateProviderResult(
+  operation: Operation,
+  value: unknown,
+  context: ThreadContext,
+): OperationResult {
+  if (operation === 'conclusion') {
+    return validateConclusionAuthorship(
+      validateOperationResult('conclusion', value),
+      context.turns,
+    );
+  }
+  return validateOperationResult(operation, value);
+}
+
 function safetyIdentifier(secret: Uint8Array, context: ThreadContext): string {
   return createHmac('sha256', secret).update(context.thread.id).digest('hex');
 }
@@ -294,7 +309,7 @@ export function createOperationService(options: OperationServiceOptions): Operat
 
         let value: OperationResult;
         try {
-          value = validate(request.operation, attempt.value);
+          value = validateProviderResult(request.operation, attempt.value, request.context);
         } catch (firstValidationError) {
           repairCount = 1;
           attempt = await raceWithAbort(options.provider.repair({
@@ -305,7 +320,7 @@ export function createOperationService(options: OperationServiceOptions): Operat
           usage = addTokenUsage(usage, attempt.tokenUsage);
 
           try {
-            value = validate(request.operation, attempt.value);
+            value = validateProviderResult(request.operation, attempt.value, request.context);
           } catch {
             const error = createServiceError('invalid_output', request.requestId);
             await recordSafely(options.telemetry, telemetryEvent(

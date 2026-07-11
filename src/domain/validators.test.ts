@@ -3,9 +3,11 @@ import {
   containsFiller,
   containsProhibitedQuestion,
   questionMarkCount,
+  validateConclusionAuthorship,
   validateOperationResult,
   wordCount,
 } from './validators';
+import { turnSchema } from './schemas';
 
 const EMPTY_UNDERSTANDING = {
   claims: [],
@@ -143,12 +145,63 @@ describe('validateOperationResult', () => {
     expect(() => validateOperationResult('conclusion', {
       kind: 'working_conclusion',
       thesis: 'My current read is that the boundary remains unclear.',
-      insights: ['Only one insight is present.'],
+      insights: [],
       observations: [],
       tensions: [],
       caveats: [],
       provenance: [{ turnId: 'turn-1', excerpt: 'The boundary remains unclear.' }],
     })).toThrow(/conclusion_shape/);
+  });
+
+  it('accepts only distinct verbatim fields from accepted user turns', () => {
+    const userTurns = [
+      turnSchema.parse({
+        id: 'turn-user-1',
+        ownerScope: 'local',
+        threadId: 'thread-1',
+        role: 'user',
+        content: 'The launch can stay reversible.',
+        modality: 'text',
+        createdAt: 1,
+        position: 0,
+        deliveryState: 'accepted',
+      }),
+      turnSchema.parse({
+        id: 'turn-user-2',
+        ownerScope: 'local',
+        threadId: 'thread-1',
+        role: 'user',
+        content: 'The handoff has no observable owner.',
+        modality: 'text',
+        createdAt: 2,
+        position: 1,
+        deliveryState: 'accepted',
+      }),
+    ];
+    const firstTurn = userTurns[0];
+    const secondTurn = userTurns[1];
+    if (firstTurn === undefined || secondTurn === undefined) {
+      throw new Error('Expected two user turns.');
+    }
+    const gathered = validateOperationResult('conclusion', {
+      kind: 'working_conclusion',
+      thesis: firstTurn.content,
+      insights: [secondTurn.content],
+      observations: [],
+      tensions: [],
+      caveats: [],
+      provenance: userTurns.map((turn) => ({ turnId: turn.id, excerpt: turn.content })),
+    });
+
+    expect(validateConclusionAuthorship(gathered, userTurns)).toBe(gathered);
+    expect(() => validateConclusionAuthorship({
+      ...gathered,
+      thesis: 'A reversible launch is the answer.',
+    }, userTurns)).toThrow(/conclusion_authorship/);
+    expect(() => validateConclusionAuthorship(gathered, [{
+      ...firstTurn,
+      role: 'specular',
+    }, secondTurn])).toThrow(/conclusion_authorship/);
   });
 
   it('rejects operation-specific word and question-count limits', () => {

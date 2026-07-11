@@ -8,18 +8,14 @@
       :root {
         color-scheme: dark;
         font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-        --ink: #070711;
-        --ink-raised: #10101d;
-        --ink-soft: #181827;
-        --warm-white: #f5f1e8;
-        --pearl: #c9c7d4;
-        --pearl-dim: #9693a6;
-        --cyan: #52e4f4;
-        --ultraviolet: #8f7cff;
-        --lime: #c9f36d;
-        --ember: #ff8a5b;
-        --hairline: rgba(245, 241, 232, 0.14);
-        --focus: rgba(82, 228, 244, 0.54);
+        --ink: #080a0e;
+        --ink-raised: #0c0e13;
+        --ink-soft: #101218;
+        --warm-white: #eeeae4;
+        --pearl: #a19da6;
+        --pearl-dim: #85818b;
+        --hairline: rgba(238, 234, 228, 0.16);
+        --focus: rgba(238, 234, 228, 0.72);
         background: transparent;
         color: var(--warm-white);
       }
@@ -44,9 +40,9 @@
         margin: 0 auto;
         overflow: hidden;
         border: 1px solid var(--hairline);
-        border-radius: 20px;
+        border-radius: 0;
         background: var(--ink);
-        box-shadow: 0 18px 46px rgba(7, 7, 17, 0.28);
+        box-shadow: none;
       }
 
       .masthead {
@@ -67,17 +63,33 @@
       }
 
       .mark {
-        display: grid;
+        position: relative;
+        display: block;
         flex: 0 0 auto;
-        width: 30px;
-        height: 30px;
-        place-items: center;
-        border: 1px solid rgba(82, 228, 244, 0.34);
-        border-radius: 10px;
-        color: var(--cyan);
-        background: var(--ink-raised);
-        font-size: 17px;
-        line-height: 1;
+        width: 18px;
+        height: 18px;
+        border: 0;
+        background: transparent;
+      }
+
+      .mark::before,
+      .mark::after {
+        position: absolute;
+        top: 2px;
+        bottom: 2px;
+        width: 1px;
+        content: "";
+        background: var(--pearl-dim);
+      }
+
+      .mark::before {
+        left: 5px;
+        box-shadow: 4px 0 0 var(--pearl-dim);
+      }
+
+      .mark::after {
+        left: 13px;
+        transform: rotate(-14deg);
       }
 
       .brand-copy {
@@ -92,22 +104,12 @@
         line-height: 1.15;
       }
 
-      .brand-purpose {
-        margin: 2px 0 0;
-        overflow: hidden;
-        color: var(--pearl-dim);
-        font-size: 12px;
-        line-height: 1.2;
-        text-overflow: ellipsis;
-        white-space: nowrap;
-      }
-
       .operation-label {
         flex: 0 0 auto;
-        padding: 5px 9px;
-        border: 1px solid currentColor;
-        border-radius: 999px;
-        color: var(--cyan);
+        padding: 5px 0;
+        border: 0;
+        border-radius: 0;
+        color: var(--pearl-dim);
         font-size: 12px;
         font-weight: 760;
         line-height: 1.2;
@@ -116,15 +118,6 @@
       .result {
         min-height: 190px;
         padding: 22px 18px 20px;
-      }
-
-      .result[data-kind="challenge"] .operation-label,
-      .plane[data-result-kind="challenge"] .operation-label {
-        color: var(--ember);
-      }
-
-      .plane[data-result-kind="conclusion"] .operation-label {
-        color: var(--lime);
       }
 
       .subtype {
@@ -151,17 +144,17 @@
       }
 
       .primary-result[data-emphasis="challenge"] {
-        color: #fff0e9;
+        color: var(--warm-white);
       }
 
       .primary-result[data-emphasis="conclusion"] {
-        color: #f4ffd9;
+        color: var(--warm-white);
       }
 
       .question-line {
         margin: 16px 0 0;
         padding-left: 13px;
-        border-left: 2px solid var(--ultraviolet);
+        border-left: 1px solid var(--hairline);
         color: var(--warm-white);
         font-size: 17px;
         font-weight: 590;
@@ -213,8 +206,8 @@
         left: 0;
         width: 5px;
         height: 5px;
-        border-radius: 50%;
-        background: var(--lime);
+        border-radius: 0;
+        background: var(--pearl-dim);
         content: "";
       }
 
@@ -231,21 +224,21 @@
       }
 
       .actions {
-        display: grid;
-        grid-template-columns: repeat(3, minmax(0, 1fr));
-        gap: 8px;
-        padding: 12px;
+        display: flex;
+        flex-wrap: wrap;
+        gap: 18px;
+        padding: 10px 16px;
         border-top: 1px solid var(--hairline);
-        background: var(--ink-raised);
+        background: transparent;
       }
 
       .action {
         min-height: 44px;
-        padding: 9px 10px;
-        border: 1px solid var(--hairline);
-        border-radius: 12px;
-        color: var(--warm-white);
-        background: var(--ink-soft);
+        padding: 9px 0;
+        border: 0;
+        border-radius: 0;
+        color: var(--pearl);
+        background: transparent;
         font-size: 16px;
         font-weight: 660;
         line-height: 1.2;
@@ -254,8 +247,8 @@
       }
 
       .action:hover:not(:disabled) {
-        border-color: rgba(82, 228, 244, 0.52);
-        background: #202033;
+        color: var(--warm-white);
+        background: transparent;
       }
 
       .action:active:not(:disabled) {
@@ -266,14 +259,6 @@
       .details-toggle:focus-visible {
         outline: 3px solid var(--focus);
         outline-offset: 2px;
-      }
-
-      .action[data-operation="challenge"] {
-        border-color: rgba(255, 138, 91, 0.34);
-      }
-
-      .action[data-operation="conclusion"] {
-        border-color: rgba(201, 243, 109, 0.3);
       }
 
       .action:disabled {
@@ -287,7 +272,7 @@
         margin-top: 16px;
         padding: 8px 0;
         border: 0;
-        color: var(--cyan);
+        color: var(--pearl);
         background: transparent;
         font-size: 16px;
         font-weight: 680;
@@ -300,7 +285,7 @@
         }
 
         .plane {
-          border-radius: 16px;
+          border-radius: 0;
         }
 
         .masthead {
@@ -316,7 +301,7 @@
         }
 
         .actions {
-          grid-template-columns: 1fr;
+          gap: 10px 18px;
         }
       }
 
@@ -363,10 +348,9 @@
     <main class="plane" id="plane" data-result-kind="question" data-specular-widget>
       <header class="masthead">
         <div class="brand">
-          <div class="mark" aria-hidden="true">✦</div>
+          <div class="mark" aria-hidden="true"></div>
           <div class="brand-copy">
             <p class="brand-name">Specular</p>
-            <p class="brand-purpose">One thread. One useful move.</p>
           </div>
         </div>
         <span class="operation-label" id="operation-label">Question</span>
@@ -379,11 +363,11 @@
         <p class="question-line" id="question-line" hidden></p>
 
         <button class="details-toggle" id="details-toggle" type="button" hidden>
-          Show conclusion details
+          Show gathered excerpts
         </button>
         <div class="details" id="details" hidden>
           <section class="detail-group" id="insights-group" hidden>
-            <h2 class="detail-heading">Key insights</h2>
+            <h2 class="detail-heading">From the thread</h2>
             <ul class="detail-list" id="insights"></ul>
           </section>
           <section class="detail-group" id="observations-group" hidden>
@@ -391,11 +375,11 @@
             <ul class="detail-list" id="observations"></ul>
           </section>
           <section class="detail-group" id="tensions-group" hidden>
-            <h2 class="detail-heading">Tensions</h2>
+            <h2 class="detail-heading">Open tensions</h2>
             <ul class="detail-list" id="tensions"></ul>
           </section>
           <section class="detail-group" id="caveats-group" hidden>
-            <h2 class="detail-heading">Caveats</h2>
+            <h2 class="detail-heading">Limits</h2>
             <ul class="detail-list" id="caveats"></ul>
           </section>
         </div>
@@ -407,10 +391,10 @@
           Next question
         </button>
         <button class="action" type="button" data-tool="challenge" data-operation="challenge">
-          Challenge
+          Test this
         </button>
         <button class="action" type="button" data-tool="draft_conclusion" data-operation="conclusion">
-          Working conclusion
+          Gather this thread
         </button>
       </nav>
     </main>
@@ -462,8 +446,8 @@
         detailsToggle.hidden = !available;
         details.hidden = !available || !detailsExpanded;
         detailsToggle.textContent = detailsExpanded
-          ? 'Hide conclusion details'
-          : 'Show conclusion details';
+          ? 'Hide gathered excerpts'
+          : 'Show gathered excerpts';
         detailsToggle.setAttribute('aria-expanded', String(available && detailsExpanded));
       }
 
@@ -496,15 +480,15 @@
             break;
           case 'blind_spot':
             plane.dataset.resultKind = 'challenge';
-            setText(operationLabel, 'Challenge');
-            setText(subtype, 'Blind spot');
+            setText(operationLabel, 'Test');
+            setText(subtype, 'Testing question');
             primaryResult.dataset.emphasis = 'challenge';
             setText(primaryResult, value.question);
             break;
           case 'counter_position':
             plane.dataset.resultKind = 'challenge';
-            setText(operationLabel, 'Challenge');
-            setText(subtype, 'Counter-position');
+            setText(operationLabel, 'Safety');
+            setText(subtype, 'Immediate support');
             primaryResult.dataset.emphasis = 'challenge';
             setText(primaryResult, value.counterPosition);
             setText(questionLine, value.question);
@@ -512,8 +496,8 @@
             break;
           case 'working_conclusion':
             plane.dataset.resultKind = 'conclusion';
-            setText(operationLabel, 'Working conclusion');
-            setText(subtype, 'Grounded in this thread');
+            setText(operationLabel, 'Gathered notes');
+            setText(subtype, 'Exact words from this thread');
             primaryResult.dataset.emphasis = 'conclusion';
             setText(primaryResult, value.thesis);
             detailSections.forEach(([listId, groupId]) => {
@@ -573,7 +557,12 @@
         document.querySelectorAll('.action').forEach((action) => {
           action.disabled = true;
         });
-        setText(feedback, operation === 'challenge' ? 'Preparing the requested Challenge…' : 'Working…');
+        const progress = operation === 'challenge'
+          ? 'Preparing one testing question…'
+          : operation === 'conclusion'
+            ? 'Gathering exact thread excerpts…'
+            : 'Working…';
+        setText(feedback, progress);
 
         try {
           const toolResult = await window.openai?.callTool(toolName, { context: nextContext });

@@ -5,7 +5,7 @@ import './main';
 describe('production Specular bootstrap', () => {
   it('renders the canonical thinking loop without modes or lens labels', async () => {
     expect(await screen.findByRole('heading', { name: 'Specular' })).toBeVisible();
-    expect(screen.getByRole('button', { name: 'Something unfinished.' })).toBeVisible();
+    expect(screen.getByRole('heading', { name: 'Something unfinished.' })).toBeVisible();
     expect(screen.getByRole('textbox', { name: 'Idea, context, or response' })).toBeVisible();
     expect(screen.queryByRole('button', { name: /voice/iu })).not.toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Send input' })).toBeVisible();

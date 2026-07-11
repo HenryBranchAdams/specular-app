@@ -61,9 +61,6 @@ const STARTERS = [
   'Notes that don’t yet agree',
 ] as const;
 
-const FOCUSED_STARTER_OPACITY_PATTERN =
-  /\.starter-deck__item:hover,\s*\.starter-deck__item:focus-within\s*\{[^}]*opacity:\s*1;/u;
-
 const EMPTY_UNDERSTANDING: ThreadUnderstanding = {
   claims: [],
   observations: [],
@@ -118,22 +115,25 @@ class DeterministicQuestioningProvider implements QuestioningProvider {
 
   conclusionHandler: (context: ThreadContext) => Promise<WorkingConclusionResult> =
     (context) => {
-      const sourceTurn = context.turns.find((turn) => turn.role === 'user');
-      if (sourceTurn === undefined) {
-        return Promise.reject(new Error('A conclusion needs user provenance.'));
+      const sourceTurns = context.turns.filter((turn) => (
+        turn.role === 'user' && turn.deliveryState === 'accepted'
+      ));
+      const position = sourceTurns[0];
+      const gathered = sourceTurns.slice(1, 6);
+      if (position === undefined || gathered.length === 0) {
+        return Promise.reject(new Error('Gathering needs two accepted user turns.'));
       }
       return Promise.resolve({
         kind: 'working_conclusion',
-        thesis: 'My current read is that a concrete boundary would make the decision easier.',
-        insights: [
-          'The uncertainty is attached to the boundary.',
-          'The decision can remain reversible.',
-          'A concrete example would expose the tradeoff.',
-        ],
-        observations: ['The user is looking for a sharper distinction.'],
-        tensions: ['More certainty may delay a reversible choice.'],
-        caveats: ['The thread contains only the user’s current account.'],
-        provenance: [{ turnId: sourceTurn.id, excerpt: sourceTurn.content }],
+        thesis: position.content,
+        insights: gathered.map((turn) => turn.content),
+        observations: [],
+        tensions: [],
+        caveats: [],
+        provenance: [position, ...gathered].map((turn) => ({
+          turnId: turn.id,
+          excerpt: turn.content,
+        })),
       });
     };
 
@@ -274,16 +274,17 @@ afterEach(() => {
 });
 
 describe('Specular mobile thinking loop', () => {
-  it('renders the four restrained interchangeable starters', async () => {
+  it('renders one invitation and three non-interactive unfinished-thought cues', async () => {
     const { dependencies } = await createFixture();
     render(<App dependencies={dependencies} />);
 
     for (const starter of STARTERS) {
-      expect(await screen.findByRole('button', { name: starter })).toBeVisible();
+      expect(await screen.findByText(starter, { exact: true })).toBeVisible();
+      expect(screen.queryByRole('button', { name: starter })).not.toBeInTheDocument();
     }
   });
 
-  it('focuses the composer from a starter without starting a thread or selecting a strategy', async () => {
+  it('makes writing the first interaction without starting a thread or selecting a strategy', async () => {
     const { dependencies, provider, service } = await createFixture();
     const user = userEvent.setup();
     const startThread = vi.spyOn(service, 'startThread');
@@ -292,9 +293,14 @@ describe('Specular mobile thinking loop', () => {
     const draftConclusion = vi.spyOn(service, 'draftConclusion');
     render(<App dependencies={dependencies} />);
 
-    await user.click(await screen.findByRole('button', { name: STARTERS[3] }));
+    const lead = await screen.findByRole('heading', { name: STARTERS[0] });
+    const composer = screen.getByRole('textbox', { name: 'Idea, context, or response' });
+    const cues = screen.getByRole('list', { name: 'Ways to begin' });
+    expect(lead.compareDocumentPosition(composer) & Node.DOCUMENT_POSITION_FOLLOWING).not.toBe(0);
+    expect(composer.compareDocumentPosition(cues) & Node.DOCUMENT_POSITION_FOLLOWING).not.toBe(0);
+    await user.click(composer);
 
-    expect(screen.getByRole('textbox', { name: 'Idea, context, or response' })).toHaveFocus();
+    expect(composer).toHaveFocus();
     expect(startThread).not.toHaveBeenCalled();
     expect(submitUserTurn).not.toHaveBeenCalled();
     expect(challenge).not.toHaveBeenCalled();
@@ -312,8 +318,10 @@ describe('Specular mobile thinking loop', () => {
       .toHaveAttribute('data-motion', 'static');
   });
 
-  it('keeps starter hierarchy accessible and fully reveals the targeted item', () => {
-    expect(styles).toMatch(FOCUSED_STARTER_OPACITY_PATTERN);
+  it('keeps starter hierarchy editorial instead of presenting a numbered taxonomy', () => {
+    expect(styles).not.toContain('starter-deck__index');
+    expect(styles).not.toContain('starter-deck__rule');
+    expect(styles).toContain('.starter-cues__item:nth-child(2)');
   });
 
   it('keeps the starter surface still instead of simulating thought with ambient motion', () => {
@@ -331,7 +339,7 @@ describe('Specular mobile thinking loop', () => {
     expect(composer).toHaveClass('touch-target');
     expect(send).toHaveClass('touch-target');
     expect(screen.queryByRole('button', { name: /voice/iu })).not.toBeInTheDocument();
-    await screen.findByRole('button', { name: STARTERS[0] });
+    await screen.findByRole('heading', { name: STARTERS[0] });
   });
 
   it('accepts one voice exchange into the active transcript without touching the text draft', async () => {
@@ -395,8 +403,8 @@ describe('Specular mobile thinking loop', () => {
     expect(within(transcript).getByText(exchange.assistantTranscript)).toBeVisible();
     expect(screen.getAllByRole('log', { name: 'Conversation history' })).toHaveLength(1);
     expect(composer).toHaveValue('A typed thought stays here.');
-    expect(screen.getByRole('button', { name: 'Challenge this' })).toBeVisible();
-    expect(screen.getByRole('button', { name: 'Draft a working conclusion' })).toBeVisible();
+    expect(screen.getByRole('button', { name: 'Test this' })).toBeVisible();
+    expect(screen.getByRole('button', { name: 'Gather this thread' })).toBeVisible();
 
     await user.click(screen.getByRole('button', { name: 'Stop voice' }));
     expect(harness.stop).toHaveBeenCalledOnce();
@@ -435,9 +443,9 @@ describe('Specular mobile thinking loop', () => {
     expect(screen.getByRole('button', { name: 'Send input' })).toBeEnabled();
   });
 
-  it('stops voice before a Challenge or conclusion operation proceeds', async () => {
+  it('stops voice before a test or gather operation proceeds', async () => {
     const fixture = await createFixture();
-    await seedActiveThread(fixture);
+    await seedActiveThread(fixture, ['First thought', 'Second thought']);
     const harness = createVoiceHarness();
     const user = userEvent.setup();
     render(
@@ -450,8 +458,8 @@ describe('Specular mobile thinking loop', () => {
 
     await user.click(await screen.findByRole('button', { name: 'Start voice' }));
     act(() => { harness.callbacks?.onStatus('listening'); });
-    const challenge = screen.getByRole('button', { name: 'Challenge this' });
-    const conclusion = screen.getByRole('button', { name: 'Draft a working conclusion' });
+    const challenge = screen.getByRole('button', { name: 'Test this' });
+    const conclusion = screen.getByRole('button', { name: 'Gather this thread' });
     expect(challenge).toBeDisabled();
     expect(conclusion).toBeDisabled();
     expect(fixture.provider.challengeCalls).toBe(0);
@@ -460,7 +468,7 @@ describe('Specular mobile thinking loop', () => {
     expect(challenge).toBeEnabled();
     await user.click(challenge);
     expect(await screen.findByRole('button', { name: 'Start voice' })).toBeEnabled();
-    expect(screen.getByRole('button', { name: 'Draft a working conclusion' })).toBeVisible();
+    expect(screen.getByRole('button', { name: 'Gather this thread' })).toBeVisible();
   });
 
   it('keeps a pre-initialization draft but waits to send until repositories load', async () => {
@@ -587,7 +595,7 @@ describe('Specular mobile thinking loop', () => {
     expect(questions[1]).toHaveAccessibleName('Current Specular question');
   });
 
-  it('keeps Challenge and conclusion actions available through the application boundary', async () => {
+  it('paces gather until two user turns and keeps both actions on the application boundary', async () => {
     const fixture = await createFixture();
     await seedActiveThread(fixture);
     const challenge = vi.spyOn(fixture.service, 'challenge');
@@ -595,14 +603,23 @@ describe('Specular mobile thinking loop', () => {
     const user = userEvent.setup();
     render(<App dependencies={fixture.dependencies} />);
 
-    await user.click(await screen.findByRole('button', { name: 'Challenge this' }));
+    expect(await screen.findByRole('button', { name: 'Test this' })).toBeVisible();
+    expect(screen.queryByRole('button', { name: 'Gather this thread' })).not.toBeInTheDocument();
+    await user.type(
+      screen.getByRole('textbox', { name: 'Idea, context, or response' }),
+      'A second user-authored detail makes gathering meaningful.',
+    );
+    await user.click(screen.getByRole('button', { name: 'Send input' }));
+    expect(await screen.findByRole('button', { name: 'Gather this thread' })).toBeVisible();
+
+    await user.click(await screen.findByRole('button', { name: 'Test this' }));
     expect(challenge).toHaveBeenCalledTimes(1);
     expect(await screen.findByText('Which stakeholder bears the cost if this assumption fails?'))
       .toBeVisible();
 
-    await user.click(screen.getByRole('button', { name: 'Draft a working conclusion' }));
+    await user.click(screen.getByRole('button', { name: 'Gather this thread' }));
     expect(draftConclusion).toHaveBeenCalledTimes(1);
-    expect(await screen.findByText('Conclusion draft ready.')).toBeVisible();
+    expect(await screen.findByText('Notes gathered.')).toBeVisible();
   });
 
   it('announces turns and typed errors while preserving composer focus', async () => {
@@ -635,7 +652,7 @@ describe('Specular mobile thinking loop', () => {
     const fixture = await createFixture();
     const user = userEvent.setup();
     render(<App dependencies={fixture.dependencies} />);
-    await screen.findByRole('button', { name: STARTERS[0] });
+    await screen.findByRole('heading', { name: STARTERS[0] });
     fixture.repositories.close();
 
     const composer = screen.getByRole('textbox', { name: 'Idea, context, or response' });
@@ -653,7 +670,7 @@ describe('Specular mobile thinking loop', () => {
     unwrap(await fixture.service.startThread());
     const user = userEvent.setup();
     render(<App dependencies={fixture.dependencies} />);
-    await screen.findByRole('button', { name: STARTERS[0] });
+    await screen.findByRole('heading', { name: STARTERS[0] });
     fixture.repositories.close();
 
     const composer = screen.getByRole('textbox', { name: 'Idea, context, or response' });
@@ -674,7 +691,7 @@ describe('Specular mobile thinking loop', () => {
     const user = userEvent.setup();
     render(<App dependencies={fixture.dependencies} />);
 
-    await user.click(await screen.findByRole('button', { name: 'Challenge this' }));
+    await user.click(await screen.findByRole('button', { name: 'Test this' }));
 
     expect(await screen.findByRole('alert')).toBeVisible();
     expect(screen.queryByRole('button', { name: 'Retry' }))
@@ -683,13 +700,13 @@ describe('Specular mobile thinking loop', () => {
 
   it('does not offer a saved-turn retry for a conclusion operation error', async () => {
     const fixture = await createFixture();
-    await seedActiveThread(fixture);
+    await seedActiveThread(fixture, ['First thought', 'Second thought']);
     fixture.provider.conclusionHandler = () =>
       Promise.reject(new QuestioningClientError('offline'));
     const user = userEvent.setup();
     render(<App dependencies={fixture.dependencies} />);
 
-    await user.click(await screen.findByRole('button', { name: 'Draft a working conclusion' }));
+    await user.click(await screen.findByRole('button', { name: 'Gather this thread' }));
 
     expect(await screen.findByRole('alert')).toBeVisible();
     expect(screen.queryByRole('button', { name: 'Retry' }))
@@ -758,7 +775,7 @@ describe('Specular mobile thinking loop', () => {
   it('gives every icon-only control an accessible name', async () => {
     const { dependencies } = await createFixture();
     render(<App dependencies={dependencies} />);
-    await screen.findByRole('button', { name: STARTERS[0] });
+    await screen.findByRole('heading', { name: STARTERS[0] });
 
     const iconOnlyButtons = [...document.querySelectorAll('button')]
       .filter((button) => button.querySelector('svg') !== null && button.textContent.trim() === '');

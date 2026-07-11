@@ -80,22 +80,25 @@ class TaskSixProvider implements QuestioningProvider {
   }
 
   draftConclusion(context: ThreadContext): Promise<WorkingConclusionResult> {
-    const source = context.turns.find((turn) => turn.role === 'user');
-    if (source === undefined) {
-      return Promise.reject(new Error('Expected user provenance.'));
+    const sources = context.turns.filter((turn) => (
+      turn.role === 'user' && turn.deliveryState === 'accepted'
+    ));
+    const position = sources[0];
+    const gathered = sources.slice(1, 6);
+    if (position === undefined || gathered.length === 0) {
+      return Promise.reject(new Error('Expected two user-authored turns.'));
     }
     return Promise.resolve({
       kind: 'working_conclusion',
-      thesis: 'A reversible step best preserves room to learn.',
-      insights: [
-        'The decision can remain reversible.',
-        'The evidence boundary remains explicit.',
-        'A smaller move preserves momentum.',
-      ],
-      observations: ['The current option can be tested quickly.'],
-      tensions: ['Waiting may reduce momentum.'],
-      caveats: ['The thread contains one point of view.'],
-      provenance: [{ turnId: source.id, excerpt: source.content }],
+      thesis: position.content,
+      insights: gathered.map((turn) => turn.content),
+      observations: [],
+      tensions: [],
+      caveats: [],
+      provenance: [position, ...gathered].map((turn) => ({
+        turnId: turn.id,
+        excerpt: turn.content,
+      })),
     });
   }
 }
@@ -146,9 +149,13 @@ function unwrap<T>(result: ServiceResult<T>): T {
 
 async function seedThread(fixture: Fixture, title = 'Decision clarity'): Promise<Thread> {
   const thread = unwrap(await fixture.service.startThread(title));
-  return unwrap(await fixture.service.submitUserTurn(
+  const first = unwrap(await fixture.service.submitUserTurn(
     thread.id,
     'I need to decide without pretending I have complete certainty.',
+  )).thread;
+  return unwrap(await fixture.service.submitUserTurn(
+    first.id,
+    'I want the next step to stay reversible while I learn.',
   )).thread;
 }
 
@@ -161,7 +168,7 @@ afterEach(() => {
 });
 
 describe('Task 6 application flow', () => {
-  it('opens synthesis only from Draft a working conclusion and keeps edited context on the same thread', async () => {
+  it('opens gathered notes locally and keeps edited context on the same thread', async () => {
     const fixture = await createFixture();
     const seeded = await seedThread(fixture);
     await fixture.service.draftConclusion(seeded.id);
@@ -170,14 +177,14 @@ describe('Task 6 application flow', () => {
     render(<App dependencies={fixture.dependencies} downloadFile={vi.fn()} />);
 
     expect(await screen.findByRole('heading', { name: 'Decision clarity' })).toBeVisible();
-    expect(screen.queryByRole('textbox', { name: 'Working conclusion' }))
+    expect(screen.queryByRole('textbox', { name: 'Working position' }))
       .not.toBeInTheDocument();
 
-    await user.click(screen.getByRole('button', { name: 'Draft a working conclusion' }));
-    const thesis = await screen.findByRole('textbox', { name: 'Working conclusion' });
+    await user.click(screen.getByRole('button', { name: 'Open gathered notes' }));
+    const thesis = await screen.findByRole('textbox', { name: 'Working position' });
     await user.clear(thesis);
     await user.type(thesis, 'My edited conclusion remains provisional on this thread.');
-    await user.click(screen.getByRole('button', { name: 'Continue developing' }));
+    await user.click(screen.getByRole('button', { name: 'Return to thread' }));
 
     await waitFor(() => {
       expect(keepDigging).toHaveBeenCalledWith(
@@ -186,7 +193,7 @@ describe('Task 6 application flow', () => {
           thesis: 'My edited conclusion remains provisional on this thread.',
         }),
       );
-      expect(screen.queryByRole('textbox', { name: 'Working conclusion' }))
+      expect(screen.queryByRole('textbox', { name: 'Working position' }))
         .not.toBeInTheDocument();
     });
     expect(screen.getByRole('heading', { name: 'Decision clarity' })).toBeVisible();
@@ -202,8 +209,8 @@ describe('Task 6 application flow', () => {
     const user = userEvent.setup();
     render(<App dependencies={fixture.dependencies} downloadFile={downloadFile} />);
 
-    await user.click(await screen.findByRole('button', { name: 'Draft a working conclusion' }));
-    const thesis = await screen.findByRole('textbox', { name: 'Working conclusion' });
+    await user.click(await screen.findByRole('button', { name: 'Gather this thread' }));
+    const thesis = await screen.findByRole('textbox', { name: 'Working position' });
     await user.clear(thesis);
     await user.type(thesis, 'This edited capsule preserves its exact source.');
     await user.click(screen.getByRole('button', { name: 'Save as capsule' }));
@@ -217,6 +224,8 @@ describe('Task 6 application flow', () => {
         thesis: 'This edited capsule preserves its exact source.',
         provenance: [expect.objectContaining({
           excerpt: 'I need to decide without pretending I have complete certainty.',
+        }), expect.objectContaining({
+          excerpt: 'I want the next step to stay reversible while I learn.',
         })],
       },
     });
@@ -224,7 +233,7 @@ describe('Task 6 application flow', () => {
     await user.click(screen.getByRole('button', { name: /Open capsule library/u }));
     const library = await screen.findByRole('dialog', { name: 'Capsules' });
     await user.click(within(library).getByRole('button', { name: /A capsule worth keeping/u }));
-    const capsuleThesis = within(library).getByRole('textbox', { name: 'Working conclusion' });
+    const capsuleThesis = within(library).getByRole('textbox', { name: 'Working position' });
     await user.clear(capsuleThesis);
     await user.type(capsuleThesis, 'The capsule edit remains local and source-bound.');
     await user.click(within(library).getByRole('button', { name: 'Save capsule edits' }));
@@ -269,17 +278,17 @@ describe('Task 6 application flow', () => {
     render(<App dependencies={fixture.dependencies} downloadFile={vi.fn()} />);
 
     await user.click(await screen.findByRole('button', {
-      name: 'Draft a working conclusion',
+      name: 'Gather this thread',
     }));
-    const thesis = await screen.findByRole('textbox', { name: 'Working conclusion' });
+    const thesis = await screen.findByRole('textbox', { name: 'Working position' });
     await user.clear(thesis);
     await user.type(thesis, 'The finished line retains my final edit.');
     await user.click(screen.getByRole('button', { name: 'Save & finish' }));
 
     expect(await screen.findByText('Saved and finished.')).toBeVisible();
-    expect(await screen.findByRole('button', { name: 'Something unfinished.' }))
+    expect(await screen.findByRole('heading', { name: 'Something unfinished.' }))
       .toBeVisible();
-    expect(screen.queryByRole('textbox', { name: 'Working conclusion' }))
+    expect(screen.queryByRole('textbox', { name: 'Working position' }))
       .not.toBeInTheDocument();
     const storedOld = await fixture.repositories.threads.get(oldThread.id);
     expect(storedOld).toMatchObject({
@@ -374,7 +383,7 @@ describe('Task 6 application flow', () => {
       name: 'Permanently delete thread',
     }));
 
-    expect(await screen.findByRole('button', { name: 'Something unfinished.' }))
+    expect(await screen.findByRole('heading', { name: 'Something unfinished.' }))
       .toBeVisible();
     expect(screen.getByRole('textbox', { name: 'Idea, context, or response' })).toHaveValue('');
     expect(await fixture.repositories.threads.get(thread.id)).toBeUndefined();
@@ -441,7 +450,7 @@ describe('Task 6 application flow', () => {
       name: 'Permanently delete all local content',
     }));
 
-    expect(await screen.findByRole('button', { name: 'Something unfinished.' }))
+    expect(await screen.findByRole('heading', { name: 'Something unfinished.' }))
       .toBeVisible();
     expect(await fixture.repositories.threads.list()).toEqual([]);
     expect(await fixture.repositories.turns.listByThread(thread.id)).toEqual([]);
@@ -506,7 +515,7 @@ describe('Task 6 application flow', () => {
       name: 'Permanently reset local data',
     }));
 
-    expect(await screen.findByRole('button', { name: 'Something unfinished.' }))
+    expect(await screen.findByRole('heading', { name: 'Something unfinished.' }))
       .toBeVisible();
     await act(async () => {
       expect(await cleanRepositories?.threads.list()).toEqual([]);

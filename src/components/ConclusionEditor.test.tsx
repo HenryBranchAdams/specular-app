@@ -53,17 +53,17 @@ describe('ConclusionEditor', () => {
       />,
     );
 
-    const thesis = screen.getByRole('textbox', { name: 'Working conclusion' });
+    const thesis = screen.getByRole('textbox', { name: 'Working position' });
     await user.clear(thesis);
     await user.type(thesis, 'My edited read keeps the uncertainty explicit.');
-    await user.clear(screen.getByRole('textbox', { name: 'Original insight 1' }));
+    await user.clear(screen.getByRole('textbox', { name: 'Thread excerpt 1' }));
     await user.type(
-      screen.getByRole('textbox', { name: 'Original insight 1' }),
+      screen.getByRole('textbox', { name: 'Thread excerpt 1' }),
       'My edited first insight.',
     );
-    await user.clear(screen.getByRole('textbox', { name: 'Supporting observations' }));
+    await user.clear(screen.getByRole('textbox', { name: 'Observations' }));
     await user.type(
-      screen.getByRole('textbox', { name: 'Supporting observations' }),
+      screen.getByRole('textbox', { name: 'Observations' }),
       'A concrete observation.\nA second observation.',
     );
     await user.clear(screen.getByRole('textbox', { name: 'Unresolved tension 1' }));
@@ -71,8 +71,8 @@ describe('ConclusionEditor', () => {
       screen.getByRole('textbox', { name: 'Unresolved tension 1' }),
       'My edited tension.',
     );
-    await user.clear(screen.getByRole('textbox', { name: 'Caveats' }));
-    await user.type(screen.getByRole('textbox', { name: 'Caveats' }), 'My edited caveat.');
+    await user.clear(screen.getByRole('textbox', { name: 'Limits' }));
+    await user.type(screen.getByRole('textbox', { name: 'Limits' }), 'My edited caveat.');
 
     rerender(
       <ConclusionEditor
@@ -85,11 +85,11 @@ describe('ConclusionEditor', () => {
     );
 
     expect(thesis).toHaveValue('My edited read keeps the uncertainty explicit.');
-    expect(screen.getAllByRole('textbox', { name: /Original insight/u })).toHaveLength(3);
+    expect(screen.getAllByRole('textbox', { name: /Thread excerpt/u })).toHaveLength(3);
     expect(screen.getAllByRole('textbox', { name: /Unresolved tension/u })).toHaveLength(1);
     expect(screen.getByText('7 / 150 words')).toBeVisible();
 
-    await user.click(screen.getByRole('button', { name: 'Continue developing' }));
+    await user.click(screen.getByRole('button', { name: 'Return to thread' }));
 
     expect(onKeepDigging).toHaveBeenCalledWith(expect.objectContaining({
       thesis: 'My edited read keeps the uncertainty explicit.',
@@ -118,7 +118,7 @@ describe('ConclusionEditor', () => {
 
     expect(screen.getByDisplayValue('<img src=x onerror=alert(1)>')).toBeVisible();
     expect(document.querySelector('.conclusion-editor img')).toBeNull();
-    for (const action of ['Continue developing', 'Save as capsule', 'Save & finish']) {
+    for (const action of ['Return to thread', 'Save as capsule', 'Save & finish']) {
       const button = screen.getByRole('button', { name: action });
       expect(button).toHaveClass('touch-target');
       expect(button).toBeDisabled();

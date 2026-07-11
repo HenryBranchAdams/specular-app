@@ -21,6 +21,7 @@ import {
 import {
   EXPECTED_ANNOTATIONS,
   EXPECTED_TOOL_COPY,
+  EXPECTED_TOOL_STATUS,
   PRIVATE_SENTINEL,
   RESOURCE_URI,
   RecordingOperationService,
@@ -53,8 +54,10 @@ describe('createSpecularMcpServer descriptors and resource', () => {
     expect(openingInstructions).toContain('explicit');
     expect(openingInstructions).toContain('thread-scoped');
     expect(openingInstructions).toContain('stateless');
-    expect(openingInstructions).toContain('challenge');
-    expect(openingInstructions).toContain('conclusion');
+    expect(openingInstructions).toContain('test this thread');
+    expect(openingInstructions).toContain('gather this thread');
+    expect(openingInstructions).toContain('exact user-authored excerpts');
+    expect(openingInstructions).toContain('must not draft new content');
     expect(openingInstructions).toContain('opt-in');
 
     const listed = await client.listTools();
@@ -73,6 +76,8 @@ describe('createSpecularMcpServer descriptors and resource', () => {
         ui: { resourceUri: RESOURCE_URI },
         'ui/resourceUri': RESOURCE_URI,
         'openai/outputTemplate': RESOURCE_URI,
+        'openai/toolInvocation/invoking': EXPECTED_TOOL_STATUS[name].invoking,
+        'openai/toolInvocation/invoked': EXPECTED_TOOL_STATUS[name].invoked,
       });
 
       const inputSchema = tool.inputSchema as JsonSchema;
@@ -211,7 +216,7 @@ describe('createSpecularMcpServer descriptors and resource', () => {
       name: 'Specular result widget',
       uri: RESOURCE_URI,
       mimeType: 'text/html;profile=mcp-app',
-      description: 'Compact Specular question, Challenge, and working-conclusion surface.',
+      description: 'Compact Specular surface for one question, testing a thread, and gathering exact user-authored excerpts.',
       _meta: {
         ui: {
           csp: {
@@ -287,6 +292,23 @@ describe('createSpecularMcpServer operation delegation', () => {
       expect(result.structuredContent).toEqual(resultForOperation(operationForTool(current[0])));
       expectTextResult(result);
     });
+  });
+
+  it('uses testing and extractive gathering semantics in text fallbacks', async () => {
+    const { client } = await connectMcp(new RecordingOperationService());
+    const tested = await call(client, 'challenge', context('challenge'));
+    const gathered = await call(client, 'draft_conclusion', context('conclusion'));
+    const testedText = tested.content.flatMap((block) => block.type === 'text' ? [block.text] : []);
+    const gatheredText = gathered.content.flatMap(
+      (block) => block.type === 'text' ? [block.text] : [],
+    );
+
+    expect(testedText.join(' ')).toContain('Test this thread');
+    expect(testedText.join(' ')).not.toContain('Challenge');
+    expect(gatheredText.join(' ')).toContain('Gather this thread');
+    expect(gatheredText.join(' ')).toContain('exact user-authored excerpt');
+    expect(gatheredText.join(' ')).toContain('no new content drafted');
+    expect(gatheredText.join(' ')).not.toContain('Working conclusion');
   });
 
   it.each([

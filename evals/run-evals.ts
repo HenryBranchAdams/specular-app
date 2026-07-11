@@ -310,25 +310,15 @@ function buildFixedOutput(entry: FixedEvalCase, operation: Operation): Operation
     case 'conclusion':
       return {
         kind: 'working_conclusion',
-        thesis: `My current read is that ${provenance.excerpt} points to a provisional direction.`,
-        insights: [
-          `The supplied material identifies ${provenance.excerpt}.`,
-          `The open information gap concerns ${informationGap}.`,
-          `A credible Challenge target concerns ${challengeTarget}.`,
-        ],
-        observations: [
-          `The user supplied the evidence excerpt ${provenance.excerpt}.`,
-        ],
-        tensions: [
-          `The current framing remains provisional until ${informationGap} is clearer.`,
-        ],
-        caveats: [
-          'This working conclusion is provisional, and the user remains the final authority.',
-        ],
-        provenance: [{
+        thesis: entry.input,
+        insights: [provenance.excerpt],
+        observations: [],
+        tensions: [],
+        caveats: [],
+        provenance: [entry.input, provenance.excerpt].map((excerpt) => ({
           turnId: turnIdSchema.parse(provenance.turnId),
-          excerpt: provenance.excerpt,
-        }],
+          excerpt,
+        })),
       };
     default:
       return assertNever(operation);
@@ -401,20 +391,25 @@ function isGroundedConclusion(entry: FixedEvalCase, evaluation: OperationEvaluat
     return false;
   }
 
-  const expectedProvenance = new Set(entry.conclusionProvenance.map((item) => (
-    `${item.turnId}\u0000${item.excerpt}`
-  )));
   const expectedExcerptsAreGrounded = entry.conclusionProvenance.every((expected) => (
     containsLiteralText(entry.input, expected.excerpt)
   ));
   return expectedExcerptsAreGrounded
-    && parsed.data.provenance.length === entry.conclusionProvenance.length
+    && entry.conclusionProvenance.every((expected) => (
+      parsed.data.provenance.some((actual) => (
+        actual.turnId === expected.turnId && actual.excerpt === expected.excerpt
+      ))
+    ))
     && parsed.data.provenance.every((actual) => (
-      expectedProvenance.has(`${actual.turnId}\u0000${actual.excerpt}`)
+      actual.turnId === `${entry.id}-turn-1`
+      && containsLiteralText(entry.input, actual.excerpt)
     ));
 }
 
-function preservesUncertaintyAndAuthority(evaluation: OperationEvaluation): boolean {
+function preservesUncertaintyAndAuthority(
+  entry: FixedEvalCase,
+  evaluation: OperationEvaluation,
+): boolean {
   if (!evaluation.serviceOk) {
     return false;
   }
@@ -422,9 +417,13 @@ function preservesUncertaintyAndAuthority(evaluation: OperationEvaluation): bool
   if (!parsed.success) {
     return false;
   }
-  const text = outputText(parsed.data);
-  return /\b(?:provisional|current read|uncertain|tentative)\b/iu.test(text)
-    && /\buser\b[^.]{0,80}\b(?:authority|edit|reject|revise|decide)\b/iu.test(text);
+  return [
+    parsed.data.thesis,
+    ...parsed.data.insights,
+    ...parsed.data.observations,
+    ...parsed.data.tensions,
+    ...parsed.data.caveats,
+  ].every((value) => containsLiteralText(entry.input, value));
 }
 
 function isMobileConcise(operation: Operation, evaluation: OperationEvaluation): boolean {
@@ -458,7 +457,7 @@ function isMobileConcise(operation: Operation, evaluation: OperationEvaluation):
       const parsed = workingConclusionResultSchema.safeParse(evaluation.output);
       return parsed.success
         && wordCount(parsed.data.thesis) <= 150
-        && parsed.data.insights.length >= 3
+        && parsed.data.insights.length >= 1
         && parsed.data.insights.length <= 5
         && parsed.data.tensions.length <= 3;
     }
@@ -589,7 +588,7 @@ function recordEvaluation(
         entry,
         operation,
         'uncertaintyAndUserAuthority',
-        preservesUncertaintyAndAuthority(evaluation),
+        preservesUncertaintyAndAuthority(entry, evaluation),
       );
       return;
     default:

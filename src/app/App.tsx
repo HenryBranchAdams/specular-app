@@ -7,7 +7,10 @@ import { CapsuleLibrary } from '../components/CapsuleLibrary';
 import { Composer } from '../components/Composer';
 import { ConclusionEditor } from '../components/ConclusionEditor';
 import { ReasoningMap } from '../components/ReasoningMap';
-import { StarterDeck } from '../components/StarterDeck';
+import {
+  StarterCues,
+  StarterLead,
+} from '../components/StarterDeck';
 import { StorageRecovery } from '../components/StorageRecovery';
 import { ThreadActions } from '../components/ThreadActions';
 import { ThreadHeader } from '../components/ThreadHeader';
@@ -105,11 +108,16 @@ export function App({
   const challengeState = specular.activity === 'challenge'
     || latestTurn?.operation === 'challenge';
   const conclusionState = specular.activity === 'conclusion' || specular.conclusion !== null;
+  const acceptedUserTurnCount = specular.turns.filter((turn) => (
+    turn.role === 'user' && turn.deliveryState === 'accepted'
+  )).length;
+  const gathered = specular.thread?.provisionalConclusion !== undefined;
+  const gatherAvailable = acceptedUserTurnCount >= 2 || gathered;
   const stateClass = conclusionState
     ? 'app-shell--conclusion'
     : challengeState
       ? 'app-shell--challenge'
-      : 'app-shell--inquiry';
+      : hasConversation ? 'app-shell--inquiry' : 'app-shell--fresh';
   const conclusionAction = specular.activity === 'keep'
     || specular.activity === 'save'
     || specular.activity === 'finish'
@@ -171,7 +179,7 @@ export function App({
             {...(specular.canRetry ? { onRetry: specular.retry } : {})}
           />
         ) : (
-          <StarterDeck onActivate={focusComposer} />
+          <StarterLead />
         )}
       </section>
 
@@ -198,10 +206,14 @@ export function App({
             <ThreadActions
               activity={specular.activity}
               disabled={voice.status === 'connecting' || voice.status === 'listening'}
+              gatherAvailable={gatherAvailable}
+              gathered={gathered}
               onChallenge={specular.challenge}
               onDraftConclusion={specular.draftConclusion}
             />
-          ) : null}
+          ) : (
+            <StarterCues />
+          )}
 
         </div>
       ) : null}

@@ -1,5 +1,3 @@
-import { PencilLine, Zap } from 'lucide-react';
-
 export interface ThreadActionsProps {
   activity:
     | 'activate'
@@ -15,6 +13,8 @@ export interface ThreadActionsProps {
     | 'update'
     | null;
   disabled?: boolean;
+  gatherAvailable: boolean;
+  gathered: boolean;
   onChallenge: () => void;
   onDraftConclusion: () => void;
 }
@@ -22,10 +22,16 @@ export interface ThreadActionsProps {
 export function ThreadActions({
   activity,
   disabled = false,
+  gatherAvailable,
+  gathered,
   onChallenge,
   onDraftConclusion,
 }: ThreadActionsProps) {
   const busy = disabled || activity !== null;
+  let gatherLabel = gathered ? 'Open gathered notes' : 'Gather this thread';
+  if (activity === 'conclusion') {
+    gatherLabel = 'Gathering…';
+  }
   return (
     <nav aria-label="Thread actions" className="thread-actions">
       <button
@@ -34,18 +40,18 @@ export function ThreadActions({
         onClick={onChallenge}
         type="button"
       >
-        <Zap aria-hidden="true" size={18} strokeWidth={2} />
-        <span>{activity === 'challenge' ? 'Challenging…' : 'Challenge this'}</span>
+        <span>{activity === 'challenge' ? 'Testing…' : 'Test this'}</span>
       </button>
-      <button
-        className="thread-action thread-action--conclusion touch-target"
-        disabled={busy}
-        onClick={onDraftConclusion}
-        type="button"
-      >
-        <PencilLine aria-hidden="true" size={18} strokeWidth={1.9} />
-        <span>{activity === 'conclusion' ? 'Drafting…' : 'Draft a working conclusion'}</span>
-      </button>
+      {gatherAvailable ? (
+        <button
+          className="thread-action thread-action--conclusion touch-target"
+          disabled={busy}
+          onClick={onDraftConclusion}
+          type="button"
+        >
+          <span>{gatherLabel}</span>
+        </button>
+      ) : null}
     </nav>
   );
 }

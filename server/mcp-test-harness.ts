@@ -52,10 +52,19 @@ export const VALID_NEXT_QUESTION = {
 } as const;
 
 export const VALID_CHALLENGE = {
-  kind: 'counter_position',
-  counterPosition: 'A smaller launch may protect learning better than a broad launch.',
+  kind: 'blind_spot',
   question: 'Which evidence would distinguish useful caution from avoidable delay?',
 } as const;
+
+const CONCLUSION_SOURCE = [
+  'A smaller reversible launch best preserves learning.',
+  'Coordination is the immediate constraint.',
+  'Reversibility protects the learning loop.',
+  'The first cohort can expose the decision boundary.',
+  'Prior launches stalled during handoff.',
+  'Speed may reduce stakeholder confidence.',
+  'The thread contains no customer interview evidence.',
+].join(' ');
 
 export const VALID_CONCLUSION = workingConclusionResultSchema.parse({
   kind: 'working_conclusion',
@@ -68,10 +77,24 @@ export const VALID_CONCLUSION = workingConclusionResultSchema.parse({
   observations: ['Prior launches stalled during handoff.'],
   tensions: ['Speed may reduce stakeholder confidence.'],
   caveats: ['The thread contains no customer interview evidence.'],
-  provenance: [{
-    turnId: 'thread-1-turn-1',
-    excerpt: 'The handoff is where the launch gets stuck.',
-  }],
+  provenance: [
+    {
+      turnId: 'thread-1-turn-1',
+      excerpt: 'A smaller reversible launch best preserves learning.',
+    },
+    { turnId: 'thread-1-turn-1', excerpt: 'Coordination is the immediate constraint.' },
+    { turnId: 'thread-1-turn-1', excerpt: 'Reversibility protects the learning loop.' },
+    {
+      turnId: 'thread-1-turn-1',
+      excerpt: 'The first cohort can expose the decision boundary.',
+    },
+    { turnId: 'thread-1-turn-1', excerpt: 'Prior launches stalled during handoff.' },
+    { turnId: 'thread-1-turn-1', excerpt: 'Speed may reduce stakeholder confidence.' },
+    {
+      turnId: 'thread-1-turn-1',
+      excerpt: 'The thread contains no customer interview evidence.',
+    },
+  ],
 });
 
 export const EXPECTED_ANNOTATIONS = {
@@ -87,12 +110,27 @@ export const EXPECTED_TOOL_COPY = {
     description: 'Ask one concise, independent next question using only the supplied thread context.',
   },
   challenge: {
-    title: 'Challenge this thread',
-    description: 'Opt in to a credible blind spot or counter-position using only the supplied thread context.',
+    title: 'Test this thread',
+    description: 'Ask one focused blind-spot or testing question using only the supplied thread context.',
   },
   draft_conclusion: {
-    title: 'Draft a working conclusion',
-    description: 'Opt in to a grounded working conclusion using only the supplied thread context.',
+    title: 'Gather this thread',
+    description: 'Organize distinct exact user-authored excerpts from accepted user turns; do not draft, paraphrase, or add content.',
+  },
+} as const;
+
+export const EXPECTED_TOOL_STATUS = {
+  next_question: {
+    invoking: 'Finding the next question…',
+    invoked: 'Next question ready.',
+  },
+  challenge: {
+    invoking: 'Testing this thread…',
+    invoked: 'Testing question ready.',
+  },
+  draft_conclusion: {
+    invoking: 'Gathering exact user-authored excerpts without drafting new content…',
+    invoked: 'Exact user-authored excerpts gathered; no new content drafted.',
   },
 } as const;
 
@@ -221,7 +259,9 @@ export function context(
       threadId,
       role: position % 2 === 0 ? 'user' : 'specular',
       content: position === 0
-        ? (options.content ?? 'The handoff is where the launch gets stuck.')
+        ? (options.content ?? (operation === 'conclusion'
+            ? CONCLUSION_SOURCE
+            : 'The handoff is where the launch gets stuck.'))
         : `Bounded context turn ${String(position + 1)}.`,
       modality: 'text',
       createdAt: position + 1,

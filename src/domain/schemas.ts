@@ -39,7 +39,7 @@ export const turnRoleSchema = z.enum(['user', 'specular', 'system']);
 export const modalitySchema = z.enum(['text', 'voice']);
 export const deliveryStateSchema = z.enum(['pending', 'accepted', 'failed']);
 export const threadLifecycleStateSchema = z.enum(['active', 'completed']);
-export const conclusionEditStateSchema = z.enum(['generated', 'edited']);
+export const conclusionEditStateSchema = z.enum(['generated', 'organized', 'edited']);
 
 export const threadUnderstandingSchema = z.object({
   claims: understandingItemsSchema,
@@ -60,7 +60,7 @@ export const conclusionProvenanceSchema = z.object({
 const conclusionFields = {
   kind: z.literal('working_conclusion'),
   thesis: resultTextSchema,
-  insights: z.array(resultTextSchema).min(3).max(5),
+  insights: z.array(resultTextSchema).min(1).max(5),
   observations: z.array(resultTextSchema).max(10),
   tensions: z.array(resultTextSchema).max(3),
   caveats: z.array(resultTextSchema).max(10),

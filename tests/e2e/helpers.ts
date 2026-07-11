@@ -19,12 +19,12 @@ export interface OperationMockController {
   releaseNextQuestion(): void;
 }
 
-function firstUserTurn(context: ThreadContextBody['context']): ThreadTurn {
-  const turn = context.turns.find((candidate) => candidate.role === 'user');
-  if (turn === undefined) {
-    throw new Error('The deterministic browser provider requires one user turn.');
+function userTurns(context: ThreadContextBody['context']): ThreadTurn[] {
+  const turns = context.turns.filter((candidate) => candidate.role === 'user');
+  if (turns.length === 0) {
+    throw new Error('The deterministic browser provider requires a user turn.');
   }
-  return turn;
+  return turns;
 }
 
 function responseFor(path: string, body: ThreadContextBody): unknown {
@@ -43,19 +43,23 @@ function responseFor(path: string, body: ThreadContextBody): unknown {
     };
   }
   if (path.endsWith('/conclusion')) {
-    const source = firstUserTurn(context);
+    const sources = userTurns(context);
+    const position = sources[0];
+    const gathered = sources.slice(1, 6);
+    if (position === undefined || gathered.length === 0) {
+      throw new Error('The deterministic browser provider gathers after two user turns.');
+    }
     return {
       kind: 'working_conclusion',
-      thesis: 'My current read is that the launch handoff needs one observable ownership signal.',
-      insights: [
-        'The handoff is the current constraint.',
-        'Support encounters uncertainty before other stakeholders.',
-        'A concrete signal can distinguish ownership from intention.',
-      ],
-      observations: ['The thread repeatedly returns to the launch handoff.'],
-      tensions: ['The useful signal remains provisional until it is tested.'],
-      caveats: ['This reading uses only the current local thread.'],
-      provenance: [{ turnId: source.id, excerpt: source.content.slice(0, 500) }],
+      thesis: position.content,
+      insights: gathered.map((turn) => turn.content),
+      observations: [],
+      tensions: [],
+      caveats: [],
+      provenance: [position, ...gathered].map((turn) => ({
+        turnId: turn.id,
+        excerpt: turn.content.slice(0, 500),
+      })),
     };
   }
   throw new Error(`Unexpected operation path: ${path}`);

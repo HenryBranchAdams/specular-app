@@ -29,10 +29,12 @@ describe('Specular widget source', () => {
     const source = await readFile(resolve(process.cwd(), 'public/specular-widget.html'), 'utf8');
 
     expect(source).toContain('Question');
-    expect(source).toContain('Challenge');
-    expect(source).toContain('Blind spot');
-    expect(source).toContain('Counter-position');
-    expect(source).toContain('Working conclusion');
+    expect(source).toContain('Test this');
+    expect(source).toContain('Testing question');
+    expect(source).toContain('Immediate support');
+    expect(source).toContain('Gather this thread');
+    expect(source).toContain('Exact words from this thread');
+    expect(source).not.toContain('✦');
     expect(source).toContain('aria-live="polite"');
     expect(source).toContain('min-height: 44px');
     expect(source).toContain('font-size: 16px');
