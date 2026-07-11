@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-labelledby="title description">
+  <title id="title">Specular maskable icon</title>
+  <desc id="description">A safe-area spectral aperture on a deep black-violet field.</desc>
+  <defs>
+    <radialGradient id="field" cx="0" cy="0" r="1" gradientTransform="translate(118 112) rotate(45) scale(530)" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#17132B"/>
+      <stop offset="1" stop-color="#070711"/>
+    </radialGradient>
+    <linearGradient id="spectrum" x1="120" y1="118" x2="394" y2="398" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#4DEBFF"/>
+      <stop offset="0.5" stop-color="#8C63FF"/>
+      <stop offset="1" stop-color="#C9FF54"/>
+    </linearGradient>
+  </defs>
+  <rect width="512" height="512" fill="url(#field)"/>
+  <rect x="112" y="112" width="288" height="288" rx="104" fill="#0D0C16" stroke="url(#spectrum)" stroke-width="12"/>
+  <path d="M178 302c36 26 64 39 86 39 40 0 65-38 73-114-26 22-51 33-76 33-34 0-62-16-83-47" fill="none" stroke="#F7F3ED" stroke-linecap="round" stroke-linejoin="round" stroke-width="25"/>
+</svg>

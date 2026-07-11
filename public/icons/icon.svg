@@ -1,0 +1,22 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-labelledby="title description">
+  <title id="title">Specular</title>
+  <desc id="description">A dark glass aperture crossed by a spectral reflection.</desc>
+  <defs>
+    <linearGradient id="background" x1="64" y1="32" x2="448" y2="480" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#141126"/>
+      <stop offset="1" stop-color="#070711"/>
+    </linearGradient>
+    <linearGradient id="spectrum" x1="104" y1="100" x2="410" y2="416" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#4DEBFF"/>
+      <stop offset="0.5" stop-color="#8C63FF"/>
+      <stop offset="1" stop-color="#C9FF54"/>
+    </linearGradient>
+    <radialGradient id="reflection" cx="0" cy="0" r="1" gradientTransform="translate(190 168) rotate(49) scale(224)" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#F7F3ED" stop-opacity="0.22"/>
+      <stop offset="1" stop-color="#F7F3ED" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+  <rect width="512" height="512" rx="112" fill="url(#background)"/>
+  <rect x="70" y="70" width="372" height="372" rx="128" fill="url(#reflection)" stroke="url(#spectrum)" stroke-width="12"/>
+  <path d="M162 320c42 30 75 45 100 45 48 0 78-45 88-135-31 26-61 39-90 39-40 0-73-18-98-55" fill="none" stroke="#F7F3ED" stroke-linecap="round" stroke-linejoin="round" stroke-width="28"/>
+</svg>

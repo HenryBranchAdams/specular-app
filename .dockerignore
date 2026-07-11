@@ -1,0 +1,14 @@
+.git
+.github
+.lighthouseci
+.superpowers
+dist
+dist-evals
+dist-server
+node_modules
+playwright-report
+test-results
+*.log
+.env
+.env.*
+!deploy/*.env

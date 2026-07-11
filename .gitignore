@@ -1,0 +1,14 @@
+node_modules/
+dist/
+dist-evals/
+dist-server/
+.lighthouseci/
+playwright-report/
+test-results/
+.codegraph/
+.DS_Store
+.env
+.env.*
+*.log
+*.zip
+.superpowers/
