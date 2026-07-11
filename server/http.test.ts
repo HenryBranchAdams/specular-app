@@ -1,10 +1,13 @@
 import { once } from 'node:events';
+import { mkdtemp, rm, writeFile } from 'node:fs/promises';
 import {
   request as createNativeRequest,
   type IncomingHttpHeaders,
   type Server,
 } from 'node:http';
 import { createConnection } from 'node:net';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 import { z } from 'zod';
 import type { Operation, ThreadContext } from '../src/domain/contracts';
@@ -183,6 +186,7 @@ class CapturingMetadataSink implements MetadataSink {
 }
 
 const openServers: Server[] = [];
+const temporaryDirectories: string[] = [];
 
 afterEach(async () => {
   const servers = openServers.splice(0);
@@ -193,6 +197,9 @@ afterEach(async () => {
         resolve();
       });
     });
+  }));
+  await Promise.all(temporaryDirectories.splice(0).map(async (directory) => {
+    await rm(directory, { force: true, recursive: true });
   }));
 });
 
@@ -289,6 +296,7 @@ function pathFor(operation: Operation): string {
 async function startServer(options: {
   config?: ServerConfig;
   provider: RepairingQuestioningProvider;
+  staticRoot?: string;
   telemetry?: CapturingMetadataSink;
 }): Promise<{ config: ServerConfig; server: Server; telemetry: CapturingMetadataSink }> {
   const serverConfig = options.config ?? config();
@@ -298,7 +306,11 @@ async function startServer(options: {
     telemetry,
     safetyRegion: serverConfig.crisisRegion,
   });
-  const server = createHttpServer({ config: serverConfig, service });
+  const server = createHttpServer({
+    config: serverConfig,
+    service,
+    ...(options.staticRoot === undefined ? {} : { staticRoot: options.staticRoot }),
+  });
   openServers.push(server);
   server.listen(0, '127.0.0.1');
   await once(server, 'listening');
@@ -486,6 +498,37 @@ function failure(response: NativeHttpResponse): z.infer<typeof failureEnvelopeSc
 }
 
 describe('stateless model HTTP service', () => {
+  it('serves static assets without applying the API origin allowlist', async () => {
+    const staticRoot = await mkdtemp(join(tmpdir(), 'specular-static-'));
+    temporaryDirectories.push(staticRoot);
+    await writeFile(join(staticRoot, 'asset.json'), JSON.stringify({ asset: true }));
+    const { server } = await startServer({
+      config: config({ allowedOrigins: [] }),
+      provider: new ScriptedRepairingProvider(),
+      staticRoot,
+    });
+    const origin = `http://127.0.0.1:${String(serverPort(server))}`;
+
+    const asset = await nativeRequest(server, {
+      path: '/asset.json',
+      headers: { origin },
+    });
+    expect(asset.status).toBe(200);
+    expect(asset.body).toEqual({ asset: true });
+    expect(asset.headers['access-control-allow-origin']).toBeUndefined();
+    expect(asset.headers['content-security-policy']).toContain("default-src 'self'");
+
+    const operation = await nativeRequest(server, {
+      ...operationRequest('next_question'),
+      headers: {
+        'content-type': 'application/json',
+        origin,
+      },
+    });
+    expect(operation.status).toBe(403);
+    expect(failure(operation).code).toBe('provider_unavailable');
+  });
+
   it.each([
     ['next_question', VALID_NEXT_QUESTION],
     ['challenge', VALID_CHALLENGE],
@@ -995,6 +1038,23 @@ describe('stateless model HTTP service', () => {
 });
 
 describe('server configuration', () => {
+  it('uses loopback-only local defaults and explicit production binding', () => {
+    const development = loadServerConfig({ NODE_ENV: 'development' });
+    expect(development.allowedOrigins).toEqual([
+      'http://localhost:5177',
+      'http://127.0.0.1:5177',
+    ]);
+    expect(development.host).toBe('127.0.0.1');
+
+    const production = loadServerConfig({ NODE_ENV: 'production' });
+    expect(production.allowedOrigins).toEqual([]);
+    expect(production.host).toBe('0.0.0.0');
+
+    expect(loadServerConfig({ NODE_ENV: 'development', HOST: '0.0.0.0' }).host)
+      .toBe('0.0.0.0');
+    expect(() => loadServerConfig({ HOST: 'localhost' })).toThrow(/HOST/u);
+  });
+
   it('defaults to OpenAI SDK model gpt-5.5 and parses bounded server settings once', () => {
     const parsed = loadServerConfig({
       NODE_ENV: 'test',

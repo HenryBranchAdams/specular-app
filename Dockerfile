@@ -1,7 +1,7 @@
 # syntax=docker/dockerfile:1.7
-FROM node:22.17.0-bookworm-slim AS dependencies
+FROM node:22.23.1-bookworm-slim AS dependencies
 WORKDIR /app
-COPY package.json package-lock.json ./
+COPY package.json package-lock.json .npmrc ./
 RUN npm ci
 
 FROM dependencies AS verification
@@ -16,16 +16,16 @@ RUN npm run validate \
 FROM dependencies AS development
 COPY . .
 ENV NODE_ENV=development
-EXPOSE 5173 8788
+EXPOSE 5177 8788
 CMD ["npm", "run", "dev"]
 
-FROM node:22.17.0-bookworm-slim AS runtime-dependencies
+FROM node:22.23.1-bookworm-slim AS runtime-dependencies
 WORKDIR /app
-COPY package.json package-lock.json ./
+COPY package.json package-lock.json .npmrc ./
 RUN npm ci --omit=dev --ignore-scripts \
   && npm cache clean --force
 
-FROM node:22.17.0-bookworm-slim AS production
+FROM node:22.23.1-bookworm-slim AS production
 ENV NODE_ENV=production
 WORKDIR /app
 COPY --from=runtime-dependencies --chown=node:node /app/node_modules ./node_modules

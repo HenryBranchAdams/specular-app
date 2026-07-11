@@ -16,6 +16,7 @@ export interface ServerConfig {
 }
 
 export interface LoadedServerConfig extends ServerConfig {
+  host: '0.0.0.0' | '127.0.0.1';
   realtimeModel: string;
   realtimeCredentialTtlSeconds: number;
 }
@@ -33,6 +34,19 @@ function parseNodeEnvironment(value: string | undefined): ServerConfig['nodeEnv'
     default:
       throw new Error('NODE_ENV must be development, test, or production.');
   }
+}
+
+function parseHost(
+  value: string | undefined,
+  nodeEnv: ServerConfig['nodeEnv'],
+): LoadedServerConfig['host'] {
+  const fallback = nodeEnv === 'production' ? '0.0.0.0' : '127.0.0.1';
+  const normalized = value?.trim();
+  const host = normalized === undefined || normalized === '' ? fallback : normalized;
+  if (host !== '0.0.0.0' && host !== '127.0.0.1') {
+    throw new Error('HOST must be 0.0.0.0 or 127.0.0.1.');
+  }
+  return host;
 }
 
 function parseInteger(
@@ -99,7 +113,9 @@ function parseOrigin(value: string): string {
 
 function parseAllowedOrigins(value: string | undefined, nodeEnv: ServerConfig['nodeEnv']): string[] {
   if (value === undefined || value.trim() === '') {
-    return nodeEnv === 'production' ? [] : ['http://localhost:5173'];
+    return nodeEnv === 'production'
+      ? []
+      : ['http://localhost:5177', 'http://127.0.0.1:5177'];
   }
 
   const origins = value.split(',').map((origin) => parseOrigin(origin.trim()));
@@ -147,6 +163,7 @@ export function loadServerConfig(environment: Environment = process.env): Loaded
   const openAiApiKey = environment.OPENAI_API_KEY?.trim();
   const base: LoadedServerConfig = {
     nodeEnv,
+    host: parseHost(environment.HOST, nodeEnv),
     port: parseInteger('PORT', environment.PORT, 8788, 0, 65_535),
     allowedOrigins: parseAllowedOrigins(environment.ALLOWED_ORIGINS, nodeEnv),
     openAiModel: parseModel('OPENAI_MODEL', environment.OPENAI_MODEL, 'gpt-5.5'),

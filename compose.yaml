@@ -5,8 +5,17 @@ services:
       context: .
       target: development
     env_file: deploy/development.env
+    environment:
+      SPECULAR_DEV_API_ORIGIN: http://development-server:8788
+    depends_on:
+      - development-server
+    volumes:
+      - ./index.html:/app/index.html:ro
+      - ./public:/app/public:ro
+      - ./src:/app/src:ro
+      - ./vite.config.ts:/app/vite.config.ts:ro
     ports:
-      - "5173:5173"
+      - "127.0.0.1:5177:5177"
     command: npm run dev -- --host 0.0.0.0
 
   development-server:
@@ -14,9 +23,20 @@ services:
     build:
       context: .
       target: development
-    env_file: deploy/development.env
+    env_file:
+      - path: deploy/development.env
+      - path: .env.local
+        required: false
+    environment:
+      HOST: 0.0.0.0
+    volumes:
+      - ./public/specular-widget.html:/app/public/specular-widget.html:ro
+      - ./scripts/dev-model-server.mjs:/app/scripts/dev-model-server.mjs:ro
+      - ./server:/app/server:ro
+      - ./src/domain:/app/src/domain:ro
+      - ./vite.server.config.ts:/app/vite.server.config.ts:ro
     ports:
-      - "8788:8788"
+      - "127.0.0.1:8788:8788"
     command: npm run dev:server
 
   preview:

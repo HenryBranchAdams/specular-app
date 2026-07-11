@@ -102,6 +102,14 @@ try {
   invariant(manifest.status === 200, 'The immutable server does not serve the PWA manifest.');
   const serviceWorker = await request('/sw.js');
   invariant(serviceWorker.status === 200, 'The immutable server does not serve its service worker.');
+  const staticAssetPaths = [...appHtml.matchAll(/(?:href|src)="([^"]+\.(?:css|js))"/gu)]
+    .map((match) => match[1]);
+  invariant(staticAssetPaths.length >= 2, 'The built app does not reference its static assets.');
+  const staticAssets = await Promise.all(staticAssetPaths.map(async (path) => (
+    await request(path, { headers: { origin: BASE_URL } })
+  )));
+  invariant(staticAssets.every((asset) => asset.status === 200),
+    'The immutable server blocks its own static assets through the API origin policy.');
 
   const rejectedOrigin = await request('/api/operations/next-question', {
     method: 'POST',
@@ -152,7 +160,7 @@ try {
   process.stdout.write(JSON.stringify({
     ok: true,
     checks: [
-      'immutable-artifacts', 'health-readiness', 'secure-headers', 'origin-rejection',
+      'immutable-artifacts', 'static-assets', 'health-readiness', 'secure-headers', 'origin-rejection',
       'request-size', 'typed-provider-failure', 'pwa-degradation', 'mcp-text-fallback',
       'privacy-log-sentinel',
     ],

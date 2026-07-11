@@ -45,6 +45,8 @@ const server = createHttpServer({
   staticRoot: fileURLToPath(new URL('../dist/', import.meta.url)),
 });
 
-server.listen(config.port, () => {
-  console.info(`Specular model service listening on port ${String(config.port)}.`);
+server.listen(config.port, config.host, () => {
+  console.info(
+    `Specular model service listening on http://${config.host}:${String(config.port)}.`,
+  );
 });

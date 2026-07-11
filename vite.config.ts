@@ -59,6 +59,15 @@ export default defineConfig({
       },
     },
   ],
+  server: {
+    port: 5177,
+    strictPort: true,
+    proxy: {
+      '/api': {
+        target: process.env.SPECULAR_DEV_API_ORIGIN ?? 'http://127.0.0.1:8788',
+      },
+    },
+  },
   test: {
     environment: 'jsdom',
     exclude: ['tests/e2e/**', '**/node_modules/**', '**/dist*/**'],

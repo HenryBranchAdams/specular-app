@@ -6,6 +6,7 @@ const nodeGlobals = {
   URL: 'readonly',
   clearTimeout: 'readonly',
   console: 'readonly',
+  fetch: 'readonly',
   process: 'readonly',
   setTimeout: 'readonly',
 };
@@ -23,7 +24,7 @@ export default tseslint.config(
     ],
   },
   {
-    files: ['**/*.js'],
+    files: ['**/*.js', '**/*.mjs'],
     ...eslint.configs.recommended,
     languageOptions: {
       ecmaVersion: 'latest',

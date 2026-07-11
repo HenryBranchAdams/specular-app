@@ -438,12 +438,12 @@ export function createHttpServer(options: HttpServerOptions): Server {
     });
 
     try {
-      applyAllowedOrigin(request, response, options.config.allowedOrigins);
       if (request.url === undefined) {
         throw new HttpBoundaryError(400, 'invalid_output');
       }
 
       if (request.url === '/mcp' && options.createMcpServer !== undefined) {
+        applyAllowedOrigin(request, response, options.config.allowedOrigins);
         if (request.method === 'OPTIONS') {
           validateMcpPreflight(request);
           response.setHeader('Access-Control-Allow-Methods', 'POST, GET, DELETE, OPTIONS');
@@ -503,6 +503,7 @@ export function createHttpServer(options: HttpServerOptions): Server {
       }
 
       if (request.url === '/api/realtime/session') {
+        applyAllowedOrigin(request, response, options.config.allowedOrigins);
         if (request.headers.origin === undefined) {
           throw new HttpBoundaryError(403, 'provider_unavailable');
         }
@@ -541,6 +542,7 @@ export function createHttpServer(options: HttpServerOptions): Server {
 
       const operation = operationForPath(request.url);
       if (operation !== undefined) {
+        applyAllowedOrigin(request, response, options.config.allowedOrigins);
         if (request.method === 'OPTIONS') {
           validatePreflight(request);
           response.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');

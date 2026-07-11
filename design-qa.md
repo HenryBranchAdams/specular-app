@@ -4,6 +4,7 @@
 
 - Accepted concept: `docs/superpowers/specs/assets/specular-quiet-spectral-reference.png`
 - Direction: Row A, Quiet Spectral Refinement
+- Historical evidence note: the committed captures predate the later neutral product-language pass. Current visible copy is governed by the production specification and component tests; these images remain evidence for hierarchy, density, and spectral treatment rather than exact text.
 - Implementation captures:
   - `docs/superpowers/specs/assets/design-qa/starter.png`
   - `docs/superpowers/specs/assets/design-qa/inline-retry.png`

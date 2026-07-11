@@ -2,14 +2,48 @@
 
 Specular is a private, question-led workspace for developing ideas, clarifying concepts, testing theses, and working through decisions. It asks one focused question at a time, offers an explicit Challenge, and can draft a grounded working conclusion. The same bounded domain contracts and stateless operation service power the PWA, native JSON API, and ChatGPT/MCP app.
 
-## Standalone web app
+## Local development
+
+Use Node 22.23.1 and npm 10.9.8. With `nvm`, `nvm use` reads the checked-in
+`.nvmrc`. Install the exact locked dependency graph with:
 
 ```bash
-npm install
+npm ci
+```
+
+The model server reads ignored local configuration from `.env.local`. Copy
+`.env.example` when you need to configure it manually; keep
+`OPENAI_API_KEY` blank for non-live UI and boundary work.
+
+Run the full stack in two terminals:
+
+```bash
+npm run dev:server
+```
+
+```bash
 npm run dev
 ```
 
-Open the local URL printed by Vite. Production assets are built with `npm run build`.
+Open `http://127.0.0.1:5177` (or `http://localhost:5177`). Vite proxies `/api` to the server at
+`http://127.0.0.1:8788`; `SPECULAR_DEV_API_ORIGIN` can override that target.
+The server rebuilds and restarts when its source changes. Production assets are
+built with `npm run build`.
+
+Native development binds both services to loopback by default, so a local API
+key is not exposed to the LAN. Set `HOST=0.0.0.0` only in an isolated container
+or when remote access is deliberate.
+
+The equivalent container workflow is:
+
+```bash
+docker compose --profile development up --build
+```
+
+Compose mounts the web and server source directories read-only, so both Vite
+and the model server watch live host edits. Published development ports remain
+restricted to `127.0.0.1` even though each service listens on the container
+interface. Stop the stack with `docker compose --profile development down`.
 
 ## Compiled model and MCP server
 
@@ -24,11 +58,11 @@ The native Node server exposes:
 Build and run the compiled server:
 
 ```bash
-npm install
+npm ci
 npm run chatgpt:server
 ```
 
-`chatgpt:server` runs `build:server` and then starts `dist-server/index.js`. The default endpoint is `http://localhost:8788/mcp`; set `PORT` to change it.
+`chatgpt:server` runs `build:server`, loads `.env.local` when present, and then starts `dist-server/index.js`. The default endpoint is `http://localhost:8788/mcp`; set `PORT` to change it.
 
 In a second terminal, inspect the running endpoint with:
 
@@ -55,7 +89,7 @@ curl http://localhost:8788/healthz
 curl http://localhost:8788/readyz
 ```
 
-Useful optional configuration includes `OPENAI_MODEL`, `ALLOWED_ORIGINS`, `REQUEST_TIMEOUT_MS`, `REQUEST_BYTES`, `RATE_LIMIT_WINDOW_MS`, `RATE_LIMIT_MAX`, and `CRISIS_REGION`. `ALLOWED_ORIGINS` must be a comma-separated list of exact HTTP(S) origins; wildcard origins are rejected.
+Useful optional configuration includes `HOST`, `OPENAI_MODEL`, `ALLOWED_ORIGINS`, `REQUEST_TIMEOUT_MS`, `REQUEST_BYTES`, `RATE_LIMIT_WINDOW_MS`, `RATE_LIMIT_MAX`, and `CRISIS_REGION`. `HOST` accepts only `127.0.0.1` or `0.0.0.0`; `ALLOWED_ORIGINS` must be a comma-separated list of exact HTTP(S) origins, and wildcard origins are rejected.
 
 ### Optional Realtime voice
 
@@ -118,7 +152,7 @@ docker build --target production -t specular:production .
 
 `npm run eval:live` is an additional authorized model-quality smoke test. It reports an explicit skip when no `OPENAI_API_KEY` is present. The fixed corpus remains the non-billable hard-invariant release gate. Browser compatibility evidence and the physical-device release procedure are recorded in `tests/e2e/browser-compatibility.md`.
 
-`npm run test:e2e` includes the 320/375/430px Chromium and WebKit product matrix, axe checks across all important UI states, 44px target checks, and an interaction-attributed long-task trace. Lighthouse requires performance at least 90, accessibility 100, a clean console, and its installable-manifest audit; in the pinned Lighthouse version that audit explicitly verifies both the manifest and service worker.
+`npm run test:e2e` includes the 320/375/430px Chromium and WebKit product matrix, axe checks across all important UI states, 44px target checks, and an interaction-attributed long-task trace. Lighthouse requires performance at least 90, accessibility 100, and a clean console. PWA installability remains a separate deterministic gate: the E2E suite exercises the installed service worker offline, and `verify:production` requires both the built manifest and service worker from the immutable server.
 
 ## Deployment
 
