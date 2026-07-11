@@ -7,6 +7,8 @@ import type {
   SyntheticEvent,
 } from 'react';
 import { Mic, Send } from 'lucide-react';
+import { Button } from '@/components/ui/button';
+import { Textarea } from '@/components/ui/textarea';
 import { assertNever } from '../domain/contracts';
 import type { VoiceStatus } from '../voice/use-voice';
 
@@ -100,7 +102,7 @@ export function Composer({
 
   return (
     <form className="composer" onSubmit={handleSubmit}>
-      <textarea
+      <Textarea
         aria-label="Idea, context, or response"
         className="composer__input touch-target"
         onBlur={() => { onFocusChange(false); }}
@@ -115,7 +117,7 @@ export function Composer({
       <div className="composer__controls">
         {voice === undefined ? null : (
           <div className="composer__voice">
-            <button
+            <Button
               aria-label={voiceButtonLabel(voice.status)}
               className={`voice-button touch-target${voice.status === 'unavailable'
                 ? ' voice-button--icon'
@@ -124,13 +126,15 @@ export function Composer({
                 || voice.status === 'unavailable'
                 || (busy && voice.status !== 'listening')}
               onClick={onVoice}
+              size="lg"
               type="button"
+              variant="ghost"
             >
-              <Mic aria-hidden="true" size={19} strokeWidth={1.8} />
+              <Mic aria-hidden="true" data-icon="inline-start" strokeWidth={1.8} />
               {voice.status === 'unavailable' ? null : (
                 <span>{voiceButtonLabel(voice.status)}</span>
               )}
-            </button>
+            </Button>
             {voice.status === 'unavailable' ? null : (
               <span
                 aria-label="Voice status"
@@ -152,14 +156,16 @@ export function Composer({
             )}
           </div>
         )}
-        <button
+        <Button
           aria-label="Send input"
           className="icon-button icon-button--send touch-target"
           disabled={busy || value.trim().length === 0}
+          size="icon-lg"
           type="submit"
+          variant="ghost"
         >
-          <Send aria-hidden="true" size={21} strokeWidth={1.9} />
-        </button>
+          <Send aria-hidden="true" data-icon="inline-start" strokeWidth={1.9} />
+        </Button>
       </div>
     </form>
   );

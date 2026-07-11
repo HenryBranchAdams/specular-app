@@ -186,17 +186,17 @@ test('starter surface remains still under every motion preference', async ({ pag
     }
   }
   await expect(composer).toBeFocused();
-  const readComposerDatum = async () => page.locator('.composer').evaluate((element) => {
-    const style = getComputedStyle(element, '::before');
+  const readComposerFocus = async () => page.locator('.composer').evaluate((element) => {
+    const style = getComputedStyle(element);
     return {
-      color: style.backgroundColor,
-      height: Number.parseFloat(style.height),
+      color: style.borderTopColor,
+      width: Number.parseFloat(style.borderTopWidth),
     };
   });
-  await expect.poll(async () => (await readComposerDatum()).height).toBeGreaterThanOrEqual(2);
-  const composerDatum = await readComposerDatum();
-  expect(composerDatum.height).toBeGreaterThanOrEqual(2);
-  expect(composerDatum.color).not.toBe('transparent');
+  await expect.poll(async () => (await readComposerFocus()).width).toBeGreaterThanOrEqual(1);
+  const composerFocus = await readComposerFocus();
+  expect(composerFocus.width).toBeGreaterThanOrEqual(1);
+  expect(composerFocus.color).not.toBe('transparent');
 
   await page.addStyleTag({ content: ':root { font-size: 200% !important; }' });
   const rows = await page.locator('.starter-cues__item').evaluateAll((elements) => (

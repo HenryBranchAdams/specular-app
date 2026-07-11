@@ -43,8 +43,17 @@ describe('buildOperationPrompt', () => {
       const prompt = buildOperationPrompt(operation, contextFor(operation));
 
       expect(prompt.instructions).toContain('Ask exactly one focused question');
+      expect(prompt.instructions).toContain('Use no setup sentence');
     },
   );
+
+  it('keeps ordinary questions brief and leaves setup empty', () => {
+    const prompt = buildOperationPrompt('next_question', context);
+
+    expect(prompt.instructions).toContain('Leave setup empty');
+    expect(prompt.instructions).toContain('28 words or fewer');
+    expect(prompt.instructions).not.toContain('at most one short setup sentence');
+  });
 
   it('limits an ordinary Challenge to one blind-spot or testing question', () => {
     const prompt = buildOperationPrompt('challenge', contextFor('challenge'));

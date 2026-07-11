@@ -1,3 +1,4 @@
+import { Button } from '@/components/ui/button';
 import { assertNever } from '../domain/contracts';
 import type {
   DeliveryState,
@@ -96,14 +97,16 @@ export function Transcript({ onRetry, pendingUserTurn, retrying = false, turns }
                 <span className={`turn__delivery turn__delivery--${turn.deliveryState}`}>
                   {status}
                 </span>
-                <button
+                <Button
                   className="turn__retry touch-target"
                   disabled={retrying}
                   onClick={onRetry}
+                  size="lg"
                   type="button"
+                  variant="link"
                 >
                   {retrying ? 'Retrying…' : 'Retry'}
-                </button>
+                </Button>
               </div>
             ) : status === null ? null : (
               <span className={`turn__delivery turn__delivery--${turn.deliveryState}`}>

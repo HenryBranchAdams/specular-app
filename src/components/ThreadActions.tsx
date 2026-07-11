@@ -34,24 +34,29 @@ export function ThreadActions({
   }
   return (
     <nav aria-label="Thread actions" className="thread-actions">
-      <button
+      <Button
         className="thread-action thread-action--challenge touch-target"
         disabled={busy}
         onClick={onChallenge}
+        size="lg"
         type="button"
+        variant="link"
       >
         <span>{activity === 'challenge' ? 'Testing…' : 'Test this'}</span>
-      </button>
+      </Button>
       {gatherAvailable ? (
-        <button
+        <Button
           className="thread-action thread-action--conclusion touch-target"
           disabled={busy}
           onClick={onDraftConclusion}
+          size="lg"
           type="button"
+          variant="link"
         >
           <span>{gatherLabel}</span>
-        </button>
+        </Button>
       ) : null}
     </nav>
   );
 }
+import { Button } from '@/components/ui/button';

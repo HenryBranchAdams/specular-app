@@ -1,3 +1,4 @@
+import tailwindcss from '@tailwindcss/vite';
 import react from '@vitejs/plugin-react';
 import { VitePWA } from 'vite-plugin-pwa';
 import { defineConfig } from 'vitest/config';
@@ -6,6 +7,7 @@ const manifestLinkPattern = /<link\s+rel="manifest"[^>]*>/gu;
 
 export default defineConfig({
   plugins: [
+    tailwindcss(),
     react(),
     VitePWA({
       registerType: 'prompt',
@@ -59,6 +61,11 @@ export default defineConfig({
       },
     },
   ],
+  resolve: {
+    alias: {
+      '@': new URL('./src', import.meta.url).pathname,
+    },
+  },
   server: {
     port: 5177,
     strictPort: true,

@@ -118,7 +118,7 @@ describe('OpenAI Realtime credential provider', () => {
     });
     expect(instructions.length).toBeLessThanOrEqual(1_200);
     expect(instructions.toLocaleLowerCase('en-US')).toContain('one question mark');
-    expect(instructions.toLocaleLowerCase('en-US')).toContain('45 words');
+    expect(instructions.toLocaleLowerCase('en-US')).toContain('28 words');
     expect(instructions.toLocaleLowerCase('en-US')).toContain('never ask why');
     expect(instructions.toLocaleLowerCase('en-US')).toContain('filler');
     expect(instructions.toLocaleLowerCase('en-US')).toContain('challenge');

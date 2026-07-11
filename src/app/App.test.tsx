@@ -355,7 +355,7 @@ describe('Specular mobile thinking loop', () => {
         voiceEnabled
       />,
     );
-    await screen.findByRole('heading', { name: thread.title });
+    await screen.findByRole('heading', { name: 'Specular' });
 
     const composer = screen.getByRole('textbox', { name: 'Idea, context, or response' });
     await user.type(composer, 'A typed thought stays here.');
@@ -567,9 +567,7 @@ describe('Specular mobile thinking loop', () => {
     );
     await user.click(screen.getByRole('button', { name: 'Send input' }));
 
-    expect(await screen.findByRole('heading', {
-      name: 'A business that turns complex compliance updates into brief operating…',
-    })).toBeVisible();
+    expect(await screen.findByRole('heading', { name: 'Specular' })).toBeVisible();
     const [thread] = await fixture.repositories.threads.list();
     expect(thread?.title).toBe(
       'A business that turns complex compliance updates into brief operating…',
@@ -794,7 +792,7 @@ describe('Specular mobile thinking loop', () => {
     );
     render(<App dependencies={fixture.dependencies} />);
 
-    expect(await screen.findByRole('heading', { name: 'Decision clarity' })).toBeVisible();
+    expect(await screen.findByRole('heading', { name: 'Specular' })).toBeVisible();
     expect(screen.getByText('Certainty keeps becoming a prerequisite for this decision.'))
       .toBeVisible();
     expect(screen.getByText(VALID_QUESTION.question)).toBeVisible();

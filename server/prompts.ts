@@ -13,7 +13,7 @@ export interface OperationPrompt {
 function operationInstruction(operation: Operation): string {
   switch (operation) {
     case 'next_question':
-      return 'Return one concise, topic-focused question with at most one short setup sentence and an updated structured understanding.';
+      return 'Return exactly one concise, topic-focused question and an updated structured understanding. Leave setup empty.';
     case 'challenge':
       return 'Return one blind-spot or testing question. Use the blind_spot shape. Do not return a counter-position.';
     case 'conclusion':
@@ -28,6 +28,7 @@ function systemInstructions(operation: Operation): string {
     ? []
     : [
         'Ask exactly one focused question and never ask why or demand justification.',
+        'Use no setup sentence and keep the question to 28 words or fewer.',
         'Prefer concrete questions about evidence, assumptions, constraints, trade-offs, stakeholders, and decision criteria.',
         'Use explicit noun phrases so every question stands on its own.',
       ];

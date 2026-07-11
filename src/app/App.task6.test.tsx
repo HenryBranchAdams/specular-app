@@ -176,7 +176,7 @@ describe('Task 6 application flow', () => {
     const user = userEvent.setup();
     render(<App dependencies={fixture.dependencies} downloadFile={vi.fn()} />);
 
-    expect(await screen.findByRole('heading', { name: 'Decision clarity' })).toBeVisible();
+    expect(await screen.findByRole('heading', { name: 'Specular' })).toBeVisible();
     expect(screen.queryByRole('textbox', { name: 'Working position' }))
       .not.toBeInTheDocument();
 
@@ -196,7 +196,7 @@ describe('Task 6 application flow', () => {
       expect(screen.queryByRole('textbox', { name: 'Working position' }))
         .not.toBeInTheDocument();
     });
-    expect(screen.getByRole('heading', { name: 'Decision clarity' })).toBeVisible();
+    expect(screen.getByRole('heading', { name: 'Specular' })).toBeVisible();
     expect((await fixture.repositories.threads.get(seeded.id))?.provisionalConclusion)
       .toMatchObject({ thesis: 'My edited conclusion remains provisional on this thread.' });
   });
