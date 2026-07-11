@@ -789,6 +789,90 @@ describe('ConversationService orchestration', () => {
     expect(await repositories.capsules.get(capsule.id)).toEqual(capsule);
   });
 
+  it('atomically saves the edited conclusion and finishes into a fresh thread', async () => {
+    const { repositories, service } = await createServiceFixture();
+    const thread = unwrap(await service.startThread('Reversible launch decision'));
+    const submission = unwrap(await service.submitUserTurn(
+      thread.id,
+      'The launch handoff is still the constraint.',
+    ));
+    const drafted = unwrap(await service.draftConclusion(thread.id));
+
+    const completed = unwrap(await service.saveAndFinish({
+      threadId: thread.id,
+      title: thread.title,
+      conclusion: {
+        ...drafted.output,
+        thesis: 'One observable ownership signal should define the handoff.',
+      },
+      sourceTurnRange: {
+        startTurnId: submission.userTurn.id,
+        endTurnId: drafted.responseTurn.id,
+      },
+    }));
+
+    expect(completed.capsule).toMatchObject({
+      title: thread.title,
+      sourceThreadId: thread.id,
+      conclusion: {
+        thesis: 'One observable ownership signal should define the handoff.',
+        editState: 'edited',
+      },
+    });
+    expect(await repositories.capsules.get(completed.capsule.id)).toEqual(completed.capsule);
+    expect(await repositories.threads.get(thread.id)).toMatchObject({
+      lifecycleState: 'completed',
+      provisionalConclusion: {
+        thesis: 'One observable ownership signal should define the handoff.',
+      },
+    });
+    expect(completed.thread).toMatchObject({
+      lifecycleState: 'active',
+      title: 'New topic',
+      turnIds: [],
+    });
+  });
+
+  it('starts continued and branched threads from a capsule without hidden global memory', async () => {
+    const { repositories, service } = await createServiceFixture();
+    const source = unwrap(await service.startThread('Observable launch ownership'));
+    const submission = unwrap(await service.submitUserTurn(
+      source.id,
+      'The handoff needs one observable ownership signal.',
+    ));
+    const drafted = unwrap(await service.draftConclusion(source.id));
+    const capsule = unwrap(await service.saveCapsule({
+      threadId: source.id,
+      title: source.title,
+      conclusion: drafted.output,
+      sourceTurnRange: {
+        startTurnId: submission.userTurn.id,
+        endTurnId: drafted.responseTurn.id,
+      },
+    }));
+
+    const continued = unwrap(await service.startFromCapsule(capsule.id, 'continue'));
+    const branched = unwrap(await service.startFromCapsule(capsule.id, 'branch'));
+
+    expect(continued).toMatchObject({
+      title: capsule.title,
+      understanding: submission.output.understanding,
+      provisionalConclusion: capsule.conclusion,
+      turnIds: [],
+    });
+    expect(branched).toMatchObject({
+      title: capsule.title + ' — branch',
+      understanding: submission.output.understanding,
+      provisionalConclusion: capsule.conclusion,
+      turnIds: [],
+    });
+    expect(continued.id).not.toBe(source.id);
+    expect(branched.id).not.toBe(source.id);
+    expect(branched.id).not.toBe(continued.id);
+    expect(await repositories.turns.listByThread(continued.id)).toEqual([]);
+    expect(await repositories.turns.listByThread(branched.id)).toEqual([]);
+  });
+
   it('updates only editable capsule content while preserving identity and provenance', async () => {
     const { repositories, service } = await createServiceFixture();
     const thread = unwrap(await service.startThread('Editable capsule source'));

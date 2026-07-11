@@ -30,11 +30,11 @@ test('empty, thread, Challenge, conclusion, and capsule states are accessible', 
   await submitThought(page, 'The launch handoff is still the constraint.');
   await expectAccessible(page, 'thread');
 
-  await page.getByRole('button', { name: 'Challenge me' }).click();
+  await page.getByRole('button', { name: 'Challenge this' }).click();
   await expect(page.getByText(/stakeholder absorbs the cost/iu)).toBeVisible();
   await expectAccessible(page, 'challenge');
 
-  await page.getByRole('button', { name: 'Draft a conclusion' }).click();
+  await page.getByRole('button', { name: 'Draft a working conclusion' }).click();
   await expectAccessible(page, 'conclusion');
   await page.getByRole('button', { name: 'Save as capsule' }).click();
   await page.getByRole('button', { name: /Open capsule library/u }).click();
@@ -46,8 +46,8 @@ test('offline failure and voice failure remain announced, named, focused, and ac
   page,
 }) => {
   await context.setOffline(true);
-  await page.getByRole('textbox', { name: 'Your thought' }).fill('Preserve this offline thought.');
-  await page.getByRole('button', { name: 'Send thought' }).click();
+  await page.getByRole('textbox', { name: 'Idea, context, or response' }).fill('Preserve this offline thought.');
+  await page.getByRole('button', { name: 'Send input' }).click();
   await expect(page.getByRole('alert')).toContainText('ready to retry');
   await expectAccessible(page, 'offline error');
   await context.setOffline(false);
@@ -65,6 +65,6 @@ test('offline failure and voice failure remain announced, named, focused, and ac
   });
   await page.getByRole('button', { name: 'Start voice' }).click();
   await expect(page.getByRole('alert').filter({ hasText: /Microphone|Voice/iu })).toBeVisible();
-  await expect(page.getByRole('textbox', { name: 'Your thought' })).toBeFocused();
+  await expect(page.getByRole('textbox', { name: 'Idea, context, or response' })).toBeFocused();
   await expectAccessible(page, 'voice failure');
 });

@@ -2,6 +2,7 @@ import { PencilLine, Zap } from 'lucide-react';
 
 export interface ThreadActionsProps {
   activity:
+    | 'activate'
     | 'challenge'
     | 'conclusion'
     | 'delete'
@@ -34,7 +35,7 @@ export function ThreadActions({
         type="button"
       >
         <Zap aria-hidden="true" size={18} strokeWidth={2} />
-        <span>{activity === 'challenge' ? 'Challenging…' : 'Challenge me'}</span>
+        <span>{activity === 'challenge' ? 'Challenging…' : 'Challenge this'}</span>
       </button>
       <button
         className="thread-action thread-action--conclusion touch-target"
@@ -43,7 +44,7 @@ export function ThreadActions({
         type="button"
       >
         <PencilLine aria-hidden="true" size={18} strokeWidth={1.9} />
-        <span>{activity === 'conclusion' ? 'Drafting…' : 'Draft a conclusion'}</span>
+        <span>{activity === 'conclusion' ? 'Drafting…' : 'Draft a working conclusion'}</span>
       </button>
     </nav>
   );

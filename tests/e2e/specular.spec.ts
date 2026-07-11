@@ -11,15 +11,15 @@ test.beforeEach(async ({ page }) => {
   await openSpecular(page);
 });
 
-test('first run, delayed persistence, reload, Challenge, conclusion, and Keep digging', async ({ page }) => {
+test('first run, delayed persistence, reload, challenge, conclusion, and continued development', async ({ page }) => {
   await expect(page.getByRole('list', { name: 'Ways to begin' })).toBeVisible();
-  await expect(page.getByRole('button', { name: 'What are you thinking about?' })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'What idea do you want to develop?' })).toBeVisible();
   const mocks = await installOperationMocks(page);
   mocks.delayNextQuestion();
 
   const thought = 'The launch handoff is still the constraint.';
-  await page.getByRole('textbox', { name: 'Your thought' }).fill(thought);
-  await page.getByRole('button', { name: 'Send thought' }).click();
+  await page.getByRole('textbox', { name: 'Idea, context, or response' }).fill(thought);
+  await page.getByRole('button', { name: 'Send input' }).click();
   await expect(page.getByText(thought, { exact: true })).toBeVisible();
   mocks.releaseNextQuestion();
   await expect(page.getByText(
@@ -31,30 +31,31 @@ test('first run, delayed persistence, reload, Challenge, conclusion, and Keep di
     'Which concrete signal would show the launch handoff is working?',
   )).toBeVisible();
 
-  await page.getByRole('button', { name: 'Challenge me' }).click();
+  await page.getByRole('button', { name: 'Challenge this' }).click();
   await expect(page.getByText(
     'Which stakeholder absorbs the cost if the launch assumption fails?',
   )).toBeVisible();
-  await page.getByRole('button', { name: 'Draft a conclusion' }).click();
-  const thesis = page.getByRole('textbox', { name: 'My current read is…' });
+  await page.getByRole('button', { name: 'Draft a working conclusion' }).click();
+  const thesis = page.getByRole('textbox', { name: 'Working conclusion' });
   await expect(thesis).toBeVisible();
   await thesis.fill('My edited read keeps ownership provisional and testable.');
-  await page.getByRole('button', { name: 'Keep digging' }).click();
+  await page.getByRole('button', { name: 'Continue developing' }).click();
   await expect(page.getByRole('log', { name: 'Conversation history' })).toBeVisible();
   await expectNoHorizontalOverflow(page);
 });
 
-test('capsule edit, export, permanent deletion, Finish, and a clean new thread', async ({ page }) => {
+test('capsule edit, export, permanent deletion, Save & finish, and a clean new thread', async ({ page }) => {
   await submitThought(page, 'The launch handoff is still the constraint.');
-  await page.getByRole('button', { name: 'Draft a conclusion' }).click();
-  await page.getByRole('textbox', { name: 'My current read is…' })
+  await page.getByRole('button', { name: 'Draft a working conclusion' }).click();
+  await page.getByRole('textbox', { name: 'Working conclusion' })
     .fill('My edited capsule thesis is still provisional.');
   await page.getByRole('button', { name: 'Save as capsule' }).click();
   await expect(page.getByText('Capsule saved.')).toBeVisible();
 
   await page.getByRole('button', { name: /Open capsule library/u }).click();
-  await page.getByRole('button', { name: /New thought,/u }).click();
-  const capsuleThesis = page.getByLabel('Current conclusion');
+  await page.getByRole('button', { name: /The launch handoff is still the constraint,/u }).click();
+  const capsuleThesis = page.getByRole('dialog', { name: 'Capsules' })
+    .getByRole('textbox', { name: 'Working conclusion' });
   await capsuleThesis.fill('A locally edited capsule thesis.');
   await page.getByRole('button', { name: 'Save capsule edits' }).click();
   await expect(page.getByRole('dialog', { name: 'Capsules' }).getByText('Capsule updated.'))
@@ -72,7 +73,7 @@ test('capsule edit, export, permanent deletion, Finish, and a clean new thread',
   await expect(page.getByText('No capsules yet.')).toBeVisible();
   await page.getByRole('button', { name: 'Close capsule library' }).click();
 
-  await page.getByRole('button', { name: 'Finish' }).click();
+  await page.getByRole('button', { name: 'Save & finish' }).click();
   await expect(page.getByRole('list', { name: 'Ways to begin' })).toBeVisible();
   await expect(page.getByText('The launch handoff is still the constraint.')).toHaveCount(0);
 });
@@ -84,8 +85,8 @@ test('offline retry, microphone denial, reduced motion, keyboard flow, scaling, 
 }) => {
   await context.setOffline(true);
   const thought = 'Keep this writing through an offline failure.';
-  await page.getByRole('textbox', { name: 'Your thought' }).fill(thought);
-  await page.getByRole('button', { name: 'Send thought' }).click();
+  await page.getByRole('textbox', { name: 'Idea, context, or response' }).fill(thought);
+  await page.getByRole('button', { name: 'Send input' }).click();
   await expect(page.getByText(thought, { exact: true })).toBeVisible();
   const recovery = page.getByRole('group', { name: 'Saved thought recovery' });
   await expect(recovery).toContainText('Not sent');
@@ -115,14 +116,14 @@ test('offline retry, microphone denial, reduced motion, keyboard flow, scaling, 
   });
   await page.getByRole('button', { name: 'Start voice' }).click();
   await expect(page.getByRole('alert')).toContainText(/Microphone|Voice/iu);
-  await expect(page.getByRole('textbox', { name: 'Your thought' })).toBeFocused();
+  await expect(page.getByRole('textbox', { name: 'Idea, context, or response' })).toBeFocused();
 
   await page.emulateMedia({ reducedMotion: 'reduce' });
   await expect(page.getByRole('status', { name: 'Voice status' })).toHaveText(/Voice/iu);
   await page.addStyleTag({ content: ':root { font-size: 200% !important; }' });
   await expectNoHorizontalOverflow(page);
 
-  await page.getByRole('textbox', { name: 'Your thought' }).focus();
+  await page.getByRole('textbox', { name: 'Idea, context, or response' }).focus();
   await page.keyboard.press(browserName === 'webkit' ? 'Alt+Tab' : 'Tab');
   await expect(page.getByRole('button', { name: 'Start voice' })).toBeFocused();
   const focusStyle = await page.getByRole('button', { name: 'Start voice' }).evaluate((element) => {

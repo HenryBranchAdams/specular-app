@@ -13,6 +13,7 @@ import {
   type VoiceExchangeResult,
 } from '../application/conversation-service';
 import { HttpQuestioningClient } from '../application/http-questioning-client';
+import { deriveThreadTitle } from '../application/thread-title';
 import { OWNER_SCOPE } from '../domain/contracts';
 import type {
   Capsule,
@@ -55,7 +56,9 @@ export type ConversationBoundary = Pick<
   | 'finishThread'
   | 'keepDigging'
   | 'retryTurn'
+  | 'saveAndFinish'
   | 'saveCapsule'
+  | 'startFromCapsule'
   | 'startThread'
   | 'submitUserTurn'
   | 'updateCapsule'
@@ -77,6 +80,7 @@ export interface SpecularRuntime {
 }
 
 type Activity =
+  | 'activate'
   | 'challenge'
   | 'conclusion'
   | 'delete'
@@ -116,6 +120,8 @@ export interface UseSpecularResult extends SpecularViewModel {
   ) => Promise<boolean>;
   canRetry: boolean;
   challenge: () => void;
+  branchCapsule: (capsuleId: CapsuleId) => Promise<boolean>;
+  challengeCapsule: (capsuleId: CapsuleId) => Promise<boolean>;
   clearNotice: () => void;
   deleteAll: () => Promise<void>;
   deleteCapsule: (capsuleId: CapsuleId) => Promise<void>;
@@ -124,6 +130,7 @@ export interface UseSpecularResult extends SpecularViewModel {
   draftConclusion: () => void;
   exportArchive: () => Promise<void>;
   finish: (conclusion: WorkingConclusion) => void;
+  continueCapsule: (capsuleId: CapsuleId) => Promise<boolean>;
   keepDigging: (conclusion: WorkingConclusion) => void;
   resetLocalData: () => Promise<void>;
   retry: () => void;
@@ -372,7 +379,7 @@ export function useSpecular(
     void (async () => {
       let thread = view.thread;
       if (thread === null) {
-        const started = await dependencies.service.startThread();
+        const started = await dependencies.service.startThread(deriveThreadTitle(content));
         if (!started.ok) {
           setView((current) => ({
             ...current,
@@ -598,29 +605,53 @@ export function useSpecular(
     }
     setView((current) => ({ ...current, activity: 'finish', error: null, notice: null }));
     void (async () => {
-      const kept = await dependencies.service.keepDigging(thread.id, conclusion);
-      if (!kept.ok) {
-        setView((current) => ({ ...current, activity: null, error: kept.error }));
+      let turns: Turn[];
+      try {
+        turns = await dependencies.repositories.turns.listByThread(thread.id);
+      } catch {
+        setView((current) => ({
+          ...current,
+          activity: null,
+          error: STORAGE_UPDATE_ERROR,
+        }));
         return;
       }
-      const finished = await dependencies.service.finishThread(thread.id);
+      const first = turns[0];
+      const last = turns.at(-1);
+      if (first === undefined || last === undefined) {
+        setView((current) => ({
+          ...current,
+          activity: null,
+          error: STORAGE_UPDATE_ERROR,
+        }));
+        return;
+      }
+      const finished = await dependencies.service.saveAndFinish({
+        threadId: thread.id,
+        title: thread.title,
+        conclusion,
+        sourceTurnRange: { startTurnId: first.id, endTurnId: last.id },
+      });
       if (!finished.ok) {
         setView((current) => ({
           ...current,
           activity: null,
           error: finished.error,
-          thread: kept.value,
         }));
         return;
       }
       setView((current) => ({
         ...current,
         activity: null,
+        capsules: newestCapsules([
+          ...current.capsules.filter((capsule) => capsule.id !== finished.value.capsule.id),
+          finished.value.capsule,
+        ]),
         conclusion: null,
         draft: '',
-        notice: 'Thread finished. Start a fresh thought when you are ready.',
+        notice: 'Saved and finished.',
         pendingUserTurn: null,
-        thread: finished.value,
+        thread: finished.value.thread,
         turns: [],
       }));
     })();
@@ -649,6 +680,76 @@ export function useSpecular(
       notice: 'Capsule updated.',
     }));
   }, []);
+
+  const startFromCapsule = useCallback(async (
+    capsuleId: CapsuleId,
+    mode: 'branch' | 'continue',
+  ): Promise<Thread | null> => {
+    const dependencies = dependenciesRef.current;
+    if (dependencies === null) {
+      return null;
+    }
+    setView((current) => ({
+      ...current,
+      activity: 'activate',
+      conclusion: null,
+      error: null,
+      notice: null,
+    }));
+    const result = await dependencies.service.startFromCapsule(capsuleId, mode);
+    if (!result.ok) {
+      setView((current) => ({ ...current, activity: null, error: result.error }));
+      return null;
+    }
+    setView((current) => ({
+      ...current,
+      activity: null,
+      conclusion: null,
+      error: null,
+      notice: mode === 'continue'
+        ? 'Continued from capsule.'
+        : 'Branch created from capsule.',
+      pendingUserTurn: null,
+      thread: result.value,
+      turns: [],
+    }));
+    return result.value;
+  }, []);
+
+  const continueCapsule = useCallback((capsuleId: CapsuleId): Promise<boolean> => (
+    startFromCapsule(capsuleId, 'continue').then((thread) => thread !== null)
+  ), [startFromCapsule]);
+
+  const branchCapsule = useCallback((capsuleId: CapsuleId): Promise<boolean> => (
+    startFromCapsule(capsuleId, 'branch').then((thread) => thread !== null)
+  ), [startFromCapsule]);
+
+  const challengeCapsule = useCallback(async (capsuleId: CapsuleId): Promise<boolean> => {
+    const thread = await startFromCapsule(capsuleId, 'continue');
+    const dependencies = dependenciesRef.current;
+    if (thread === null || dependencies === null) {
+      return false;
+    }
+    setView((current) => ({
+      ...current,
+      activity: 'challenge',
+      error: null,
+      notice: null,
+    }));
+    const result = await dependencies.service.challenge(thread.id);
+    if (!result.ok) {
+      setView((current) => ({ ...current, activity: null, error: result.error }));
+      return false;
+    }
+    setView((current) => ({
+      ...current,
+      activity: null,
+      notice: 'Challenge started from capsule.',
+      thread: result.value.thread,
+      turns: [result.value.responseTurn],
+    }));
+    return true;
+  }, [startFromCapsule]);
 
   const exportArchive = useCallback(async (): Promise<void> => {
     const dependencies = dependenciesRef.current;
@@ -763,9 +864,12 @@ export function useSpecular(
   return {
     ...view,
     acceptVoiceExchange,
+    branchCapsule,
     canRetry: latestRetryableTurnId(view.turns) !== null,
     challenge,
+    challengeCapsule,
     clearNotice,
+    continueCapsule,
     deleteAll,
     deleteCapsule,
     deleteThread,

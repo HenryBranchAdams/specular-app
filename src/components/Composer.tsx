@@ -101,13 +101,13 @@ export function Composer({
   return (
     <form className="composer" onSubmit={handleSubmit}>
       <textarea
-        aria-label="Your thought"
+        aria-label="Idea, context, or response"
         className="composer__input touch-target"
         onBlur={() => { onFocusChange(false); }}
         onChange={(event) => { onValueChange(event.target.value); }}
         onFocus={() => { onFocusChange(true); }}
         onKeyDown={handleKeyDown}
-        placeholder="Share whatever’s on your mind…"
+        placeholder="Add an idea, question, thesis, or context…"
         ref={setComposerRef}
         rows={1}
         value={value}
@@ -153,7 +153,7 @@ export function Composer({
           </div>
         )}
         <button
-          aria-label="Send thought"
+          aria-label="Send input"
           className="icon-button icon-button--send touch-target"
           disabled={busy || value.trim().length === 0}
           type="submit"

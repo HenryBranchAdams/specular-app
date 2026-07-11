@@ -1,10 +1,10 @@
 export const STARTER_PROMPTS = [
-  'What are you thinking about?',
-  'Give me a hot take.',
-  'Had any new ideas lately?',
-  'What can’t you quite articulate?',
-  'What’s been on your mind?',
-  'Bring me something unfinished.',
-  'What are you reconsidering?',
-  'What feels true but still blurry?',
+  'What idea do you want to develop?',
+  'Clarify a difficult concept.',
+  'Pressure-test an investment thesis.',
+  'Work through a strategic decision.',
+  'Shape a creative direction.',
+  'Strengthen an argument.',
+  'Find the load-bearing assumption.',
+  'Turn scattered notes into a working position.',
 ] as const;

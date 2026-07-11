@@ -53,7 +53,7 @@ describe('ConclusionEditor', () => {
       />,
     );
 
-    const thesis = screen.getByRole('textbox', { name: 'My current read is…' });
+    const thesis = screen.getByRole('textbox', { name: 'Working conclusion' });
     await user.clear(thesis);
     await user.type(thesis, 'My edited read keeps the uncertainty explicit.');
     await user.clear(screen.getByRole('textbox', { name: 'Original insight 1' }));
@@ -89,7 +89,7 @@ describe('ConclusionEditor', () => {
     expect(screen.getAllByRole('textbox', { name: /Unresolved tension/u })).toHaveLength(1);
     expect(screen.getByText('7 / 150 words')).toBeVisible();
 
-    await user.click(screen.getByRole('button', { name: 'Keep digging' }));
+    await user.click(screen.getByRole('button', { name: 'Continue developing' }));
 
     expect(onKeepDigging).toHaveBeenCalledWith(expect.objectContaining({
       thesis: 'My edited read keeps the uncertainty explicit.',
@@ -118,7 +118,7 @@ describe('ConclusionEditor', () => {
 
     expect(screen.getByDisplayValue('<img src=x onerror=alert(1)>')).toBeVisible();
     expect(document.querySelector('.conclusion-editor img')).toBeNull();
-    for (const action of ['Keep digging', 'Save as capsule', 'Finish']) {
+    for (const action of ['Continue developing', 'Save as capsule', 'Save & finish']) {
       const button = screen.getByRole('button', { name: action });
       expect(button).toHaveClass('touch-target');
       expect(button).toBeDisabled();

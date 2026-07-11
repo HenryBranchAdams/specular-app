@@ -86,6 +86,13 @@ export interface SaveCapsuleInput {
   sourceTurnRange: SourceTurnRange;
 }
 
+export interface SaveAndFinishResult {
+  capsule: Capsule;
+  thread: Thread;
+}
+
+export type CapsuleThreadMode = 'branch' | 'continue';
+
 export interface ConversationServiceOptions {
   repositories: LocalRepositories;
   client: QuestioningProvider;
@@ -210,7 +217,7 @@ export class ConversationService {
       const thread = threadSchema.parse({
         id: this.ids.threadId(),
         ownerScope: OWNER_SCOPE,
-        title: normalizeTitle(title, 'New thought'),
+        title: normalizeTitle(title, 'New topic'),
         lifecycleState: 'active',
         createdAt: timestamp,
         updatedAt: timestamp,
@@ -509,44 +516,108 @@ export class ConversationService {
 
   async saveCapsule(input: SaveCapsuleInput): Promise<ServiceResult<Capsule>> {
     try {
-      await this.requireActiveThread(input.threadId);
-      const turns = await this.repositories.turns.listByThread(input.threadId);
-      const byId = new Map(turns.map((turn) => [turn.id, turn]));
-      const start = byId.get(input.sourceTurnRange.startTurnId);
-      const end = byId.get(input.sourceTurnRange.endTurnId);
-      if (start === undefined || end === undefined || start.position > end.position) {
-        return failure('storage_failure');
-      }
-
-      const editedConclusion = workingConclusionSchema.parse({
-        ...input.conclusion,
-        editState: 'edited',
-        editedAt: this.now(),
-      });
-      const provenanceIsWithinRange = editedConclusion.provenance.every((source) => {
-        const turn = byId.get(source.turnId);
-        return turn !== undefined
-          && turn.position >= start.position
-          && turn.position <= end.position;
-      });
-      if (!provenanceIsWithinRange) {
-        return failure('storage_failure');
-      }
-
-      const timestamp = this.now();
-      const capsule = capsuleSchema.parse({
-        id: this.ids.capsuleId(),
-        ownerScope: OWNER_SCOPE,
-        title: normalizeTitle(input.title, 'Saved conclusion'),
-        createdAt: timestamp,
-        updatedAt: timestamp,
-        conclusion: editedConclusion,
-        sourceThreadId: input.threadId,
-        sourceTurnRange: input.sourceTurnRange,
-      });
+      const capsule = await this.buildCapsule(input);
       await this.repositories.capsules.put(capsule);
       await this.recordTelemetry('capsule_saved');
       return success(capsule);
+    } catch {
+      return failure('storage_failure');
+    }
+  }
+
+  async saveAndFinish(
+    input: SaveCapsuleInput,
+  ): Promise<ServiceResult<SaveAndFinishResult>> {
+    try {
+      const thread = await this.requireActiveThread(input.threadId);
+      const capsule = await this.buildCapsule(input);
+      const timestamp = this.now();
+      const completedThread = threadSchema.parse({
+        ...thread,
+        lifecycleState: 'completed',
+        completedAt: timestamp,
+        provisionalConclusion: capsule.conclusion,
+        updatedAt: timestamp,
+      });
+      const freshThread = threadSchema.parse({
+        id: this.ids.threadId(),
+        ownerScope: OWNER_SCOPE,
+        title: 'New topic',
+        lifecycleState: 'active',
+        createdAt: timestamp,
+        updatedAt: timestamp,
+        turnIds: [],
+        understanding: {
+          claims: [],
+          observations: [],
+          stakeholders: [],
+          contexts: [],
+          distinctions: [],
+          tensions: [],
+          exploredBlindSpots: [],
+          unexploredBlindSpots: [],
+        },
+      });
+      await this.repositories.conversation.finishAndStart({
+        capsule,
+        completedThread,
+        freshThread,
+      });
+      await Promise.all([
+        this.recordTelemetry('capsule_saved'),
+        this.recordTelemetry('thread_started'),
+      ]);
+      return success({ capsule, thread: freshThread });
+    } catch {
+      return failure('storage_failure');
+    }
+  }
+
+  async startFromCapsule(
+    capsuleId: CapsuleId,
+    mode: CapsuleThreadMode,
+  ): Promise<ServiceResult<Thread>> {
+    try {
+      const capsule = await this.repositories.capsules.get(capsuleId);
+      if (capsule === undefined) {
+        return failure('storage_failure');
+      }
+      const sourceThread = await this.repositories.threads.get(capsule.sourceThreadId);
+      let title: string;
+      switch (mode) {
+        case 'continue':
+          title = capsule.title;
+          break;
+        case 'branch':
+          title = capsule.title + ' — branch';
+          break;
+        default:
+          return assertNever(mode);
+      }
+      const timestamp = this.now();
+      const thread = threadSchema.parse({
+        id: this.ids.threadId(),
+        ownerScope: OWNER_SCOPE,
+        title: normalizeTitle(title, 'New topic'),
+        lifecycleState: 'active',
+        createdAt: timestamp,
+        updatedAt: timestamp,
+        turnIds: [],
+        understanding: sourceThread?.understanding ?? {
+          claims: [],
+          observations: [],
+          stakeholders: [],
+          contexts: [],
+          distinctions: [],
+          tensions: [],
+          exploredBlindSpots: [],
+          unexploredBlindSpots: [],
+        },
+        provisionalConclusion: capsule.conclusion,
+      });
+      await this.repositories.threads.put(thread);
+      await this.recordTelemetry('thread_started');
+      return success(thread);
     } catch {
       return failure('storage_failure');
     }
@@ -637,7 +708,7 @@ export class ConversationService {
       const freshThread = threadSchema.parse({
         id: this.ids.threadId(),
         ownerScope: OWNER_SCOPE,
-        title: 'New thought',
+        title: 'New topic',
         lifecycleState: 'active',
         createdAt: timestamp,
         updatedAt: timestamp,
@@ -697,6 +768,44 @@ export class ConversationService {
     } catch {
       return failure('storage_failure');
     }
+  }
+
+  private async buildCapsule(input: SaveCapsuleInput): Promise<Capsule> {
+    await this.requireActiveThread(input.threadId);
+    const turns = await this.repositories.turns.listByThread(input.threadId);
+    const byId = new Map(turns.map((turn) => [turn.id, turn]));
+    const start = byId.get(input.sourceTurnRange.startTurnId);
+    const end = byId.get(input.sourceTurnRange.endTurnId);
+    if (start === undefined || end === undefined || start.position > end.position) {
+      throw new Error('Capsule source range is invalid.');
+    }
+
+    const timestamp = this.now();
+    const editedConclusion = workingConclusionSchema.parse({
+      ...input.conclusion,
+      editState: 'edited',
+      editedAt: timestamp,
+    });
+    const provenanceIsWithinRange = editedConclusion.provenance.every((source) => {
+      const turn = byId.get(source.turnId);
+      return turn !== undefined
+        && turn.position >= start.position
+        && turn.position <= end.position;
+    });
+    if (!provenanceIsWithinRange) {
+      throw new Error('Capsule provenance is outside the source range.');
+    }
+
+    return capsuleSchema.parse({
+      id: this.ids.capsuleId(),
+      ownerScope: OWNER_SCOPE,
+      title: normalizeTitle(input.title, 'Saved conclusion'),
+      createdAt: timestamp,
+      updatedAt: timestamp,
+      conclusion: editedConclusion,
+      sourceThreadId: input.threadId,
+      sourceTurnRange: input.sourceTurnRange,
+    });
   }
 
   private async completePendingUserTurn(

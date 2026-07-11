@@ -531,6 +531,9 @@ class IndexedDbConversationRepository implements ConversationRepository {
 
   async finishAndStart(write: FinishedThreadWrite): Promise<void> {
     this.assertWritable();
+    const capsule = write.capsule === undefined
+      ? undefined
+      : parseCapsuleForOwner(write.capsule, this.ownerScope);
     const completedThread = parseThreadForOwner(write.completedThread, this.ownerScope);
     const freshThread = parseThreadForOwner(write.freshThread, this.ownerScope);
     assertConversationWrite(
@@ -542,13 +545,21 @@ class IndexedDbConversationRepository implements ConversationRepository {
         && freshThread.provisionalConclusion === undefined,
       'Invalid finished conversation write.',
     );
+    assertConversationWrite(
+      capsule === undefined || capsule.sourceThreadId === completedThread.id,
+      'A finished capsule must belong to the completed thread.',
+    );
 
-    const transaction = this.database.transaction('threads', 'readwrite');
+    const transaction = this.database.transaction(['threads', 'capsules'], 'readwrite');
     await runAtomicTransaction(transaction, async () => {
-      await enqueueAtomicWrites([
+      const operations: (() => Promise<unknown>)[] = [
         () => transaction.objectStore('threads').put(completedThread),
         () => transaction.objectStore('threads').put(freshThread),
-      ]);
+      ];
+      if (capsule !== undefined) {
+        operations.push(() => transaction.objectStore('capsules').put(capsule));
+      }
+      await enqueueAtomicWrites(operations);
     });
   }
 }

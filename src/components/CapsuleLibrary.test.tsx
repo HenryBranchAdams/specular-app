@@ -84,6 +84,9 @@ describe('CapsuleLibrary', () => {
             capsules={capsules}
             currentThread={currentThread}
             onClose={() => { setOpen(false); }}
+            onBranchCapsule={vi.fn()}
+            onChallengeCapsule={vi.fn()}
+            onContinueCapsule={vi.fn()}
             onDeleteAll={vi.fn()}
             onDeleteCapsule={vi.fn()}
             onDeleteThread={vi.fn()}
@@ -146,6 +149,9 @@ describe('CapsuleLibrary', () => {
             capsules={[]}
             currentThread={currentThread}
             onClose={() => { setOpen(false); }}
+            onBranchCapsule={vi.fn()}
+            onChallengeCapsule={vi.fn()}
+            onContinueCapsule={vi.fn()}
             onDeleteAll={vi.fn()}
             onDeleteCapsule={vi.fn()}
             onDeleteThread={vi.fn()}
@@ -214,6 +220,9 @@ describe('CapsuleLibrary', () => {
         capsules={[capsule]}
         currentThread={currentThread}
         onClose={vi.fn()}
+        onBranchCapsule={vi.fn()}
+        onChallengeCapsule={vi.fn()}
+        onContinueCapsule={vi.fn()}
         onDeleteAll={vi.fn()}
         onDeleteCapsule={vi.fn()}
         onDeleteThread={vi.fn()}
@@ -225,7 +234,7 @@ describe('CapsuleLibrary', () => {
     );
 
     await user.click(screen.getByRole('button', { name: /Decision clarity/u }));
-    const thesis = screen.getByRole('textbox', { name: 'Current conclusion' });
+    const thesis = screen.getByRole('textbox', { name: 'Working conclusion' });
     await user.clear(thesis);
     await user.type(thesis, 'My capsule edit survives refresh.');
 
@@ -235,6 +244,9 @@ describe('CapsuleLibrary', () => {
         capsules={[{ ...capsule, conclusion: makeConclusion('An async replacement.') }]}
         currentThread={currentThread}
         onClose={vi.fn()}
+        onBranchCapsule={vi.fn()}
+        onChallengeCapsule={vi.fn()}
+        onContinueCapsule={vi.fn()}
         onDeleteAll={vi.fn()}
         onDeleteCapsule={vi.fn()}
         onDeleteThread={vi.fn()}
@@ -265,6 +277,9 @@ describe('CapsuleLibrary', () => {
         capsules={[]}
         currentThread={currentThread}
         onClose={vi.fn()}
+        onBranchCapsule={vi.fn()}
+        onChallengeCapsule={vi.fn()}
+        onContinueCapsule={vi.fn()}
         onDeleteAll={vi.fn()}
         onDeleteCapsule={vi.fn()}
         onDeleteThread={vi.fn()}
@@ -276,7 +291,7 @@ describe('CapsuleLibrary', () => {
     );
 
     expect(screen.getByText('No capsules yet.')).toBeVisible();
-    expect(screen.getByText('Finished conclusions you save will collect here.')).toBeVisible();
+    expect(screen.getByText('Saved working conclusions collect here.')).toBeVisible();
     expect(screen.queryByRole('button', { name: 'Delete all local content' }))
       .not.toBeInTheDocument();
 
@@ -303,6 +318,9 @@ describe('CapsuleLibrary', () => {
         }]}
         currentThread={currentThread}
         onClose={vi.fn()}
+        onBranchCapsule={vi.fn()}
+        onChallengeCapsule={vi.fn()}
+        onContinueCapsule={vi.fn()}
         onDeleteAll={vi.fn()}
         onDeleteCapsule={vi.fn()}
         onDeleteThread={vi.fn()}
@@ -347,6 +365,9 @@ describe('CapsuleLibrary', () => {
         capsules={[]}
         currentThread={oldThread}
         onClose={vi.fn()}
+        onBranchCapsule={vi.fn()}
+        onChallengeCapsule={vi.fn()}
+        onContinueCapsule={vi.fn()}
         onDeleteAll={vi.fn()}
         onDeleteCapsule={vi.fn()}
         onDeleteThread={onDeleteThread}
@@ -367,6 +388,9 @@ describe('CapsuleLibrary', () => {
         capsules={[]}
         currentThread={freshThread}
         onClose={vi.fn()}
+        onBranchCapsule={vi.fn()}
+        onChallengeCapsule={vi.fn()}
+        onContinueCapsule={vi.fn()}
         onDeleteAll={vi.fn()}
         onDeleteCapsule={vi.fn()}
         onDeleteThread={onDeleteThread}
@@ -384,6 +408,9 @@ describe('CapsuleLibrary', () => {
         capsules={[]}
         currentThread={freshThread}
         onClose={vi.fn()}
+        onBranchCapsule={vi.fn()}
+        onChallengeCapsule={vi.fn()}
+        onContinueCapsule={vi.fn()}
         onDeleteAll={vi.fn()}
         onDeleteCapsule={vi.fn()}
         onDeleteThread={onDeleteThread}
@@ -412,6 +439,9 @@ describe('CapsuleLibrary', () => {
           title: 'Busy thread',
         }}
         onClose={vi.fn()}
+        onBranchCapsule={vi.fn()}
+        onChallengeCapsule={vi.fn()}
+        onContinueCapsule={vi.fn()}
         onDeleteAll={vi.fn()}
         onDeleteCapsule={vi.fn()}
         onDeleteThread={vi.fn()}
@@ -427,6 +457,85 @@ describe('CapsuleLibrary', () => {
     const capsuleButton = screen.getByRole('button', { name: /Busy capsule/u });
     expect(capsuleButton).toBeDisabled();
     await user.click(capsuleButton);
-    expect(screen.queryByRole('textbox', { name: 'Current conclusion' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('textbox', { name: 'Working conclusion' })).not.toBeInTheDocument();
+  });
+
+  it('opens a capsule as a continuation, branch, or immediate challenge', async () => {
+    const capsule = makeCapsule('capsule-revisit', 'Market thesis', Date.UTC(2026, 6, 9));
+    const triggerRef = createRef<HTMLButtonElement>();
+    const onClose = vi.fn();
+    const onContinueCapsule = vi.fn().mockResolvedValue(true);
+    const onBranchCapsule = vi.fn().mockResolvedValue(true);
+    const onChallengeCapsule = vi.fn().mockResolvedValue(true);
+    const user = userEvent.setup();
+    const { rerender } = render(
+      <CapsuleLibrary
+        busy={false}
+        capsules={[capsule]}
+        currentThread={currentThread}
+        onBranchCapsule={onBranchCapsule}
+        onChallengeCapsule={onChallengeCapsule}
+        onClose={onClose}
+        onContinueCapsule={onContinueCapsule}
+        onDeleteAll={vi.fn()}
+        onDeleteCapsule={vi.fn()}
+        onDeleteThread={vi.fn()}
+        onExport={vi.fn()}
+        onUpdateCapsule={vi.fn()}
+        open
+        triggerRef={triggerRef}
+      />,
+    );
+
+    await user.click(screen.getByRole('button', { name: /Market thesis/u }));
+    await user.click(screen.getByRole('button', { name: 'Continue developing' }));
+    expect(onContinueCapsule).toHaveBeenCalledWith(capsule.id);
+    expect(onClose).toHaveBeenCalledOnce();
+
+    onClose.mockClear();
+    rerender(
+      <CapsuleLibrary
+        busy={false}
+        capsules={[capsule]}
+        currentThread={currentThread}
+        onBranchCapsule={onBranchCapsule}
+        onChallengeCapsule={onChallengeCapsule}
+        onClose={onClose}
+        onContinueCapsule={onContinueCapsule}
+        onDeleteAll={vi.fn()}
+        onDeleteCapsule={vi.fn()}
+        onDeleteThread={vi.fn()}
+        onExport={vi.fn()}
+        onUpdateCapsule={vi.fn()}
+        open
+        triggerRef={triggerRef}
+      />,
+    );
+    await user.click(screen.getByRole('button', { name: 'Branch into new thread' }));
+    expect(onBranchCapsule).toHaveBeenCalledWith(capsule.id);
+    expect(onClose).toHaveBeenCalledOnce();
+
+    onClose.mockClear();
+    rerender(
+      <CapsuleLibrary
+        busy={false}
+        capsules={[capsule]}
+        currentThread={currentThread}
+        onBranchCapsule={onBranchCapsule}
+        onChallengeCapsule={onChallengeCapsule}
+        onClose={onClose}
+        onContinueCapsule={onContinueCapsule}
+        onDeleteAll={vi.fn()}
+        onDeleteCapsule={vi.fn()}
+        onDeleteThread={vi.fn()}
+        onExport={vi.fn()}
+        onUpdateCapsule={vi.fn()}
+        open
+        triggerRef={triggerRef}
+      />,
+    );
+    await user.click(screen.getByRole('button', { name: 'Challenge this' }));
+    expect(onChallengeCapsule).toHaveBeenCalledWith(capsule.id);
+    expect(onClose).toHaveBeenCalledOnce();
   });
 });

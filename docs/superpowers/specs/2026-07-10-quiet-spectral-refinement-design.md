@@ -18,7 +18,7 @@ Row A, **Quiet Spectral Refinement**, is authoritative. Rows B and C are rejecte
 
 - Use an open near-black surface rather than making the starter deck read as a large bordered card.
 - Keep `Specular` in a compact header and preserve direct Capsule-library access.
-- Render the dominant prompt in a high-contrast editorial serif: `What are you thinking about?`
+- Render the dominant prompt in a high-contrast editorial serif: `What idea do you want to develop?`
 - Show three supporting prompts at first-viewport priority; the remaining interchangeable prompts may continue below or rotate through the same positions. No prompt selects a mode.
 - Keep the composer fully visible in a 375 × 812 first viewport, including when the offline-ready notice appears.
 - Render the offline-ready notice as one slim, bottom-adjacent status row that does not add shell padding or cover controls. It may auto-settle after announcement and retains a compact Dismiss action.
@@ -52,9 +52,9 @@ Row A, **Quiet Spectral Refinement**, is authoritative. Rows B and C are rejecte
 
 - `Specular`
 - `Capsules`
-- `What are you thinking about?`
+- `What idea do you want to develop?`
 - Existing interchangeable starter prompts
-- `Share whatever’s on your mind…`
+- `Add an idea, question, thesis, or context…`
 - `Not sent`
 - `Retry`
 - `No capsules yet.`
@@ -65,7 +65,7 @@ Row A, **Quiet Spectral Refinement**, is authoritative. Rows B and C are rejecte
 
 ## Intentional deviations from the generated board
 
-- The existing composer placeholder is retained instead of the mockup's `Share anything…` because it is already approved product copy.
+- The composer uses neutral object-focused language rather than an invitation to personal disclosure.
 - Direct Capsule-library access remains in the PWA header instead of a generic settings gear.
 - The voice control remains a microphone rather than the mockup's plus button because Realtime voice is an approved product capability.
 - The PWA uses the existing Lucide icon library rather than reproducing the mockup's illustrative glyphs.

@@ -436,20 +436,53 @@ describe('versioned owner-scoped IndexedDB persistence', () => {
     });
     const freshThread = makeThread({
       id: 'thread-fresh',
-      title: 'New thought',
+      title: 'New topic',
       createdAt: 40,
       updatedAt: 40,
     });
+    const capsule = makeCapsule({ sourceThreadId: completedThread.id });
     await repositories.threads.put(activeThread);
     abortOnNthPut('threads', 2);
 
     await expect(repositories.conversation.finishAndStart({
+      capsule,
       completedThread,
       freshThread,
     })).rejects.toBeDefined();
 
     expect(await repositories.threads.get(activeThread.id)).toEqual(activeThread);
     expect(await repositories.threads.get(freshThread.id)).toBeUndefined();
+    expect(await repositories.capsules.get(capsule.id)).toBeUndefined();
+    repositories.close();
+  });
+
+  it('commits a finished thread, fresh thread, and saved capsule as one unit', async () => {
+    const factory = new IDBFactory();
+    const repositories = await createLocalRepositories('local', factory);
+    const activeThread = makeThread();
+    const completedThread = makeThread({
+      lifecycleState: 'completed',
+      completedAt: 40,
+      updatedAt: 40,
+    });
+    const freshThread = makeThread({
+      id: 'thread-fresh',
+      title: 'New topic',
+      createdAt: 40,
+      updatedAt: 40,
+    });
+    const capsule = makeCapsule({ sourceThreadId: completedThread.id });
+    await repositories.threads.put(activeThread);
+
+    await repositories.conversation.finishAndStart({
+      capsule,
+      completedThread,
+      freshThread,
+    });
+
+    expect(await repositories.threads.get(completedThread.id)).toEqual(completedThread);
+    expect(await repositories.threads.get(freshThread.id)).toEqual(freshThread);
+    expect(await repositories.capsules.get(capsule.id)).toEqual(capsule);
     repositories.close();
   });
 

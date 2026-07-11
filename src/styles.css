@@ -1212,6 +1212,132 @@ textarea:focus-visible,
   margin: 0 0 var(--space-6);
 }
 
+.capsule-detail__revisit {
+  display: grid;
+  gap: var(--space-2);
+  padding: 0 0 var(--space-5);
+  margin-bottom: var(--space-5);
+  border-bottom: 1px solid var(--hairline);
+}
+
+.capsule-detail__revisit button {
+  display: flex;
+  min-height: 2.75rem;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--hairline-strong);
+  border-radius: 0.75rem;
+  color: var(--warm-white);
+  background: transparent;
+  font-size: 0.9375rem;
+  font-weight: 620;
+  text-align: left;
+}
+
+.capsule-detail__revisit-primary {
+  border-color: rgb(77 235 255 / 52%) !important;
+  background: rgb(77 235 255 / 8%) !important;
+}
+
+.capsule-detail__revisit-secondary svg {
+  color: var(--muted);
+}
+
+.reasoning-map {
+  display: none;
+}
+
+@media (min-width: 56rem) {
+  .app-shell:has(.reasoning-map) {
+    width: min(100%, 50rem);
+  }
+
+  .app-shell:has(.reasoning-map) > .thread-header,
+  .app-shell:has(.reasoning-map) > .conversation-plane,
+  .app-shell:has(.reasoning-map) > .interaction-dock,
+  .app-shell:has(.reasoning-map) > .application-status {
+    width: 26.875rem;
+  }
+
+  .reasoning-map {
+    position: absolute;
+    top: 5.25rem;
+    right: max(var(--space-3), var(--safe-area-right));
+    display: block;
+    width: 18rem;
+    max-height: calc(100dvh - 7rem);
+    overflow-y: auto;
+    color: var(--muted);
+  }
+
+  .reasoning-map details {
+    border: 1px solid var(--hairline);
+    border-radius: 0.875rem;
+    background: rgb(14 14 29 / 72%);
+    backdrop-filter: blur(0.75rem);
+  }
+
+  .reasoning-map summary {
+    display: flex;
+    min-height: 2.75rem;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--space-2);
+    padding: var(--space-2) var(--space-3);
+    color: var(--warm-white);
+    cursor: pointer;
+    font-size: 0.875rem;
+    font-weight: 650;
+    list-style: none;
+  }
+
+  .reasoning-map summary::-webkit-details-marker {
+    display: none;
+  }
+
+  .reasoning-map summary svg {
+    transition: transform 160ms ease;
+  }
+
+  .reasoning-map details[open] summary svg {
+    transform: rotate(180deg);
+  }
+
+  .reasoning-map__content {
+    display: grid;
+    gap: var(--space-4);
+    padding: 0 var(--space-3) var(--space-4);
+    border-top: 1px solid var(--hairline);
+  }
+
+  .reasoning-map__content section:first-child {
+    padding-top: var(--space-4);
+  }
+
+  .reasoning-map h2 {
+    margin: 0 0 var(--space-2);
+    color: var(--quiet);
+    font-size: 0.6875rem;
+    font-weight: 720;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+  }
+
+  .reasoning-map ul {
+    display: grid;
+    gap: var(--space-2);
+    padding: 0;
+    margin: 0;
+    list-style: none;
+  }
+
+  .reasoning-map li {
+    font-size: 0.8125rem;
+    line-height: 1.45;
+  }
+}
+
 .capsule-library__notice,
 .capsule-library > [role="alert"] {
   min-height: 1.5rem;

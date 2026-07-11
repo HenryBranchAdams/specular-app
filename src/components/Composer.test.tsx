@@ -31,8 +31,8 @@ describe('Composer voice affordance', () => {
     render(<Composer {...BASE_PROPS} onValueChange={onValueChange} />);
 
     expect(screen.queryByRole('button', { name: /voice/iu })).not.toBeInTheDocument();
-    const composer = screen.getByRole('textbox', { name: 'Your thought' });
-    const send = screen.getByRole('button', { name: 'Send thought' });
+    const composer = screen.getByRole('textbox', { name: 'Idea, context, or response' });
+    const send = screen.getByRole('button', { name: 'Send input' });
     expect(composer).toHaveValue('Keep this typed draft.');
     expect(send).toBeEnabled();
 
@@ -85,13 +85,13 @@ describe('Composer voice affordance', () => {
     );
 
     expect(screen.getByRole('alert')).toHaveTextContent('Microphone access was not granted.');
-    expect(screen.getByRole('textbox', { name: 'Your thought' }))
+    expect(screen.getByRole('textbox', { name: 'Idea, context, or response' }))
       .toHaveValue('Keep this typed draft.');
-    expect(screen.getByRole('button', { name: 'Send thought' })).toBeEnabled();
+    expect(screen.getByRole('button', { name: 'Send input' })).toBeEnabled();
 
     await user.click(screen.getByRole('button', { name: 'Start voice' }));
     expect(onVoice).toHaveBeenCalledOnce();
-    expect(screen.getByRole('textbox', { name: 'Your thought' }))
+    expect(screen.getByRole('textbox', { name: 'Idea, context, or response' }))
       .toHaveValue('Keep this typed draft.');
   });
 });

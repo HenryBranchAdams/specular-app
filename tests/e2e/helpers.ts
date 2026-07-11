@@ -102,14 +102,14 @@ export async function installOperationMocks(page: Page): Promise<OperationMockCo
 export async function openSpecular(page: Page): Promise<void> {
   await page.goto('/');
   await expect(page.getByRole('heading', { name: 'Specular' })).toBeVisible();
-  await expect(page.getByRole('textbox', { name: 'Your thought' })).toBeVisible();
+  await expect(page.getByRole('textbox', { name: 'Idea, context, or response' })).toBeVisible();
   const dismiss = page.getByRole('button', { name: 'Dismiss' });
   await dismiss.click({ timeout: 2_000 }).catch(() => undefined);
 }
 
 export async function submitThought(page: Page, thought: string): Promise<void> {
-  await page.getByRole('textbox', { name: 'Your thought' }).fill(thought);
-  await page.getByRole('button', { name: 'Send thought' }).click();
+  await page.getByRole('textbox', { name: 'Idea, context, or response' }).fill(thought);
+  await page.getByRole('button', { name: 'Send input' }).click();
   await expect(page.getByText(thought, { exact: true })).toBeVisible();
   await expect(page.getByText(
     'Which concrete signal would show the launch handoff is working?',

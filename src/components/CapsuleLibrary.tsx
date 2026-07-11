@@ -7,6 +7,9 @@ import {
   ArrowLeft,
   Database,
   Ellipsis,
+  GitBranch,
+  MessageCircleQuestion,
+  Play,
   X,
 } from 'lucide-react';
 import { assertNever } from '../domain/contracts';
@@ -23,7 +26,10 @@ export interface CapsuleLibraryProps {
   busy: boolean;
   capsules: readonly Capsule[];
   currentThread: { id: ThreadId; title: string } | null;
+  onBranchCapsule: (capsuleId: CapsuleId) => Promise<boolean>;
+  onChallengeCapsule: (capsuleId: CapsuleId) => Promise<boolean>;
   onClose: () => void;
+  onContinueCapsule: (capsuleId: CapsuleId) => Promise<boolean>;
   onDeleteAll: () => Promise<void>;
   onDeleteCapsule: (capsuleId: CapsuleId) => Promise<void>;
   onDeleteThread: (threadId: ThreadId) => Promise<void>;
@@ -39,6 +45,9 @@ export interface CapsuleLibraryProps {
 interface CapsuleDetailProps {
   busy: boolean;
   capsule: Capsule;
+  onBranch: (capsuleId: CapsuleId) => Promise<void>;
+  onChallenge: (capsuleId: CapsuleId) => Promise<void>;
+  onContinue: (capsuleId: CapsuleId) => Promise<void>;
   onSave: (capsuleId: CapsuleId, conclusion: WorkingConclusion) => Promise<void>;
 }
 
@@ -77,7 +86,14 @@ function localDate(timestamp: number): string {
   return LOCAL_DATE_FORMATTER.format(new Date(timestamp));
 }
 
-function CapsuleDetail({ busy, capsule, onSave }: CapsuleDetailProps) {
+function CapsuleDetail({
+  busy,
+  capsule,
+  onBranch,
+  onChallenge,
+  onContinue,
+  onSave,
+}: CapsuleDetailProps) {
   const [draft, setDraft] = useState<WorkingConclusion>(() => capsule.conclusion);
   const [insights, setInsights] = useState(() => capsule.conclusion.insights.join('\n'));
   const [observations, setObservations] = useState(() => (
@@ -109,8 +125,37 @@ function CapsuleDetail({ busy, capsule, onSave }: CapsuleDetailProps) {
     <section aria-labelledby="capsule-detail-title" className="capsule-detail">
       <h3 id="capsule-detail-title">{capsule.title}</h3>
       <p className="capsule-detail__date">{localDate(capsule.createdAt)}</p>
+      <div aria-label="Revisit capsule" className="capsule-detail__revisit">
+        <button
+          className="capsule-detail__revisit-primary touch-target"
+          disabled={busy}
+          onClick={() => { void onContinue(capsule.id); }}
+          type="button"
+        >
+          <Play aria-hidden="true" size={17} />
+          Continue developing
+        </button>
+        <button
+          className="capsule-detail__revisit-secondary touch-target"
+          disabled={busy}
+          onClick={() => { void onBranch(capsule.id); }}
+          type="button"
+        >
+          <GitBranch aria-hidden="true" size={17} />
+          Branch into new thread
+        </button>
+        <button
+          className="capsule-detail__revisit-secondary touch-target"
+          disabled={busy}
+          onClick={() => { void onChallenge(capsule.id); }}
+          type="button"
+        >
+          <MessageCircleQuestion aria-hidden="true" size={17} />
+          Challenge this
+        </button>
+      </div>
       <label className="capsule-detail__field">
-        <span>Current conclusion</span>
+        <span>Working conclusion</span>
         <textarea
           onChange={(event) => {
             const thesis = event.currentTarget.value;
@@ -168,7 +213,10 @@ export function CapsuleLibrary({
   busy,
   capsules,
   currentThread,
+  onBranchCapsule,
+  onChallengeCapsule,
   onClose,
+  onContinueCapsule,
   onDeleteAll,
   onDeleteCapsule,
   onDeleteThread,
@@ -216,6 +264,24 @@ export function CapsuleLibrary({
       setNotice('Capsule updated.');
     } catch {
       setError('The capsule edit could not be saved. Your local draft remains on screen.');
+    }
+  };
+
+  const revisitCapsule = async (
+    action: (capsuleId: CapsuleId) => Promise<boolean>,
+    capsuleId: CapsuleId,
+  ): Promise<void> => {
+    if (busy) {
+      return;
+    }
+    setError(null);
+    setNotice(null);
+    try {
+      if (await action(capsuleId)) {
+        onClose();
+      }
+    } catch {
+      setError('This capsule could not be opened. Its saved content is unchanged.');
     }
   };
 
@@ -349,7 +415,7 @@ export function CapsuleLibrary({
           <div className="capsule-library__empty">
             <Database aria-hidden="true" size={34} strokeWidth={1.4} />
             <p>No capsules yet.</p>
-            <span>Finished conclusions you save will collect here.</span>
+            <span>Saved working conclusions collect here.</span>
           </div>
         ) : selected === null ? (
           <ol aria-label="Saved capsules" className="capsule-library__list">
@@ -375,6 +441,9 @@ export function CapsuleLibrary({
             busy={busy}
             capsule={selected}
             key={selected.id}
+            onBranch={(capsuleId) => revisitCapsule(onBranchCapsule, capsuleId)}
+            onChallenge={(capsuleId) => revisitCapsule(onChallengeCapsule, capsuleId)}
+            onContinue={(capsuleId) => revisitCapsule(onContinueCapsule, capsuleId)}
             onSave={updateCapsule}
           />
         )}

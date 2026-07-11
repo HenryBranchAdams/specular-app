@@ -1,6 +1,6 @@
 # Specular
 
-Specular is a private thinking companion that asks the next useful question, offers an explicit Challenge, and can draft a grounded working conclusion. The same bounded domain contracts and stateless operation service power the PWA, native JSON API, and ChatGPT/MCP app.
+Specular is a private, question-led workspace for developing ideas, clarifying concepts, testing theses, and working through decisions. It asks one focused question at a time, offers an explicit Challenge, and can draft a grounded working conclusion. The same bounded domain contracts and stateless operation service power the PWA, native JSON API, and ChatGPT/MCP app.
 
 ## Standalone web app
 

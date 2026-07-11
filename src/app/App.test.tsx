@@ -55,14 +55,14 @@ import type { SpecularDependencies } from './use-specular';
 const styles = readFileSync(join(process.cwd(), 'src/styles.css'), 'utf8');
 
 const STARTERS = [
-  'What are you thinking about?',
-  'Give me a hot take.',
-  'Had any new ideas lately?',
-  'What can’t you quite articulate?',
-  'What’s been on your mind?',
-  'Bring me something unfinished.',
-  'What are you reconsidering?',
-  'What feels true but still blurry?',
+  'What idea do you want to develop?',
+  'Clarify a difficult concept.',
+  'Pressure-test an investment thesis.',
+  'Work through a strategic decision.',
+  'Shape a creative direction.',
+  'Strengthen an argument.',
+  'Find the load-bearing assumption.',
+  'Turn scattered notes into a working position.',
 ] as const;
 
 const STARTER_OPACITY_PATTERN = /--starter-opacity:\s*(\d+(?:\.\d+)?)/gu;
@@ -303,7 +303,7 @@ describe('Specular mobile thinking loop', () => {
 
     await user.click(await screen.findByRole('button', { name: STARTERS[3] }));
 
-    expect(screen.getByRole('textbox', { name: 'Your thought' })).toHaveFocus();
+    expect(screen.getByRole('textbox', { name: 'Idea, context, or response' })).toHaveFocus();
     expect(startThread).not.toHaveBeenCalled();
     expect(submitUserTurn).not.toHaveBeenCalled();
     expect(challenge).not.toHaveBeenCalled();
@@ -339,8 +339,8 @@ describe('Specular mobile thinking loop', () => {
     const { dependencies } = await createFixture();
     render(<App dependencies={dependencies} />);
 
-    const composer = screen.getByRole('textbox', { name: 'Your thought' });
-    const send = screen.getByRole('button', { name: 'Send thought' });
+    const composer = screen.getByRole('textbox', { name: 'Idea, context, or response' });
+    const send = screen.getByRole('button', { name: 'Send input' });
 
     expect(composer).toHaveClass('touch-target');
     expect(send).toHaveClass('touch-target');
@@ -363,7 +363,7 @@ describe('Specular mobile thinking loop', () => {
     );
     await screen.findByRole('heading', { name: thread.title });
 
-    const composer = screen.getByRole('textbox', { name: 'Your thought' });
+    const composer = screen.getByRole('textbox', { name: 'Idea, context, or response' });
     await user.type(composer, 'A typed thought stays here.');
     await user.click(screen.getByRole('button', { name: 'Start voice' }));
 
@@ -409,8 +409,8 @@ describe('Specular mobile thinking loop', () => {
     expect(within(transcript).getByText(exchange.assistantTranscript)).toBeVisible();
     expect(screen.getAllByRole('log', { name: 'Conversation history' })).toHaveLength(1);
     expect(composer).toHaveValue('A typed thought stays here.');
-    expect(screen.getByRole('button', { name: 'Challenge me' })).toBeVisible();
-    expect(screen.getByRole('button', { name: 'Draft a conclusion' })).toBeVisible();
+    expect(screen.getByRole('button', { name: 'Challenge this' })).toBeVisible();
+    expect(screen.getByRole('button', { name: 'Draft a working conclusion' })).toBeVisible();
 
     await user.click(screen.getByRole('button', { name: 'Stop voice' }));
     expect(harness.stop).toHaveBeenCalledOnce();
@@ -431,7 +431,7 @@ describe('Specular mobile thinking loop', () => {
       />,
     );
 
-    const composer = await screen.findByRole('textbox', { name: 'Your thought' });
+    const composer = await screen.findByRole('textbox', { name: 'Idea, context, or response' });
     await user.type(composer, 'Do not erase this draft.');
     await user.click(screen.getByRole('button', { name: 'Start voice' }));
     act(() => {
@@ -446,7 +446,7 @@ describe('Specular mobile thinking loop', () => {
     expect(screen.getByRole('button', { name: 'Start voice' })).toBeEnabled();
     expect(composer).toHaveValue('Do not erase this draft.');
     expect(composer).toHaveFocus();
-    expect(screen.getByRole('button', { name: 'Send thought' })).toBeEnabled();
+    expect(screen.getByRole('button', { name: 'Send input' })).toBeEnabled();
   });
 
   it('stops voice before a Challenge or conclusion operation proceeds', async () => {
@@ -464,8 +464,8 @@ describe('Specular mobile thinking loop', () => {
 
     await user.click(await screen.findByRole('button', { name: 'Start voice' }));
     act(() => { harness.callbacks?.onStatus('listening'); });
-    const challenge = screen.getByRole('button', { name: 'Challenge me' });
-    const conclusion = screen.getByRole('button', { name: 'Draft a conclusion' });
+    const challenge = screen.getByRole('button', { name: 'Challenge this' });
+    const conclusion = screen.getByRole('button', { name: 'Draft a working conclusion' });
     expect(challenge).toBeDisabled();
     expect(conclusion).toBeDisabled();
     expect(fixture.provider.challengeCalls).toBe(0);
@@ -474,7 +474,7 @@ describe('Specular mobile thinking loop', () => {
     expect(challenge).toBeEnabled();
     await user.click(challenge);
     expect(await screen.findByRole('button', { name: 'Start voice' })).toBeEnabled();
-    expect(screen.getByRole('button', { name: 'Draft a conclusion' })).toBeVisible();
+    expect(screen.getByRole('button', { name: 'Draft a working conclusion' })).toBeVisible();
   });
 
   it('keeps a pre-initialization draft but waits to send until repositories load', async () => {
@@ -490,10 +490,10 @@ describe('Specular mobile thinking loop', () => {
     await waitFor(() => {
       expect(listThreads).toHaveBeenCalledOnce();
     });
-    expect(screen.getByText('Loading your private local thread.')).toBeInTheDocument();
+    expect(screen.getByText('Loading your private local workspace.')).toBeInTheDocument();
 
-    const composer = screen.getByRole('textbox', { name: 'Your thought' });
-    const send = screen.getByRole('button', { name: 'Send thought' });
+    const composer = screen.getByRole('textbox', { name: 'Idea, context, or response' });
+    const send = screen.getByRole('button', { name: 'Send input' });
     await user.type(composer, 'Keep this draft while local history loads.');
 
     expect(composer).toHaveValue('Keep this draft while local history loads.');
@@ -512,7 +512,7 @@ describe('Specular mobile thinking loop', () => {
       expect(send).toBeEnabled();
     });
     expect(composer).toHaveValue('Keep this draft while local history loads.');
-    expect(screen.queryByText('Loading your private local thread.')).not.toBeInTheDocument();
+    expect(screen.queryByText('Loading your private local workspace.')).not.toBeInTheDocument();
 
     await user.click(send);
 
@@ -530,9 +530,9 @@ describe('Specular mobile thinking loop', () => {
     const user = userEvent.setup();
     render(<App dependencies={dependencies} />);
 
-    const composer = screen.getByRole('textbox', { name: 'Your thought' });
+    const composer = screen.getByRole('textbox', { name: 'Idea, context, or response' });
     await user.type(composer, 'I can’t tell what evidence would be enough.');
-    await user.click(screen.getByRole('button', { name: 'Send thought' }));
+    await user.click(screen.getByRole('button', { name: 'Send input' }));
 
     expect(await screen.findByText('I can’t tell what evidence would be enough.')).toBeVisible();
     expect(screen.getByText('Sending…')).toBeVisible();
@@ -559,6 +559,27 @@ describe('Specular mobile thinking loop', () => {
 
     expect(await screen.findByText(VALID_QUESTION.question)).toBeVisible();
     expect(screen.queryByText('Sending…')).not.toBeInTheDocument();
+  });
+
+  it('derives a meaningful local title from the first submitted input', async () => {
+    const fixture = await createFixture();
+    const user = userEvent.setup();
+    render(<App dependencies={fixture.dependencies} />);
+
+    const composer = screen.getByRole('textbox', { name: 'Idea, context, or response' });
+    await user.type(
+      composer,
+      'I’m exploring a business that turns complex compliance updates into brief operating checklists for small manufacturers.',
+    );
+    await user.click(screen.getByRole('button', { name: 'Send input' }));
+
+    expect(await screen.findByRole('heading', {
+      name: 'A business that turns complex compliance updates into brief operating…',
+    })).toBeVisible();
+    const [thread] = await fixture.repositories.threads.list();
+    expect(thread?.title).toBe(
+      'A business that turns complex compliance updates into brief operating…',
+    );
   });
 
   it('keeps history scrollable and marks only the latest Specular question current', async () => {
@@ -588,12 +609,12 @@ describe('Specular mobile thinking loop', () => {
     const user = userEvent.setup();
     render(<App dependencies={fixture.dependencies} />);
 
-    await user.click(await screen.findByRole('button', { name: 'Challenge me' }));
+    await user.click(await screen.findByRole('button', { name: 'Challenge this' }));
     expect(challenge).toHaveBeenCalledTimes(1);
     expect(await screen.findByText('Which stakeholder bears the cost if this assumption fails?'))
       .toBeVisible();
 
-    await user.click(screen.getByRole('button', { name: 'Draft a conclusion' }));
+    await user.click(screen.getByRole('button', { name: 'Draft a working conclusion' }));
     expect(draftConclusion).toHaveBeenCalledTimes(1);
     expect(await screen.findByText('Conclusion draft ready.')).toBeVisible();
   });
@@ -605,7 +626,7 @@ describe('Specular mobile thinking loop', () => {
     const user = userEvent.setup();
     render(<App dependencies={dependencies} />);
 
-    const composer = screen.getByRole('textbox', { name: 'Your thought' });
+    const composer = screen.getByRole('textbox', { name: 'Idea, context, or response' });
     await user.type(composer, '<img src=x onerror=alert(1)> unfinished');
     await user.keyboard('{Control>}{Enter}{/Control}');
 
@@ -631,7 +652,7 @@ describe('Specular mobile thinking loop', () => {
     await screen.findByRole('button', { name: STARTERS[0] });
     fixture.repositories.close();
 
-    const composer = screen.getByRole('textbox', { name: 'Your thought' });
+    const composer = screen.getByRole('textbox', { name: 'Idea, context, or response' });
     await user.type(composer, 'Keep this unfinished thought safe.');
     await user.keyboard('{Control>}{Enter}{/Control}');
 
@@ -649,7 +670,7 @@ describe('Specular mobile thinking loop', () => {
     await screen.findByRole('button', { name: STARTERS[0] });
     fixture.repositories.close();
 
-    const composer = screen.getByRole('textbox', { name: 'Your thought' });
+    const composer = screen.getByRole('textbox', { name: 'Idea, context, or response' });
     await user.type(composer, 'Do not discard this draft either.');
     await user.keyboard('{Control>}{Enter}{/Control}');
 
@@ -667,7 +688,7 @@ describe('Specular mobile thinking loop', () => {
     const user = userEvent.setup();
     render(<App dependencies={fixture.dependencies} />);
 
-    await user.click(await screen.findByRole('button', { name: 'Challenge me' }));
+    await user.click(await screen.findByRole('button', { name: 'Challenge this' }));
 
     expect(await screen.findByRole('alert')).toBeVisible();
     expect(screen.queryByRole('button', { name: 'Retry' }))
@@ -682,7 +703,7 @@ describe('Specular mobile thinking loop', () => {
     const user = userEvent.setup();
     render(<App dependencies={fixture.dependencies} />);
 
-    await user.click(await screen.findByRole('button', { name: 'Draft a conclusion' }));
+    await user.click(await screen.findByRole('button', { name: 'Draft a working conclusion' }));
 
     expect(await screen.findByRole('alert')).toBeVisible();
     expect(screen.queryByRole('button', { name: 'Retry' }))

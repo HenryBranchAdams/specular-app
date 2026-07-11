@@ -48,6 +48,7 @@ export interface SpecularTurnWrite {
 }
 
 export interface FinishedThreadWrite {
+  capsule?: Capsule;
   completedThread: Thread;
   freshThread: Thread;
 }

@@ -13,7 +13,7 @@ export default defineConfig({
       manifest: {
         name: 'Specular',
         short_name: 'Specular',
-        description: 'A private thinking companion that asks the next useful question.',
+        description: 'A private workspace for developing ideas, testing theses, and making decisions.',
         start_url: '/',
         scope: '/',
         display: 'standalone',

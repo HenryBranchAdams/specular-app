@@ -6,6 +6,7 @@ import {
 import { CapsuleLibrary } from '../components/CapsuleLibrary';
 import { Composer } from '../components/Composer';
 import { ConclusionEditor } from '../components/ConclusionEditor';
+import { ReasoningMap } from '../components/ReasoningMap';
 import { StarterDeck } from '../components/StarterDeck';
 import { StorageRecovery } from '../components/StorageRecovery';
 import { ThreadActions } from '../components/ThreadActions';
@@ -145,7 +146,7 @@ export function App({
       <section
         aria-busy={!specular.initialized}
         aria-label={specular.conclusion === null
-          ? hasConversation ? 'Active conversation' : 'Start a thought'
+          ? hasConversation ? 'Active conversation' : 'Start a topic'
           : 'Edit conclusion'}
         className={`conversation-plane${specular.conclusion === null
           ? ''
@@ -173,6 +174,10 @@ export function App({
           <StarterDeck onActivate={focusComposer} />
         )}
       </section>
+
+      {specular.thread === null ? null : (
+        <ReasoningMap understanding={specular.thread.understanding} />
+      )}
 
       {specular.conclusion === null ? (
         <div className="interaction-dock">
@@ -211,7 +216,7 @@ export function App({
           {specular.notice}
         </div>
         <p className="sr-only" aria-live="polite">
-          {specular.initialized ? '' : 'Loading your private local thread.'}
+          {specular.initialized ? '' : 'Loading your private local workspace.'}
         </p>
       </div>
 
@@ -221,7 +226,10 @@ export function App({
         currentThread={specular.thread === null
           ? null
           : { id: specular.thread.id, title: specular.thread.title }}
+        onBranchCapsule={specular.branchCapsule}
+        onChallengeCapsule={specular.challengeCapsule}
         onClose={closeCapsules}
+        onContinueCapsule={specular.continueCapsule}
         onDeleteAll={specular.deleteAll}
         onDeleteCapsule={specular.deleteCapsule}
         onDeleteThread={specular.deleteThread}

@@ -2,13 +2,13 @@
 
 **Status:** Approved by Henry on 2026-07-09  
 **Scope:** Production target for the mobile web/PWA and ChatGPT app  
-**Product thesis:** Specular inverts the usual LLM relationship. The system asks adaptive questions so the user does the thinking, contributes the original insight, and remains the final authority.
+**Product thesis:** Specular is a question-led workspace for developing ideas. It asks adaptive questions so the user does the thinking, pressure-tests the current thesis on request, and leaves with an editable working conclusion.
 
 ## 1. Product Vision
 
-Specular is a private, mobile-first thinking companion for thoughts that are unfinished, difficult to articulate, worth challenging, or ready to be distilled. It should feel curious rather than authoritative. It may form a conclusion, but only when the user explicitly requests one, and it must present that conclusion as a provisional reading that the user is expected to edit or reject.
+Specular is a private, mobile-first workspace for ideas, concepts, theses, decisions, arguments, and creative directions that are unfinished or worth pressure-testing. It should feel precise and curious rather than intimate, therapeutic, or authoritative. It may form a conclusion, but only when the user explicitly requests one, and it must present that conclusion as a provisional reading that the user is expected to edit or reject.
 
-The product succeeds when a user leaves with language, distinctions, or insights that are recognizably their own. It fails when the model replaces reflection with a polished answer, rewards passivity, flatters the user, or turns the exchange into a lecture.
+The product succeeds when a user leaves with clearer language, distinctions, evidence needs, or insights that remain recognizably their own. It fails when the model replaces the user's reasoning with a polished answer, rewards passivity, flatters the user, or turns the exchange into a lecture.
 
 ## 2. Product Principles
 
@@ -54,16 +54,16 @@ The default posture is curious. The **Challenge me** action grants permission fo
 
 ### 3.1 Empty state
 
-The first screen is an animated deck of interchangeable opening copy, including lines such as:
+The first screen is an animated deck of interchangeable, object-focused starting points:
 
-- “What are you thinking about?”
-- “Give me a hot take.”
-- “Had any new ideas lately?”
-- “What can’t you quite articulate?”
-- “What’s been on your mind?”
-- “Bring me something unfinished.”
-- “What are you reconsidering?”
-- “What feels true but still blurry?”
+- “What idea do you want to develop?”
+- “Clarify a difficult concept.”
+- “Pressure-test an investment thesis.”
+- “Work through a strategic decision.”
+- “Shape a creative direction.”
+- “Strengthen an argument.”
+- “Find the load-bearing assumption.”
+- “Turn scattered notes into a working position.”
 
 One line is visually dominant while adjacent options drift vertically. Tapping a line focuses the composer. The selected line does not select a hidden mode or influence the questioning strategy; the user’s actual input determines the session. Typing and voice input remain immediately available. Motion pauses on interaction and becomes a static list when reduced motion is enabled.
 
@@ -81,7 +81,7 @@ There is no dashboard, mode picker, progress bar, feed, score, streak, or gamifi
 
 Normal Specular turns contain at most one short setup sentence followed by one question, use no more than 45 words, and contain one question mark. The question itself remains understandable without the setup sentence.
 
-### 3.3 Challenge me
+### 3.3 Challenge this
 
 Challenge is always user-invoked. The challenge planner evaluates the current thread and chooses one of two response shapes:
 
@@ -108,9 +108,9 @@ The initial working thesis uses no more than 150 words. Supporting material cont
 
 The user can:
 
-- **Keep digging:** return to the same thread with the working conclusion available as provisional context;
+- **Continue developing:** return to the same thread with the working conclusion available as provisional context;
 - **Save as capsule:** save the edited conclusion and its supporting structure;
-- **Finish:** close the line of inquiry and return to a fresh start.
+- **Save & finish:** atomically save the edited conclusion as a capsule, close the line of inquiry, and return to a fresh start.
 
 ### 3.5 Capsules
 

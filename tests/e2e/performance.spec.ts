@@ -43,12 +43,12 @@ test('scripted mobile interactions produce no task longer than 50 milliseconds',
   await submitThought(page, 'The launch handoff is still the constraint.');
 
   await markOperation(page, 'challenge-transition');
-  await page.getByRole('button', { name: 'Challenge me' }).click();
+  await page.getByRole('button', { name: 'Challenge this' }).click();
   await expect(page.getByText(/stakeholder absorbs the cost/iu)).toBeVisible();
 
   await markOperation(page, 'conclusion-transition');
-  await page.getByRole('button', { name: 'Draft a conclusion' }).click();
-  await expect(page.getByRole('textbox', { name: 'My current read is…' })).toBeVisible();
+  await page.getByRole('button', { name: 'Draft a working conclusion' }).click();
+  await expect(page.getByRole('textbox', { name: 'Working conclusion' })).toBeVisible();
 
   await markOperation(page, 'capsule-navigation');
   await page.getByRole('button', { name: 'Save as capsule' }).click();

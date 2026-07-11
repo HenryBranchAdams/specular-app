@@ -64,9 +64,9 @@ export function ConclusionEditor({
     >
       <div className="conclusion-editor__fields">
         <label className="conclusion-field conclusion-field--thesis">
-          <span className="conclusion-field__label">My current read is…</span>
+          <span className="conclusion-field__label">Working conclusion</span>
           <textarea
-            aria-label="My current read is…"
+            aria-label="Working conclusion"
             aria-describedby="conclusion-thesis-guide"
             onChange={(event) => {
               const thesis = event.currentTarget.value;
@@ -82,7 +82,7 @@ export function ConclusionEditor({
 
         <fieldset className="conclusion-fieldset">
           <legend>Original insights</legend>
-          <p>Keep 3–5 insights that are distinctly yours.</p>
+          <p>Keep 3–5 insights that materially shape this conclusion.</p>
           {draft.insights.map((insight, index) => (
             <label className="conclusion-field" key={`insight-${String(index)}`}>
               <span className="sr-only">Original insight {String(index + 1)}</span>
@@ -148,7 +148,7 @@ export function ConclusionEditor({
           onClick={() => { onKeepDigging(conclusionForAction()); }}
           type="button"
         >
-          Keep digging
+          Continue developing
         </button>
         <button
           className="conclusion-editor__action touch-target"
@@ -164,7 +164,7 @@ export function ConclusionEditor({
           onClick={() => { onFinish(conclusionForAction()); }}
           type="button"
         >
-          Finish
+          Save &amp; finish
         </button>
       </div>
     </form>
