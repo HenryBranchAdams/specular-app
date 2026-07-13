@@ -4,6 +4,7 @@ import {
   containsProhibitedQuestion,
   questionMarkCount,
   validateConclusionAuthorship,
+  validateOperationResponse,
   validateOperationResult,
   wordCount,
 } from './validators';
@@ -506,5 +507,33 @@ describe('validateOperationResult', () => {
     };
 
     expect(validateOperationResult('conclusion', result).kind).toBe('working_conclusion');
+  });
+});
+
+describe('validateOperationResponse', () => {
+  const safety = {
+    kind: 'immediate_safety',
+    guidance: 'Contact immediate support now.',
+    question: 'Can you contact one trusted person now?',
+  } as const;
+
+  it.each(['next_question', 'challenge', 'conclusion'] as const)(
+    'accepts immediate safety for %s',
+    (operation) => {
+      expect(validateOperationResponse(operation, safety)).toEqual(safety);
+    },
+  );
+
+  it('keeps normal operation substitution invalid', () => {
+    expect(() => validateOperationResponse('challenge', normalResult(
+      'Which customer would notice the difference first?',
+    ))).toThrow(/challenge_shape/);
+  });
+
+  it('does not accept a safety discriminator with unknown fields', () => {
+    expect(() => validateOperationResponse('next_question', {
+      ...safety,
+      provenance: [],
+    })).toThrow(/schema_invalid/);
   });
 });

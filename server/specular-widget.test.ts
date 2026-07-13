@@ -31,6 +31,10 @@ describe('Specular widget source', () => {
     expect(source).toContain('Question');
     expect(source).toContain('Test this');
     expect(source).toContain('Testing question');
+    expect(source).toContain("case 'counter_position':");
+    expect(source).toContain('Counter-position');
+    expect(source).toContain("case 'immediate_safety':");
+    expect(source).toContain('Safety');
     expect(source).toContain('Immediate support');
     expect(source).toContain('Gather this thread');
     expect(source).toContain('Exact words from this thread');
@@ -41,5 +45,27 @@ describe('Specular widget source', () => {
     expect(source).toContain('prefers-reduced-motion: reduce');
     expect(source).toContain('prefers-contrast: more');
     expect(source).toContain('forced-colors: active');
+  });
+
+  it('keeps counter-positions distinct from text-only immediate support', async () => {
+    const source = await readFile(resolve(process.cwd(), 'public/specular-widget.html'), 'utf8');
+    const counterPositionCase = source.slice(
+      source.indexOf("case 'counter_position':"),
+      source.indexOf("case 'immediate_safety':"),
+    );
+    const immediateSafetyCase = source.slice(
+      source.indexOf("case 'immediate_safety':"),
+      source.indexOf("case 'working_conclusion':"),
+    );
+
+    expect(counterPositionCase).toContain("setText(operationLabel, 'Test')");
+    expect(counterPositionCase).toContain("setText(subtype, 'Counter-position')");
+    expect(counterPositionCase).toContain('value.counterPosition');
+    expect(counterPositionCase).not.toContain("setText(operationLabel, 'Safety')");
+    expect(immediateSafetyCase).toContain("setText(operationLabel, 'Safety')");
+    expect(immediateSafetyCase).toContain("setText(subtype, 'Immediate support')");
+    expect(immediateSafetyCase).toContain('value.guidance');
+    expect(immediateSafetyCase).toContain('value.question');
+    expect(immediateSafetyCase).not.toContain('innerHTML');
   });
 });

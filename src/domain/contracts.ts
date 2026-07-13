@@ -1,5 +1,6 @@
 import type {
   ChallengeResult,
+  ImmediateSafetyResult,
   NextQuestionResult,
   ThreadContext,
   WorkingConclusionResult,
@@ -15,10 +16,12 @@ export type {
   CounterPositionChallengeResult,
   DeliveryState,
   GlobalId,
+  ImmediateSafetyResult,
   Modality,
   NextQuestionResult,
   Operation,
   OperationResult,
+  OperationResponse,
   OwnerScope,
   RequestId,
   SourceTurnRange,
@@ -40,9 +43,9 @@ export type {
 export const OWNER_SCOPE = 'local' as const;
 
 export interface QuestioningProvider {
-  nextQuestion(context: ThreadContext): Promise<NextQuestionResult>;
-  challenge(context: ThreadContext): Promise<ChallengeResult>;
-  draftConclusion(context: ThreadContext): Promise<WorkingConclusionResult>;
+  nextQuestion(context: ThreadContext): Promise<NextQuestionResult | ImmediateSafetyResult>;
+  challenge(context: ThreadContext): Promise<ChallengeResult | ImmediateSafetyResult>;
+  draftConclusion(context: ThreadContext): Promise<WorkingConclusionResult | ImmediateSafetyResult>;
 }
 
 export function assertNever(value: never): never {

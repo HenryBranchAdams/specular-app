@@ -1,9 +1,7 @@
 import { assertNever } from '../src/domain/contracts';
 import type {
-  Operation,
-  OperationResult,
+  ImmediateSafetyResult,
   ThreadContext,
-  TurnId,
 } from '../src/domain/contracts';
 import type { CrisisRegion } from './config';
 
@@ -61,54 +59,12 @@ function safetyQuestion(): string {
   return 'Can you move away from anything you could use for harm and contact one trusted person now?';
 }
 
-function sourceTurnId(context: ThreadContext): TurnId {
-  const turn = [...context.turns].reverse().find((candidate) => candidate.role === 'user');
-  if (turn === undefined) {
-    throw new Error('A safety response requires a source user turn.');
-  }
-  return turn.id;
-}
-
 export function createSafetyResult(
-  operation: Operation,
-  context: ThreadContext,
   region: CrisisRegion,
-): OperationResult {
-  const guidance = regionalGuidance(region);
-  const question = safetyQuestion();
-
-  switch (operation) {
-    case 'next_question':
-      return {
-        kind: 'question',
-        setup: guidance,
-        question,
-        understanding: context.understanding,
-      };
-    case 'challenge':
-      return {
-        kind: 'counter_position',
-        counterPosition: `${guidance} Your immediate safety takes priority, and you remain in control of what you share.`,
-        question,
-      };
-    case 'conclusion':
-      return {
-        kind: 'working_conclusion',
-        thesis: guidance,
-        insights: [
-          'Immediate safety takes priority over completing the reflection.',
-          question,
-          'You remain in control of what you share and can continue after contacting support.',
-        ],
-        observations: [],
-        tensions: [],
-        caveats: ['This response does not diagnose or replace immediate human support.'],
-        provenance: [{
-          turnId: sourceTurnId(context),
-          excerpt: 'An immediate safety concern needs attention.',
-        }],
-      };
-    default:
-      return assertNever(operation);
-  }
+): ImmediateSafetyResult {
+  return {
+    kind: 'immediate_safety',
+    guidance: regionalGuidance(region),
+    question: safetyQuestion(),
+  };
 }

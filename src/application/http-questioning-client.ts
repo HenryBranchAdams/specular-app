@@ -2,6 +2,7 @@ import { z } from 'zod';
 import { assertNever } from '../domain/contracts';
 import type {
   ChallengeResult,
+  ImmediateSafetyResult,
   NextQuestionResult,
   Operation,
   QuestioningProvider,
@@ -14,7 +15,7 @@ import {
   specularErrorSchema,
   threadContextSchema,
 } from '../domain/schemas';
-import { validateOperationResult } from '../domain/validators';
+import { validateOperationResponse } from '../domain/validators';
 
 const apiSuccessSchema = z.object({
   ok: z.literal(true),
@@ -116,28 +117,34 @@ export class HttpQuestioningClient implements QuestioningProvider {
     this.timeoutMs = options.timeoutMs ?? 15_000;
   }
 
-  async nextQuestion(context: ThreadContext): Promise<NextQuestionResult> {
+  async nextQuestion(
+    context: ThreadContext,
+  ): Promise<NextQuestionResult | ImmediateSafetyResult> {
     const value = await this.request('next_question', context);
     try {
-      return validateOperationResult('next_question', value);
+      return validateOperationResponse('next_question', value);
     } catch {
       throw new QuestioningClientError('invalid_output');
     }
   }
 
-  async challenge(context: ThreadContext): Promise<ChallengeResult> {
+  async challenge(
+    context: ThreadContext,
+  ): Promise<ChallengeResult | ImmediateSafetyResult> {
     const value = await this.request('challenge', context);
     try {
-      return validateOperationResult('challenge', value);
+      return validateOperationResponse('challenge', value);
     } catch {
       throw new QuestioningClientError('invalid_output');
     }
   }
 
-  async draftConclusion(context: ThreadContext): Promise<WorkingConclusionResult> {
+  async draftConclusion(
+    context: ThreadContext,
+  ): Promise<WorkingConclusionResult | ImmediateSafetyResult> {
     const value = await this.request('conclusion', context);
     try {
-      return validateOperationResult('conclusion', value);
+      return validateOperationResponse('conclusion', value);
     } catch {
       throw new QuestioningClientError('invalid_output');
     }

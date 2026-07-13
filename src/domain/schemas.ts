@@ -93,6 +93,12 @@ export const counterPositionChallengeResultSchema = z.object({
   question: resultTextSchema,
 }).strict();
 
+export const immediateSafetyResultSchema = z.object({
+  kind: z.literal('immediate_safety'),
+  guidance: resultTextSchema,
+  question: resultTextSchema,
+}).strict();
+
 export const challengeResultSchema = z.discriminatedUnion('kind', [
   blindSpotChallengeResultSchema,
   counterPositionChallengeResultSchema,
@@ -103,6 +109,11 @@ export const operationResultSchema = z.discriminatedUnion('kind', [
   blindSpotChallengeResultSchema,
   counterPositionChallengeResultSchema,
   workingConclusionResultSchema,
+]);
+
+export const operationResponseSchema = z.union([
+  operationResultSchema,
+  immediateSafetyResultSchema,
 ]);
 
 export const turnSchema = z.object({
@@ -228,6 +239,8 @@ export type ChallengeResult = z.infer<typeof challengeResultSchema>;
 export type WorkingConclusionResult = z.infer<typeof workingConclusionResultSchema>;
 export type WorkingConclusion = z.infer<typeof workingConclusionSchema>;
 export type OperationResult = z.infer<typeof operationResultSchema>;
+export type ImmediateSafetyResult = z.infer<typeof immediateSafetyResultSchema>;
+export type OperationResponse = z.infer<typeof operationResponseSchema>;
 export type Turn = z.infer<typeof turnSchema>;
 export type Thread = z.infer<typeof threadSchema>;
 export type SourceTurnRange = z.infer<typeof sourceTurnRangeSchema>;

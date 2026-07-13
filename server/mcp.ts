@@ -18,14 +18,19 @@ import { z as z4 } from 'zod/v4';
 import { assertNever } from '../src/domain/contracts';
 import type {
   Operation,
-  OperationResult,
+  OperationResponse,
   RequestId,
   SpecularError,
   ThreadContext,
 } from '../src/domain/contracts';
 import {
   challengeResultSchema,
+  immediateSafetyResultSchema,
+  MAX_IDENTIFIER_LENGTH,
+  MAX_PROVENANCE_ITEMS,
   MAX_RESULT_TEXT_LENGTH,
+  MAX_UNDERSTANDING_ITEM_LENGTH,
+  MAX_UNDERSTANDING_ITEMS,
   nextQuestionResultSchema,
   requestIdSchema,
   threadContextSchema,
@@ -86,22 +91,105 @@ type RegisterCompatibleAppTool = <
 // cast at this one registration boundary so handlers remain fully typed.
 const registerCompatibleAppTool = registerAppTool as unknown as RegisterCompatibleAppTool;
 
-const challengeResultTextSchema = z4
+const toolResultTextSchema = z4
   .string()
   .trim()
   .min(1)
   .max(MAX_RESULT_TEXT_LENGTH);
 
-const challengeToolOutputSchema = z4.object({
-  kind: z4.enum(['blind_spot', 'counter_position']),
-  question: challengeResultTextSchema,
-  counterPosition: challengeResultTextSchema.optional(),
+const toolUnderstandingItemSchema = z4
+  .string()
+  .trim()
+  .min(1)
+  .max(MAX_UNDERSTANDING_ITEM_LENGTH);
+
+const toolUnderstandingItemsSchema = z4
+  .array(toolUnderstandingItemSchema)
+  .max(MAX_UNDERSTANDING_ITEMS);
+
+const toolUnderstandingSchema = z4.object({
+  claims: toolUnderstandingItemsSchema,
+  observations: toolUnderstandingItemsSchema,
+  stakeholders: toolUnderstandingItemsSchema,
+  contexts: toolUnderstandingItemsSchema,
+  distinctions: toolUnderstandingItemsSchema,
+  tensions: toolUnderstandingItemsSchema,
+  exploredBlindSpots: toolUnderstandingItemsSchema,
+  unexploredBlindSpots: toolUnderstandingItemsSchema,
+}).strict();
+
+const toolProvenanceSchema = z4.object({
+  turnId: z4
+    .string()
+    .min(1)
+    .max(MAX_IDENTIFIER_LENGTH)
+    .regex(/^[A-Za-z0-9][A-Za-z0-9._:-]*$/),
+  excerpt: z4
+    .string()
+    .trim()
+    .min(1)
+    .max(MAX_UNDERSTANDING_ITEM_LENGTH),
+}).strict();
+
+const safetyJsonBranch = {
+  type: 'object',
+  properties: {
+    kind: { type: 'string', const: 'immediate_safety' },
+    guidance: {},
+    question: {},
+  },
+  required: ['kind', 'guidance', 'question'],
+  additionalProperties: false,
+} as const;
+
+const nextQuestionToolOutputSchema = z4.object({
+  kind: z4.enum(['question', 'immediate_safety']),
+  setup: toolResultTextSchema.optional(),
+  question: toolResultTextSchema,
+  understanding: toolUnderstandingSchema.optional(),
+  guidance: toolResultTextSchema.optional(),
 }).strict().check(({ value, issues }) => {
-  if (!challengeResultSchema.safeParse(value).success) {
+  if (
+    !nextQuestionResultSchema.safeParse(value).success
+    && !immediateSafetyResultSchema.safeParse(value).success
+  ) {
     issues.push({
       code: 'custom',
       input: value,
-      message: 'The result must match exactly one shared Challenge shape.',
+      message: 'The result must match the shared next-question or immediate-safety shape.',
+    });
+  }
+}).meta({
+  oneOf: [
+    {
+      type: 'object',
+      properties: {
+        kind: { type: 'string', const: 'question' },
+        setup: {},
+        question: {},
+        understanding: {},
+      },
+      required: ['kind', 'question', 'understanding'],
+      additionalProperties: false,
+    },
+    safetyJsonBranch,
+  ],
+});
+
+const challengeToolOutputSchema = z4.object({
+  kind: z4.enum(['blind_spot', 'counter_position', 'immediate_safety']),
+  question: toolResultTextSchema,
+  counterPosition: toolResultTextSchema.optional(),
+  guidance: toolResultTextSchema.optional(),
+}).strict().check(({ value, issues }) => {
+  if (
+    !challengeResultSchema.safeParse(value).success
+    && !immediateSafetyResultSchema.safeParse(value).success
+  ) {
+    issues.push({
+      code: 'custom',
+      input: value,
+      message: 'The result must match a shared Challenge or immediate-safety shape.',
     });
   }
 }).meta({
@@ -110,11 +198,7 @@ const challengeToolOutputSchema = z4.object({
       type: 'object',
       properties: {
         kind: { type: 'string', const: 'blind_spot' },
-        question: {
-          type: 'string',
-          minLength: 1,
-          maxLength: MAX_RESULT_TEXT_LENGTH,
-        },
+        question: {},
       },
       required: ['kind', 'question'],
       additionalProperties: false,
@@ -123,20 +207,62 @@ const challengeToolOutputSchema = z4.object({
       type: 'object',
       properties: {
         kind: { type: 'string', const: 'counter_position' },
-        counterPosition: {
-          type: 'string',
-          minLength: 1,
-          maxLength: MAX_RESULT_TEXT_LENGTH,
-        },
-        question: {
-          type: 'string',
-          minLength: 1,
-          maxLength: MAX_RESULT_TEXT_LENGTH,
-        },
+        counterPosition: {},
+        question: {},
       },
       required: ['kind', 'counterPosition', 'question'],
       additionalProperties: false,
     },
+    safetyJsonBranch,
+  ],
+});
+
+const conclusionToolOutputSchema = z4.object({
+  kind: z4.enum(['working_conclusion', 'immediate_safety']),
+  thesis: toolResultTextSchema.optional(),
+  insights: z4.array(toolResultTextSchema).min(1).max(5).optional(),
+  observations: z4.array(toolResultTextSchema).max(10).optional(),
+  tensions: z4.array(toolResultTextSchema).max(3).optional(),
+  caveats: z4.array(toolResultTextSchema).max(10).optional(),
+  provenance: z4.array(toolProvenanceSchema).min(1).max(MAX_PROVENANCE_ITEMS).optional(),
+  guidance: toolResultTextSchema.optional(),
+  question: toolResultTextSchema.optional(),
+}).strict().check(({ value, issues }) => {
+  if (
+    !workingConclusionResultSchema.safeParse(value).success
+    && !immediateSafetyResultSchema.safeParse(value).success
+  ) {
+    issues.push({
+      code: 'custom',
+      input: value,
+      message: 'The result must match the shared gathered-notes or immediate-safety shape.',
+    });
+  }
+}).meta({
+  oneOf: [
+    {
+      type: 'object',
+      properties: {
+        kind: { type: 'string', const: 'working_conclusion' },
+        thesis: {},
+        insights: {},
+        observations: {},
+        tensions: {},
+        caveats: {},
+        provenance: {},
+      },
+      required: [
+        'kind',
+        'thesis',
+        'insights',
+        'observations',
+        'tensions',
+        'caveats',
+        'provenance',
+      ],
+      additionalProperties: false,
+    },
+    safetyJsonBranch,
   ],
 });
 
@@ -183,7 +309,7 @@ function toolMetadata(invoking: string, invoked: string) {
   };
 }
 
-function textFallback(value: OperationResult): string {
+function textFallback(value: OperationResponse): string {
   switch (value.kind) {
     case 'question':
       return value.setup === undefined
@@ -195,6 +321,8 @@ function textFallback(value: OperationResult): string {
       return `Test this thread: ${value.counterPosition} ${value.question}`;
     case 'working_conclusion':
       return `Gather this thread — exact user-authored excerpt organized; no new content drafted: ${value.thesis}`;
+    case 'immediate_safety':
+      return `Immediate support: ${value.guidance} ${value.question}`;
     default:
       return assertNever(value);
   }
@@ -278,7 +406,7 @@ export function createSpecularMcpServer(
       title: 'Ask the next question',
       description: 'Ask one concise, independent next question using only the supplied thread context.',
       inputSchema: inputSchemaFor('next_question'),
-      outputSchema: nextQuestionResultSchema,
+      outputSchema: nextQuestionToolOutputSchema,
       annotations: TOOL_ANNOTATIONS,
       _meta: toolMetadata('Finding the next question…', 'Next question ready.'),
     },
@@ -316,7 +444,7 @@ export function createSpecularMcpServer(
       title: 'Gather this thread',
       description: 'Organize distinct exact user-authored excerpts from accepted user turns; do not draft, paraphrase, or add content.',
       inputSchema: inputSchemaFor('conclusion'),
-      outputSchema: workingConclusionResultSchema,
+      outputSchema: conclusionToolOutputSchema,
       annotations: TOOL_ANNOTATIONS,
       _meta: toolMetadata(
         'Gathering exact user-authored excerpts without drafting new content…',

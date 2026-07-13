@@ -7,6 +7,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 import { assertNever } from '../src/domain/contracts';
 import type {
   OperationResult,
+  OperationResponse,
   SpecularErrorCode,
 } from '../src/domain/contracts';
 import {
@@ -22,6 +23,7 @@ import {
   EXPECTED_ANNOTATIONS,
   EXPECTED_TOOL_COPY,
   EXPECTED_TOOL_STATUS,
+  IMMEDIATE_SAFETY,
   PRIVATE_SENTINEL,
   RESOURCE_URI,
   RecordingOperationService,
@@ -100,6 +102,9 @@ describe('createSpecularMcpServer descriptors and resource', () => {
       expect(serializedInput).toContain('"additionalProperties":false');
 
       const serializedOutput = JSON.stringify(tool.outputSchema);
+      expect(serializedOutput).toContain('immediate_safety');
+      expect(serializedOutput).toContain('guidance');
+      expect(serializedOutput).toContain('"additionalProperties":false');
       switch (name) {
         case 'next_question':
           expect(serializedOutput).toContain('question');
@@ -119,7 +124,7 @@ describe('createSpecularMcpServer descriptors and resource', () => {
     });
   });
 
-  it('advertises the two exact conditional Challenge output shapes', async () => {
+  it('advertises the three exact conditional Challenge output shapes', async () => {
     const { client } = await connectMcp(new RecordingOperationService());
     const listed = await client.listTools();
     const challenge = listed.tools.find((tool) => tool.name === 'challenge');
@@ -127,7 +132,7 @@ describe('createSpecularMcpServer descriptors and resource', () => {
     const branches = outputSchema?.oneOf as JsonSchema[] | undefined;
 
     expect(outputSchema?.type).toBe('object');
-    expect(branches).toHaveLength(2);
+    expect(branches).toHaveLength(3);
     expect(branches?.map((branch) => ({
       additionalProperties: branch.additionalProperties,
       kind: branch.properties?.kind?.const,
@@ -147,6 +152,13 @@ describe('createSpecularMcpServer descriptors and resource', () => {
         kind: 'counter_position',
         properties: ['counterPosition', 'kind', 'question'],
         required: ['counterPosition', 'kind', 'question'],
+        type: 'object',
+      },
+      {
+        additionalProperties: false,
+        kind: 'immediate_safety',
+        properties: ['guidance', 'kind', 'question'],
+        required: ['guidance', 'kind', 'question'],
         type: 'object',
       },
     ]);
@@ -177,6 +189,48 @@ describe('createSpecularMcpServer descriptors and resource', () => {
     expect(result.structuredContent).toEqual(valid);
     expectTextResult(result);
   });
+
+  it.each([
+    ['next_question', 'next_question'],
+    ['challenge', 'challenge'],
+    ['draft_conclusion', 'conclusion'],
+  ] as const)(
+    'accepts strict immediate safety through the real %s output boundary',
+    async (tool, operation) => {
+      const service = new RecordingOperationService(() => ({
+        ok: true,
+        value: IMMEDIATE_SAFETY,
+      }));
+      const { client } = await connectMcp(service);
+      const result = await call(client, tool, context(operation));
+
+      expect(result.isError).not.toBe(true);
+      expect(result.structuredContent).toEqual(IMMEDIATE_SAFETY);
+      expectTextResult(result);
+      expect(JSON.stringify(result.content)).toContain('Immediate support');
+    },
+  );
+
+  it.each([
+    ['next_question', 'next_question'],
+    ['challenge', 'challenge'],
+    ['draft_conclusion', 'conclusion'],
+  ] as const)(
+    'rejects unknown immediate-safety fields through the real %s output boundary',
+    async (tool, operation) => {
+      const service = new RecordingOperationService(() => ({
+        ok: true,
+        value: { ...IMMEDIATE_SAFETY, extra: 'rejected' } as unknown as OperationResponse,
+      }));
+      const { client } = await connectMcp(service);
+      await client.listTools();
+      const result = await call(client, tool, context(operation));
+
+      expect(result.isError).toBe(true);
+      expect(result.structuredContent).toBeUndefined();
+      expectTextResult(result);
+    },
+  );
 
   it.each([
     {
@@ -310,6 +364,26 @@ describe('createSpecularMcpServer operation delegation', () => {
     expect(gatheredText.join(' ')).toContain('no new content drafted');
     expect(gatheredText.join(' ')).not.toContain('Working conclusion');
   });
+
+  it.each([
+    ['next_question', 'next_question'],
+    ['challenge', 'challenge'],
+    ['draft_conclusion', 'conclusion'],
+  ] as const)(
+    'returns local immediate safety for %s without provider work',
+    async (tool, operation) => {
+      const provider = new ScriptedProvider();
+      const { client } = await connectMcp(serviceWithProvider(provider));
+      const result = await call(client, tool, context(operation, {
+        content: 'I am going to kill myself tonight and I have the means ready.',
+      }));
+
+      expect(result.structuredContent).toMatchObject({ kind: 'immediate_safety' });
+      expect(JSON.stringify(result.structuredContent)).not.toContain('provenance');
+      expect(provider.generateCalls).toBe(0);
+      expect(provider.repairCalls).toBe(0);
+    },
+  );
 
   it.each([
     {
@@ -450,6 +524,12 @@ describe('shared model validation and MCP errors', () => {
       tool: 'draft_conclusion' as const,
       operation: 'conclusion' as const,
       invalid: { ...VALID_CONCLUSION, provenance: [] },
+    },
+    {
+      label: 'the local-only immediate-safety discriminator',
+      tool: 'next_question' as const,
+      operation: 'next_question' as const,
+      invalid: IMMEDIATE_SAFETY,
     },
   ])('enforces $label through one repair and never returns the invalid payload', async ({
     invalid,

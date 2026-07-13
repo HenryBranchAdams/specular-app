@@ -8,6 +8,7 @@ import {
 import { expect } from 'vitest';
 import { assertNever } from '../src/domain/contracts';
 import type {
+  ImmediateSafetyResult,
   Operation,
   OperationResult,
   ThreadContext,
@@ -55,6 +56,12 @@ export const VALID_CHALLENGE = {
   kind: 'blind_spot',
   question: 'Which evidence would distinguish useful caution from avoidable delay?',
 } as const;
+
+export const IMMEDIATE_SAFETY: ImmediateSafetyResult = {
+  kind: 'immediate_safety',
+  guidance: 'Call 911 now or call or text 988; you can continue here after contacting immediate support.',
+  question: 'Can you move away from anything you could use for harm and contact one trusted person now?',
+};
 
 const CONCLUSION_SOURCE = [
   'A smaller reversible launch best preserves learning.',

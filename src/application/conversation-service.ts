@@ -6,6 +6,7 @@ import type {
   Capsule,
   CapsuleId,
   ChallengeResult,
+  ImmediateSafetyResult,
   Modality,
   NextQuestionResult,
   Operation,
@@ -33,6 +34,8 @@ import {
 } from '../domain/schemas';
 import {
   ProductValidationError,
+  validateConclusionAuthorship,
+  validateOperationResponse,
   validateOperationResult,
 } from '../domain/validators';
 import type { SpecularExport } from '../storage/export';
@@ -58,7 +61,7 @@ export interface SubmittedTurnResult {
   thread: Thread;
   userTurn: Turn;
   responseTurn: Turn;
-  output: NextQuestionResult;
+  output: NextQuestionResult | ImmediateSafetyResult;
 }
 
 export interface VoiceExchangeResult {
@@ -70,13 +73,13 @@ export interface VoiceExchangeResult {
 export interface ChallengeOperationResult {
   thread: Thread;
   responseTurn: Turn;
-  output: ChallengeResult;
+  output: ChallengeResult | ImmediateSafetyResult;
 }
 
 export interface ConclusionOperationResult {
   thread: Thread;
   responseTurn: Turn;
-  output: WorkingConclusion;
+  output: WorkingConclusion | ImmediateSafetyResult;
 }
 
 export interface SaveCapsuleInput {
@@ -166,6 +169,10 @@ function challengeContent(output: ChallengeResult): string {
     default:
       return assertNever(output);
   }
+}
+
+function immediateSafetyContent(output: ImmediateSafetyResult): string {
+  return `${output.guidance}\n\n${output.question}`;
 }
 
 function providerError(error: unknown): SpecularError {
@@ -402,9 +409,9 @@ export class ConversationService {
     }
     await this.recordTelemetry('challenge_requested');
 
-    let output: ChallengeResult;
+    let output: ChallengeResult | ImmediateSafetyResult;
     try {
-      output = validateOperationResult('challenge', await this.client.challenge(context));
+      output = validateOperationResponse('challenge', await this.client.challenge(context));
     } catch (error) {
       const mapped = providerError(error);
       await this.recordTelemetry('recoverable_error');
@@ -417,8 +424,10 @@ export class ConversationService {
       const responseTurn = this.createSpecularTurn(
         threadId,
         nextPosition(turns),
-        'challenge',
-        challengeContent(output),
+        output.kind === 'immediate_safety' ? 'next_question' : 'challenge',
+        output.kind === 'immediate_safety'
+          ? immediateSafetyContent(output)
+          : challengeContent(output),
       );
       const updatedThread = threadSchema.parse({
         ...thread,
@@ -445,18 +454,19 @@ export class ConversationService {
     }
     await this.recordTelemetry('conclusion_requested');
 
-    let output: WorkingConclusion;
+    let output: WorkingConclusion | ImmediateSafetyResult;
     try {
-      const validated = validateOperationResult(
+      const validated = validateOperationResponse(
         'conclusion',
         await this.client.draftConclusion(context),
       );
-      output = workingConclusionSchema.parse({
-        ...validated,
-        editState: 'organized',
-      });
-      if (!hasAcceptedUserProvenance(output, context.turns)) {
-        return failure('invalid_output');
+      if (validated.kind === 'immediate_safety') {
+        output = validated;
+      } else {
+        output = workingConclusionSchema.parse({
+          ...validateConclusionAuthorship(validated, context.turns),
+          editState: 'organized',
+        });
       }
     } catch (error) {
       const mapped = providerError(error);
@@ -470,14 +480,18 @@ export class ConversationService {
       const responseTurn = this.createSpecularTurn(
         threadId,
         nextPosition(turns),
-        'conclusion',
-        output.thesis,
+        output.kind === 'immediate_safety' ? 'next_question' : 'conclusion',
+        output.kind === 'immediate_safety'
+          ? immediateSafetyContent(output)
+          : output.thesis,
       );
       const updatedThread = threadSchema.parse({
         ...thread,
         updatedAt: this.now(),
         turnIds: appendTurnId(thread.turnIds, responseTurn.id),
-        provisionalConclusion: output,
+        ...(output.kind === 'immediate_safety'
+          ? {}
+          : { provisionalConclusion: output }),
       });
       await this.repositories.conversation.persistSpecularTurn({
         thread: updatedThread,
@@ -820,9 +834,9 @@ export class ConversationService {
       return this.failUserTurn(userTurn, serviceError('storage_failure'));
     }
 
-    let output: NextQuestionResult;
+    let output: NextQuestionResult | ImmediateSafetyResult;
     try {
-      output = validateOperationResult(
+      output = validateOperationResponse(
         'next_question',
         await this.client.nextQuestion(context),
       );
@@ -841,7 +855,9 @@ export class ConversationService {
         userTurn.threadId,
         nextPosition(turns),
         'next_question',
-        nextQuestionContent(output),
+        output.kind === 'immediate_safety'
+          ? immediateSafetyContent(output)
+          : nextQuestionContent(output),
       );
       const updatedThread = threadSchema.parse({
         ...thread,
@@ -850,7 +866,9 @@ export class ConversationService {
           appendTurnId(thread.turnIds, acceptedUserTurn.id),
           responseTurn.id,
         ),
-        understanding: output.understanding,
+        understanding: output.kind === 'immediate_safety'
+          ? context.understanding
+          : output.understanding,
       });
       await this.repositories.conversation.acceptExchange({
         thread: updatedThread,

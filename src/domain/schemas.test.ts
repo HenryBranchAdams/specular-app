@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import { threadContextSchema } from './schemas';
+import {
+  MAX_RESULT_TEXT_LENGTH,
+  immediateSafetyResultSchema,
+  operationResponseSchema,
+  threadContextSchema,
+} from './schemas';
 
 const EMPTY_UNDERSTANDING = {
   claims: [],
@@ -71,5 +76,28 @@ describe('threadContextSchema', () => {
     ]));
 
     expect(result.success).toBe(false);
+  });
+});
+
+describe('immediateSafetyResultSchema', () => {
+  const valid = {
+    kind: 'immediate_safety',
+    guidance: 'Contact immediate support now.',
+    question: 'Can you contact one trusted person now?',
+  } as const;
+
+  it('accepts the strict shared response through the operation response union', () => {
+    expect(immediateSafetyResultSchema.parse(valid)).toEqual(valid);
+    expect(operationResponseSchema.parse(valid)).toEqual(valid);
+  });
+
+  it.each([
+    { ...valid, guidance: '' },
+    { ...valid, question: ' ' },
+    { ...valid, guidance: 'g'.repeat(MAX_RESULT_TEXT_LENGTH + 1) },
+    { ...valid, question: 'q'.repeat(MAX_RESULT_TEXT_LENGTH + 1) },
+    { ...valid, extra: 'not allowed' },
+  ])('rejects invalid, overlong, or unknown fields', (value) => {
+    expect(immediateSafetyResultSchema.safeParse(value).success).toBe(false);
   });
 });

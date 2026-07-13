@@ -27,6 +27,7 @@ import {
 import { QuestioningClientError } from '../application/http-questioning-client';
 import type {
   ChallengeResult,
+  ImmediateSafetyResult,
   NextQuestionResult,
   QuestioningProvider,
   Thread,
@@ -78,6 +79,12 @@ const VALID_QUESTION: NextQuestionResult = {
   understanding: EMPTY_UNDERSTANDING,
 };
 
+const IMMEDIATE_SAFETY: ImmediateSafetyResult = {
+  kind: 'immediate_safety',
+  guidance: 'Contact immediate support now.',
+  question: 'Can you contact one trusted person now?',
+};
+
 interface Deferred<T> {
   promise: Promise<T>;
   resolve(value: T): void;
@@ -104,16 +111,22 @@ class DeterministicQuestioningProvider implements QuestioningProvider {
   challengeCalls = 0;
   conclusionCalls = 0;
 
-  nextQuestionHandler: (context: ThreadContext) => Promise<NextQuestionResult> =
+  nextQuestionHandler: (
+    context: ThreadContext,
+  ) => Promise<NextQuestionResult | ImmediateSafetyResult> =
     () => Promise.resolve(VALID_QUESTION);
 
-  challengeHandler: (context: ThreadContext) => Promise<ChallengeResult> =
+  challengeHandler: (
+    context: ThreadContext,
+  ) => Promise<ChallengeResult | ImmediateSafetyResult> =
     () => Promise.resolve({
       kind: 'blind_spot',
       question: 'Which stakeholder bears the cost if this assumption fails?',
     });
 
-  conclusionHandler: (context: ThreadContext) => Promise<WorkingConclusionResult> =
+  conclusionHandler: (
+    context: ThreadContext,
+  ) => Promise<WorkingConclusionResult | ImmediateSafetyResult> =
     (context) => {
       const sourceTurns = context.turns.filter((turn) => (
         turn.role === 'user' && turn.deliveryState === 'accepted'
@@ -137,17 +150,19 @@ class DeterministicQuestioningProvider implements QuestioningProvider {
       });
     };
 
-  nextQuestion(context: ThreadContext): Promise<NextQuestionResult> {
+  nextQuestion(context: ThreadContext): Promise<NextQuestionResult | ImmediateSafetyResult> {
     this.nextQuestionCalls += 1;
     return this.nextQuestionHandler(context);
   }
 
-  challenge(context: ThreadContext): Promise<ChallengeResult> {
+  challenge(context: ThreadContext): Promise<ChallengeResult | ImmediateSafetyResult> {
     this.challengeCalls += 1;
     return this.challengeHandler(context);
   }
 
-  draftConclusion(context: ThreadContext): Promise<WorkingConclusionResult> {
+  draftConclusion(
+    context: ThreadContext,
+  ): Promise<WorkingConclusionResult | ImmediateSafetyResult> {
     this.conclusionCalls += 1;
     return this.conclusionHandler(context);
   }
@@ -618,6 +633,37 @@ describe('Specular mobile thinking loop', () => {
     await user.click(screen.getByRole('button', { name: 'Gather this thread' }));
     expect(draftConclusion).toHaveBeenCalledTimes(1);
     expect(await screen.findByText('Notes gathered.')).toBeVisible();
+  });
+
+  it('renders immediate gathering support without opening the conclusion editor', async () => {
+    const fixture = await createFixture();
+    fixture.provider.conclusionHandler = () => Promise.resolve(IMMEDIATE_SAFETY);
+    await seedActiveThread(fixture);
+    const user = userEvent.setup();
+    render(<App dependencies={fixture.dependencies} />);
+
+    await user.type(
+      await screen.findByRole('textbox', { name: 'Idea, context, or response' }),
+      'A second user-authored detail makes gathering available.',
+    );
+    await user.click(screen.getByRole('button', { name: 'Send input' }));
+    await screen.findByRole('button', { name: 'Gather this thread' });
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: 'Gather this thread' })).toBeEnabled();
+    });
+    await user.click(screen.getByRole('button', { name: 'Gather this thread' }));
+
+    await waitFor(() => {
+      expect(screen.getAllByTestId('specular-turn').at(-1))
+        .toHaveTextContent(IMMEDIATE_SAFETY.guidance);
+    });
+    const safetyTurn = screen.getAllByTestId('specular-turn').at(-1);
+    expect(safetyTurn).toHaveTextContent(IMMEDIATE_SAFETY.question);
+    expect(screen.queryByRole('textbox', { name: 'Working position' }))
+      .not.toBeInTheDocument();
+    expect(screen.queryByText('Notes gathered.')).not.toBeInTheDocument();
+    const [thread] = await fixture.repositories.threads.list();
+    expect(thread?.provisionalConclusion).toBeUndefined();
   });
 
   it('announces turns and typed errors while preserving composer focus', async () => {

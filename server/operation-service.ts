@@ -3,6 +3,7 @@ import { assertNever } from '../src/domain/contracts';
 import type {
   Operation,
   OperationResult,
+  OperationResponse,
   RequestId,
   SpecularError,
   SpecularErrorCode,
@@ -74,7 +75,7 @@ export interface RepairingQuestioningProvider {
 }
 
 export type OperationServiceResult =
-  | { ok: true; value: OperationResult }
+  | { ok: true; value: OperationResponse }
   | { ok: false; error: SpecularError };
 
 export interface ExecuteOperationRequest {
@@ -187,10 +188,6 @@ function validationCode(error: unknown): ProductValidationErrorCode {
   return error instanceof ProductValidationError ? error.code : 'schema_invalid';
 }
 
-function validate(operation: Operation, value: unknown): OperationResult {
-  return validateOperationResult(operation, value);
-}
-
 function validateProviderResult(
   operation: Operation,
   value: unknown,
@@ -260,10 +257,7 @@ export function createOperationService(options: OperationServiceOptions): Operat
       let usage: ProviderTokenUsage | undefined;
 
       if (requiresImmediateSafetyResponse(request.context)) {
-        const value = validate(
-          request.operation,
-          createSafetyResult(request.operation, request.context, options.safetyRegion),
-        );
+        const value = createSafetyResult(options.safetyRegion);
         await recordSafely(options.telemetry, telemetryEvent(
           options.provider,
           request,

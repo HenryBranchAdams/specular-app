@@ -23,11 +23,13 @@ import {
 } from '../application/conversation-service';
 import type {
   ChallengeResult,
+  ImmediateSafetyResult,
   NextQuestionResult,
   QuestioningProvider,
   Thread,
   ThreadContext,
   ThreadUnderstanding,
+  WorkingConclusion,
   WorkingConclusionResult,
 } from '../domain/contracts';
 import {
@@ -145,6 +147,15 @@ function unwrap<T>(result: ServiceResult<T>): T {
     throw new Error(`Expected success, received ${result.error.code}.`);
   }
   return result.value;
+}
+
+function workingConclusion(
+  output: WorkingConclusion | ImmediateSafetyResult,
+): WorkingConclusion {
+  if (output.kind === 'immediate_safety') {
+    throw new Error('Expected gathered notes, received immediate safety guidance.');
+  }
+  return output;
 }
 
 async function seedThread(fixture: Fixture, title = 'Decision clarity'): Promise<Thread> {
@@ -324,7 +335,7 @@ describe('Task 6 application flow', () => {
     const capsule = unwrap(await fixture.service.saveCapsule({
       threadId: thread.id,
       title: thread.title,
-      conclusion: drafted.output,
+      conclusion: workingConclusion(drafted.output),
       sourceTurnRange: { startTurnId: first.id, endTurnId: last.id },
     }));
     const { result } = renderHook(() => useSpecular(fixture.dependencies));
@@ -399,7 +410,7 @@ describe('Task 6 application flow', () => {
     const { result } = renderHook(() => useSpecular(fixture.dependencies));
     await waitFor(() => { expect(result.current.initialized).toBe(true); });
 
-    act(() => { result.current.finish(drafted.output); });
+    act(() => { result.current.finish(workingConclusion(drafted.output)); });
     await waitFor(() => {
       expect(result.current.thread?.id).not.toBe(oldThread.id);
       expect(result.current.activity).toBeNull();
@@ -431,7 +442,7 @@ describe('Task 6 application flow', () => {
     unwrap(await fixture.service.saveCapsule({
       threadId: thread.id,
       title: 'Delete all capsule',
-      conclusion: drafted.output,
+      conclusion: workingConclusion(drafted.output),
       sourceTurnRange: { startTurnId: first.id, endTurnId: last.id },
     }));
     await fixture.repositories.preferences.put('task6-preference', true);

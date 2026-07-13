@@ -487,10 +487,19 @@
             break;
           case 'counter_position':
             plane.dataset.resultKind = 'challenge';
+            setText(operationLabel, 'Test');
+            setText(subtype, 'Counter-position');
+            primaryResult.dataset.emphasis = 'challenge';
+            setText(primaryResult, value.counterPosition);
+            setText(questionLine, value.question);
+            questionLine.hidden = false;
+            break;
+          case 'immediate_safety':
+            plane.dataset.resultKind = 'safety';
             setText(operationLabel, 'Safety');
             setText(subtype, 'Immediate support');
             primaryResult.dataset.emphasis = 'challenge';
-            setText(primaryResult, value.counterPosition);
+            setText(primaryResult, value.guidance);
             setText(questionLine, value.question);
             questionLine.hidden = false;
             break;

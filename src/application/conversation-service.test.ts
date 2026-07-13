@@ -5,6 +5,7 @@ import {
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type {
   ChallengeResult,
+  ImmediateSafetyResult,
   NextQuestionResult,
   QuestioningProvider,
   Thread,
@@ -129,44 +130,65 @@ function abortOnNthPut(storeName: string, occurrence: number): void {
   });
 }
 
-function validConclusion(turnId: TurnId): WorkingConclusionResult {
+function validConclusion(
+  turnId: TurnId,
+  content = 'The handoff is where the launch gets stuck.',
+): WorkingConclusionResult {
+  const firstWord = content.split(/\s/u)[0];
+  if (firstWord === undefined || firstWord === content) {
+    throw new Error('Conclusion fixtures need at least two distinct exact excerpts.');
+  }
   return {
     kind: 'working_conclusion',
-    thesis: 'A smaller reversible launch best preserves learning.',
-    insights: [
-      'Coordination is the immediate constraint.',
-      'Reversibility protects the learning loop.',
-      'The first cohort can expose the decision boundary.',
+    thesis: content,
+    insights: [firstWord],
+    observations: [],
+    tensions: [],
+    caveats: [],
+    provenance: [
+      { turnId, excerpt: content },
+      { turnId, excerpt: firstWord },
     ],
-    observations: ['Prior launches stalled during handoff.'],
-    tensions: ['Speed may reduce stakeholder confidence.'],
-    caveats: ['The thread contains no customer interview evidence.'],
-    provenance: [{ turnId, excerpt: 'The handoff is where the launch gets stuck.' }],
   };
 }
 
-type NextQuestionHandler = (context: ThreadContext) => Promise<NextQuestionResult>;
-type ChallengeHandler = (context: ThreadContext) => Promise<ChallengeResult>;
-type ConclusionHandler = (context: ThreadContext) => Promise<WorkingConclusionResult>;
+const IMMEDIATE_SAFETY: ImmediateSafetyResult = {
+  kind: 'immediate_safety',
+  guidance: 'Contact immediate support now.',
+  question: 'Can you contact one trusted person now?',
+};
+
+type NextQuestionHandler = (
+  context: ThreadContext,
+) => Promise<NextQuestionResult | ImmediateSafetyResult>;
+type ChallengeHandler = (
+  context: ThreadContext,
+) => Promise<ChallengeResult | ImmediateSafetyResult>;
+type ConclusionHandler = (
+  context: ThreadContext,
+) => Promise<WorkingConclusionResult | ImmediateSafetyResult>;
 
 class CompleteTestQuestioningProvider implements QuestioningProvider {
   nextQuestionHandler: NextQuestionHandler = () => Promise.resolve(VALID_QUESTION);
   challengeHandler: ChallengeHandler = () => Promise.resolve(VALID_CHALLENGE);
   conclusionHandler: ConclusionHandler = (context) => {
-    const sourceTurnId = context.turns.find((turn) => turn.role === 'user')?.id
-      ?? turnIdSchema.parse('turn-1');
-    return Promise.resolve(validConclusion(sourceTurnId));
+    const sourceTurn = context.turns.find((turn) => turn.role === 'user');
+    return sourceTurn === undefined
+      ? Promise.reject(new Error('Gathering needs one accepted user turn.'))
+      : Promise.resolve(validConclusion(sourceTurn.id, sourceTurn.content));
   };
 
-  nextQuestion(context: ThreadContext): Promise<NextQuestionResult> {
+  nextQuestion(context: ThreadContext): Promise<NextQuestionResult | ImmediateSafetyResult> {
     return this.nextQuestionHandler(context);
   }
 
-  challenge(context: ThreadContext): Promise<ChallengeResult> {
+  challenge(context: ThreadContext): Promise<ChallengeResult | ImmediateSafetyResult> {
     return this.challengeHandler(context);
   }
 
-  draftConclusion(context: ThreadContext): Promise<WorkingConclusionResult> {
+  draftConclusion(
+    context: ThreadContext,
+  ): Promise<WorkingConclusionResult | ImmediateSafetyResult> {
     return this.conclusionHandler(context);
   }
 }
@@ -229,6 +251,24 @@ function unwrap<T>(result: ServiceResult<T>): T {
     throw new Error(`Expected success, received ${result.error.code}.`);
   }
   return result.value;
+}
+
+function workingConclusion(
+  output: WorkingConclusion | ImmediateSafetyResult,
+): WorkingConclusion {
+  if (output.kind === 'immediate_safety') {
+    throw new Error('Expected gathered notes, received immediate safety guidance.');
+  }
+  return output;
+}
+
+function nextQuestion(
+  output: NextQuestionResult | ImmediateSafetyResult,
+): NextQuestionResult {
+  if (output.kind === 'immediate_safety') {
+    throw new Error('Expected a next question, received immediate safety guidance.');
+  }
+  return output;
 }
 
 function makeThread(id: ThreadId, turnIds: TurnId[], overrides: Partial<Thread> = {}): Thread {
@@ -462,7 +502,10 @@ describe('ConversationService orchestration', () => {
     };
     client.conclusionHandler = (context) => {
       conclusionContext = context;
-      return Promise.resolve(validConclusion(exchange.userTurn.id));
+      return Promise.resolve(validConclusion(
+        exchange.userTurn.id,
+        exchange.userTurn.content,
+      ));
     };
 
     unwrap(await service.challenge(thread.id));
@@ -713,14 +756,76 @@ describe('ConversationService orchestration', () => {
     expect((await repositories.threads.get(thread.id))?.provisionalConclusion).toBeUndefined();
 
     const concluded = unwrap(await service.draftConclusion(thread.id));
-    expect(concluded.output).toMatchObject({
+    const conclusion = workingConclusion(concluded.output);
+    expect(conclusion).toMatchObject({
       kind: 'working_conclusion',
       editState: 'organized',
     });
     expect(concluded.responseTurn.operation).toBe('conclusion');
     expect((await repositories.threads.get(thread.id))?.provisionalConclusion).toEqual(
-      concluded.output,
+      conclusion,
     );
+  });
+
+  it('accepts an immediate-safety next response while preserving understanding', async () => {
+    const { client, repositories, service } = await createServiceFixture();
+    const thread = unwrap(await service.startThread('Safety interruption'));
+    await service.submitUserTurn(thread.id, 'A smaller launch may preserve learning.');
+    client.nextQuestionHandler = () => Promise.resolve(IMMEDIATE_SAFETY);
+
+    const submitted = unwrap(await service.submitUserTurn(
+      thread.id,
+      'I need immediate support for this moment.',
+    ));
+
+    expect(submitted.output).toEqual(IMMEDIATE_SAFETY);
+    expect(submitted.userTurn.deliveryState).toBe('accepted');
+    expect(submitted.responseTurn.content).toBe(
+      `${IMMEDIATE_SAFETY.guidance}\n\n${IMMEDIATE_SAFETY.question}`,
+    );
+    expect(submitted.responseTurn.operation).toBe('next_question');
+    expect(submitted.thread.understanding).toEqual(UPDATED_UNDERSTANDING);
+    expect((await repositories.threads.get(thread.id))?.understanding).toEqual(
+      UPDATED_UNDERSTANDING,
+    );
+  });
+
+  it('persists immediate-safety challenge guidance without replacing a conclusion', async () => {
+    const { client, repositories, service } = await createServiceFixture();
+    const thread = unwrap(await service.startThread('Safety challenge'));
+    await service.submitUserTurn(thread.id, 'The handoff is still uncertain.');
+    const drafted = unwrap(await service.draftConclusion(thread.id));
+    const conclusion = workingConclusion(drafted.output);
+    client.challengeHandler = () => Promise.resolve(IMMEDIATE_SAFETY);
+
+    const challenged = unwrap(await service.challenge(thread.id));
+
+    expect(challenged.output).toEqual(IMMEDIATE_SAFETY);
+    expect(challenged.responseTurn.content).toBe(
+      `${IMMEDIATE_SAFETY.guidance}\n\n${IMMEDIATE_SAFETY.question}`,
+    );
+    expect(challenged.responseTurn.operation).toBe('next_question');
+    expect((await repositories.threads.get(thread.id))?.provisionalConclusion).toEqual(
+      conclusion,
+    );
+  });
+
+  it('persists immediate-safety gathering guidance without a provisional conclusion', async () => {
+    const { client, repositories, service } = await createServiceFixture();
+    const thread = unwrap(await service.startThread('Safety gathering'));
+    await service.submitUserTurn(thread.id, 'The handoff is still uncertain.');
+    client.conclusionHandler = () => Promise.resolve(IMMEDIATE_SAFETY);
+
+    const gathered = unwrap(await service.draftConclusion(thread.id));
+
+    expect(gathered.output).toEqual(IMMEDIATE_SAFETY);
+    expect(gathered.responseTurn.content).toBe(
+      `${IMMEDIATE_SAFETY.guidance}\n\n${IMMEDIATE_SAFETY.question}`,
+    );
+    expect(gathered.responseTurn.operation).toBe('next_question');
+    expect(gathered.thread.provisionalConclusion).toBeUndefined();
+    expect((await repositories.threads.get(thread.id))?.provisionalConclusion).toBeUndefined();
+    expect(JSON.stringify(gathered.output)).not.toContain('provenance');
   });
 
   it('rejects gathered notes whose provenance points to Specular-authored text', async () => {
@@ -747,7 +852,7 @@ describe('ConversationService orchestration', () => {
     await service.submitUserTurn(thread.id, 'The handoff creates the uncertainty.');
     const drafted = unwrap(await service.draftConclusion(thread.id));
     const edited: WorkingConclusion = {
-      ...drafted.output,
+      ...workingConclusion(drafted.output),
       thesis: 'My edited thesis keeps the uncertainty visible.',
       insights: [
         'The handoff remains the constraint.',
@@ -775,7 +880,7 @@ describe('ConversationService orchestration', () => {
     const submission = unwrap(await service.submitUserTurn(thread.id, 'The handoff is the constraint.'));
     const drafted = unwrap(await service.draftConclusion(thread.id));
     const edited: WorkingConclusion = {
-      ...drafted.output,
+      ...workingConclusion(drafted.output),
       thesis: 'The user-edited thesis replaces the provider wording.',
       caveats: ['The source range is intentionally inclusive.'],
       editState: 'organized',
@@ -820,7 +925,7 @@ describe('ConversationService orchestration', () => {
       threadId: thread.id,
       title: thread.title,
       conclusion: {
-        ...drafted.output,
+        ...workingConclusion(drafted.output),
         thesis: 'One observable ownership signal should define the handoff.',
       },
       sourceTurnRange: {
@@ -862,7 +967,7 @@ describe('ConversationService orchestration', () => {
     const capsule = unwrap(await service.saveCapsule({
       threadId: source.id,
       title: source.title,
-      conclusion: drafted.output,
+      conclusion: workingConclusion(drafted.output),
       sourceTurnRange: {
         startTurnId: submission.userTurn.id,
         endTurnId: drafted.responseTurn.id,
@@ -874,13 +979,13 @@ describe('ConversationService orchestration', () => {
 
     expect(continued).toMatchObject({
       title: capsule.title,
-      understanding: submission.output.understanding,
+      understanding: nextQuestion(submission.output).understanding,
       provisionalConclusion: capsule.conclusion,
       turnIds: [],
     });
     expect(branched).toMatchObject({
       title: capsule.title + ' — branch',
-      understanding: submission.output.understanding,
+      understanding: nextQuestion(submission.output).understanding,
       provisionalConclusion: capsule.conclusion,
       turnIds: [],
     });
@@ -902,7 +1007,7 @@ describe('ConversationService orchestration', () => {
     const capsule = unwrap(await service.saveCapsule({
       threadId: thread.id,
       title: 'Stable capsule title',
-      conclusion: drafted.output,
+      conclusion: workingConclusion(drafted.output),
       sourceTurnRange: {
         startTurnId: submission.userTurn.id,
         endTurnId: drafted.responseTurn.id,
@@ -948,7 +1053,7 @@ describe('ConversationService orchestration', () => {
     const capsule = unwrap(await service.saveCapsule({
       threadId: thread.id,
       title: 'Independent retained capsule',
-      conclusion: drafted.output,
+      conclusion: workingConclusion(drafted.output),
       sourceTurnRange: {
         startTurnId: submission.userTurn.id,
         endTurnId: drafted.responseTurn.id,
@@ -989,7 +1094,7 @@ describe('ConversationService orchestration', () => {
     const capsule = unwrap(await service.saveCapsule({
       threadId: sourceThread.id,
       title: 'Cross-thread guard',
-      conclusion: drafted.output,
+      conclusion: workingConclusion(drafted.output),
       sourceTurnRange: {
         startTurnId: submission.userTurn.id,
         endTurnId: drafted.responseTurn.id,
@@ -1019,7 +1124,7 @@ describe('ConversationService orchestration', () => {
     const capsule = unwrap(await service.saveCapsule({
       threadId: thread.id,
       title: 'Validated capsule',
-      conclusion: drafted.output,
+      conclusion: workingConclusion(drafted.output),
       sourceTurnRange: {
         startTurnId: submission.userTurn.id,
         endTurnId: drafted.responseTurn.id,
@@ -1067,7 +1172,7 @@ describe('ConversationService orchestration', () => {
     const capsule = unwrap(await service.saveCapsule({
       threadId: thread.id,
       title: 'Delete this capsule',
-      conclusion: drafted.output,
+      conclusion: workingConclusion(drafted.output),
       sourceTurnRange: {
         startTurnId: submitted.userTurn.id,
         endTurnId: drafted.responseTurn.id,
@@ -1280,6 +1385,33 @@ describe('HttpQuestioningClient', () => {
     }
     expect(JSON.parse(capturedBody)).toEqual({ context });
   });
+
+  it.each(['next_question', 'challenge', 'conclusion'] as const)(
+    'returns immediate safety from a successful %s envelope',
+    async (operation) => {
+      const operationContext = threadContextSchema.parse({
+        ...context,
+        operation,
+      });
+      const client = new HttpQuestioningClient({
+        fetch: () => Promise.resolve(new Response(JSON.stringify({
+          ok: true,
+          value: IMMEDIATE_SAFETY,
+        }), {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        })),
+      });
+
+      const result = operation === 'next_question'
+        ? await client.nextQuestion(operationContext)
+        : operation === 'challenge'
+          ? await client.challenge(operationContext)
+          : await client.draftConclusion(operationContext);
+
+      expect(result).toEqual(IMMEDIATE_SAFETY);
+    },
+  );
 
   it('preserves typed server failures and rejects invalid success output', async () => {
     const rateLimited = new HttpQuestioningClient({

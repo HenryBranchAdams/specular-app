@@ -519,9 +519,16 @@ async function evaluateOperation(
     signal: new AbortController().signal,
   });
 
+  if (!result.ok || result.value.kind === 'immediate_safety') {
+    return {
+      serviceOk: false,
+      output: execution.candidate,
+    };
+  }
+
   return {
-    serviceOk: result.ok,
-    output: result.ok ? result.value : execution.candidate,
+    serviceOk: true,
+    output: result.value,
   };
 }
 

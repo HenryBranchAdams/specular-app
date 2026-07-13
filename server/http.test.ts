@@ -17,7 +17,10 @@ import {
   threadContextSchema,
   threadUnderstandingSchema,
 } from '../src/domain/schemas';
-import { validateOperationResult } from '../src/domain/validators';
+import {
+  validateOperationResponse,
+  validateOperationResult,
+} from '../src/domain/validators';
 import {
   loadServerConfig,
   type ServerConfig,
@@ -965,9 +968,12 @@ describe('stateless model HTTP service', () => {
   it.each(['next_question', 'challenge', 'conclusion'] as const)(
     'uses the conservative configured-region safety path for %s without provider work',
     async (operation) => {
+      const provider = new ScriptedRepairingProvider();
+      const telemetry = new CapturingMetadataSink();
       const { server } = await startServer({
         config: config({ crisisRegion: 'GB' }),
-        provider: new ScriptedRepairingProvider(),
+        provider,
+        telemetry,
       });
 
       const response = await nativeRequest(
@@ -975,12 +981,21 @@ describe('stateless model HTTP service', () => {
         operationRequest(operation, 'I am going to kill myself tonight and I have the means ready.'),
       );
       const value = successValue(response);
-      validateOperationResult(operation, value);
+      expect(validateOperationResponse(operation, value)).toEqual(value);
+      expect(value).toMatchObject({ kind: 'immediate_safety' });
       const serialized = JSON.stringify(value);
       expect(serialized).toContain('999 or 112');
       expect(serialized).toContain('116 123');
       expect(serialized.match(/[?？]/gu)).toHaveLength(1);
       expect(serialized).not.toMatch(/\bwhy\b/iu);
+      expect(serialized).not.toContain('working_conclusion');
+      expect(serialized).not.toContain('provenance');
+      expect(provider.generateCalls).toBe(0);
+      expect(provider.repairCalls).toBe(0);
+      expect(telemetry.events).toHaveLength(1);
+      expect(JSON.stringify(telemetry.events)).not.toContain(
+        'I am going to kill myself tonight and I have the means ready.',
+      );
     },
   );
 
@@ -997,7 +1012,9 @@ describe('stateless model HTTP service', () => {
         operationRequest('next_question', 'I am going to kill myself tonight.'),
       );
 
-      validateOperationResult('next_question', successValue(response));
+      expect(validateOperationResponse('next_question', successValue(response))).toMatchObject({
+        kind: 'immediate_safety',
+      });
     },
   );
 
@@ -1016,7 +1033,9 @@ describe('stateless model HTTP service', () => {
     );
 
     expect(response.status).toBe(200);
-    validateOperationResult('next_question', successValue(response));
+    expect(validateOperationResponse('next_question', successValue(response))).toMatchObject({
+      kind: 'immediate_safety',
+    });
   });
 
   it.each([
@@ -1034,7 +1053,9 @@ describe('stateless model HTTP service', () => {
     );
 
     expect(response.status).toBe(200);
-    validateOperationResult('next_question', successValue(response));
+    expect(validateOperationResponse('next_question', successValue(response))).toMatchObject({
+      kind: 'immediate_safety',
+    });
     expect(provider.generateCalls).toBe(0);
     expect(provider.repairCalls).toBe(0);
     expect(telemetry.events).toHaveLength(1);

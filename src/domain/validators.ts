@@ -1,13 +1,16 @@
 import { assertNever } from './contracts';
 import type {
   ChallengeResult,
+  ImmediateSafetyResult,
   NextQuestionResult,
   Operation,
   OperationResult,
+  OperationResponse,
   Turn,
   WorkingConclusionResult,
 } from './contracts';
 import {
+  immediateSafetyResultSchema,
   challengeResultSchema,
   nextQuestionResultSchema,
   workingConclusionResultSchema,
@@ -555,4 +558,31 @@ export function validateOperationResult(
     default:
       return assertNever(operation);
   }
+}
+
+export function validateOperationResponse(
+  operation: 'next_question',
+  value: unknown,
+): NextQuestionResult | ImmediateSafetyResult;
+export function validateOperationResponse(
+  operation: 'challenge',
+  value: unknown,
+): ChallengeResult | ImmediateSafetyResult;
+export function validateOperationResponse(
+  operation: 'conclusion',
+  value: unknown,
+): WorkingConclusionResult | ImmediateSafetyResult;
+export function validateOperationResponse(
+  operation: Operation,
+  value: unknown,
+): OperationResponse;
+export function validateOperationResponse(
+  operation: Operation,
+  value: unknown,
+): OperationResponse {
+  const safety = immediateSafetyResultSchema.safeParse(value);
+  if (safety.success) {
+    return safety.data;
+  }
+  return validateOperationResult(operation, value);
 }

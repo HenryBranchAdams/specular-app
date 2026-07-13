@@ -524,8 +524,12 @@ export function useSpecular(
       setView((current) => ({
         ...current,
         activity: null,
-        conclusion: result.value.output,
-        notice: 'Notes gathered.',
+        conclusion: result.value.output.kind === 'immediate_safety'
+          ? null
+          : result.value.output,
+        notice: result.value.output.kind === 'immediate_safety'
+          ? null
+          : 'Notes gathered.',
         thread: result.value.thread,
         turns: orderedUniqueTurns(current.turns, [result.value.responseTurn]),
       }));
