@@ -68,4 +68,16 @@ describe('Specular widget source', () => {
     expect(immediateSafetyCase).toContain('value.question');
     expect(immediateSafetyCase).not.toContain('innerHTML');
   });
+
+  it('renders ordinary questions without reading a setup field', async () => {
+    const source = await readFile(resolve(process.cwd(), 'public/specular-widget.html'), 'utf8');
+    const questionCase = source.slice(
+      source.indexOf("case 'question':"),
+      source.indexOf("case 'blind_spot':"),
+    );
+
+    expect(questionCase).toContain('value.question');
+    expect(questionCase).not.toContain('value.setup');
+    expect(source).not.toContain('id="setup"');
+  });
 });

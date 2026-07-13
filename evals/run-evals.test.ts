@@ -70,7 +70,7 @@ const MUTATION_CASES: {
   {
     dimension: 'noPrematureSynthesis',
     mutate: ({ operation, output }) => operation === 'next_question' && output.kind === 'question'
-      ? { ...output, setup: 'My current read is settled.' }
+      ? { ...output, question: 'My current read is settled; which concrete example changes the decision?' }
       : output,
   },
   {
@@ -121,7 +121,7 @@ const MUTATION_CASES: {
     mutate: ({ operation, output }) => operation === 'next_question' && output.kind === 'question'
       ? {
           ...output,
-          question: `${Array.from({ length: 46 }, () => 'boundary').join(' ')}?`,
+          question: `${Array.from({ length: 29 }, () => 'boundary').join(' ')}?`,
         }
       : output,
   },
@@ -219,6 +219,24 @@ describe('deterministic fixed eval runner', () => {
       expect(report.violations.some((violation) => violation.dimension === dimension)).toBe(true);
     },
   );
+
+  it('fails operation evaluation for a setup-bearing next-question object', async () => {
+    const report = await runFixedEvals(rawCorpus, {
+      caseIds: [firstCaseId()],
+      mutateOutput: ({ operation, output }) => (
+        operation === 'next_question' && output.kind === 'question'
+          ? { ...output, setup: 'My current read is settled.' }
+          : output
+      ),
+    });
+
+    expect(report.status).toBe('failed');
+    expect(report.dimensions.usefulNextQuestion).toEqual({ passed: 0, total: 1 });
+    expect(report.dimensions.mobileConcision).toEqual({ passed: 2, total: 3 });
+    expect(report.violations).toEqual(expect.arrayContaining([
+      expect.objectContaining({ operation: 'next_question' }),
+    ]));
+  });
 
   it('fails normal-operation dimensions when local immediate safety interrupts evaluation', async () => {
     const corpus = cloneCorpus() as typeof rawCorpus;

@@ -2,6 +2,7 @@ import { createHmac, randomBytes } from 'node:crypto';
 import OpenAI from 'openai';
 import { z } from 'zod';
 import type { RequestId, SpecularError, SpecularErrorCode } from '../src/domain/contracts';
+import { MAX_NEXT_QUESTION_WORDS } from '../src/domain/schemas';
 import { createServiceError } from './operation-service';
 
 const MAX_CREDENTIAL_LENGTH = 4_096;
@@ -21,7 +22,7 @@ const credentialSchema = z.object({
 const REALTIME_NORMAL_TURN_INSTRUCTIONS = [
   'Specular asks the next useful question so the user does the thinking and remains the final authority.',
   'Reply with exactly one independently understandable question and no setup sentence.',
-  'Use exactly one question mark and no more than 28 words total.',
+  `Use exactly one question mark and no more than ${String(MAX_NEXT_QUESTION_WORDS)} words total.`,
   'Never ask why or disguised why questions such as what makes you think, what led you to believe, or how come.',
   'Do not use praise, validation, filler, diagnosis, lectures, long preambles, or unsupported certainty.',
   'Do not provide a Challenge or conclusion in this voice turn; those remain separate operations that require explicit user invocation.',

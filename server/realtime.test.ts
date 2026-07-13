@@ -1,5 +1,6 @@
 import { createHmac } from 'node:crypto';
 import { describe, expect, it } from 'vitest';
+import { MAX_NEXT_QUESTION_WORDS } from '../src/domain/schemas';
 import { loadServerConfig } from './config';
 import { createServiceError } from './operation-service';
 import {
@@ -118,7 +119,9 @@ describe('OpenAI Realtime credential provider', () => {
     });
     expect(instructions.length).toBeLessThanOrEqual(1_200);
     expect(instructions.toLocaleLowerCase('en-US')).toContain('one question mark');
-    expect(instructions.toLocaleLowerCase('en-US')).toContain('28 words');
+    expect(instructions.toLocaleLowerCase('en-US')).toContain(
+      `${String(MAX_NEXT_QUESTION_WORDS)} words`,
+    );
     expect(instructions.toLocaleLowerCase('en-US')).toContain('never ask why');
     expect(instructions.toLocaleLowerCase('en-US')).toContain('filler');
     expect(instructions.toLocaleLowerCase('en-US')).toContain('challenge');

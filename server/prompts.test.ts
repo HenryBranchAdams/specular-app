@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { Operation, ThreadContext } from '../src/domain/contracts';
-import { threadIdSchema } from '../src/domain/schemas';
+import { MAX_NEXT_QUESTION_WORDS, threadIdSchema } from '../src/domain/schemas';
 import { buildOperationPrompt, buildRepairPrompt } from './prompts';
 
 const context: ThreadContext = {
@@ -47,11 +47,12 @@ describe('buildOperationPrompt', () => {
     },
   );
 
-  it('keeps ordinary questions brief and leaves setup empty', () => {
+  it('keeps ordinary questions brief and excludes setup text', () => {
     const prompt = buildOperationPrompt('next_question', context);
 
-    expect(prompt.instructions).toContain('Leave setup empty');
-    expect(prompt.instructions).toContain('28 words or fewer');
+    expect(prompt.instructions).toContain('Do not return setup text');
+    expect(prompt.instructions).toContain(`${String(MAX_NEXT_QUESTION_WORDS)} words or fewer`);
+    expect(prompt.instructions).not.toContain('Leave setup empty');
     expect(prompt.instructions).not.toContain('at most one short setup sentence');
   });
 

@@ -68,6 +68,18 @@ const VALID_NEXT_QUESTION = {
   understanding: UNDERSTANDING,
 } as const;
 
+function questionWithWordCount(count: number): string {
+  return [
+    ...Array.from({ length: count - 1 }, () => 'word'),
+    'boundary?',
+  ].join(' ');
+}
+
+const VALID_NEXT_QUESTION_AT_LIMIT = {
+  ...VALID_NEXT_QUESTION,
+  question: questionWithWordCount(28),
+} as const;
+
 const VALID_CHALLENGE = {
   kind: 'blind_spot',
   question: 'Which stakeholder bears the greatest cost if the launch misses its timing?',
@@ -755,6 +767,36 @@ describe('stateless model HTTP service', () => {
     });
   });
 
+  it.each([
+    {
+      label: 'removed setup field',
+      invalid: { ...VALID_NEXT_QUESTION, setup: 'Let us make the boundary concrete.' },
+      validationCode: 'schema_invalid',
+    },
+    {
+      label: '29-word question',
+      invalid: { ...VALID_NEXT_QUESTION, question: questionWithWordCount(29) },
+      validationCode: 'word_limit',
+    },
+  ] as const)('repairs a $label exactly once', async ({ invalid, validationCode }) => {
+    const provider = new ScriptedRepairingProvider({
+      generate: [attempt(invalid)],
+      repair: [
+        (request) => {
+          expect(request.validationCodes).toEqual([validationCode]);
+          return attempt(VALID_NEXT_QUESTION);
+        },
+      ],
+    });
+    const { server } = await startServer({ provider });
+
+    const response = await nativeRequest(server, operationRequest('next_question'));
+
+    expect(successValue(response)).toEqual(VALID_NEXT_QUESTION);
+    expect(provider.generateCalls).toBe(1);
+    expect(provider.repairCalls).toBe(1);
+  });
+
   it('repairs a structurally valid conclusion that invents authored content', async () => {
     const invented = {
       ...VALID_CONCLUSION,
@@ -817,19 +859,22 @@ describe('stateless model HTTP service', () => {
     expect(provider.repairCalls).toBe(1);
   });
 
-  it('does not repair valid output', async () => {
+  it('does not repair a valid 28-word output', async () => {
     const telemetry = new CapturingMetadataSink();
+    const provider = new ScriptedRepairingProvider({
+      generate: [attempt(VALID_NEXT_QUESTION_AT_LIMIT)],
+      repair: [new Error('Valid output must not be repaired.')],
+    });
     const { server } = await startServer({
       telemetry,
-      provider: new ScriptedRepairingProvider({
-        generate: [attempt(VALID_NEXT_QUESTION)],
-        repair: [new Error('Valid output must not be repaired.')],
-      }),
+      provider,
     });
 
     const response = await nativeRequest(server, operationRequest('next_question'));
 
-    expect(successValue(response)).toEqual(VALID_NEXT_QUESTION);
+    expect(successValue(response)).toEqual(VALID_NEXT_QUESTION_AT_LIMIT);
+    expect(provider.generateCalls).toBe(1);
+    expect(provider.repairCalls).toBe(0);
     expect(telemetry.events[0]).toMatchObject({ repairCount: 0, schemaOutcome: 'valid' });
   });
 
@@ -1213,8 +1258,9 @@ describe('OpenAI server adapter without live access', () => {
           ) {
             throw new Error('OpenAI request did not preserve the bounded privacy contract.');
           }
+          expect(JSON.stringify(body.text.format)).not.toContain('setup');
           return sdkResponse('completed', {
-            output_text: JSON.stringify({ ...VALID_NEXT_QUESTION, setup: null }),
+            output_text: JSON.stringify(VALID_NEXT_QUESTION),
           });
         },
       ]),

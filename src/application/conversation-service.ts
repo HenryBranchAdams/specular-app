@@ -154,12 +154,6 @@ function normalizeTitle(value: string | undefined, fallback: string): string {
     .slice(0, MAX_TITLE_LENGTH);
 }
 
-function nextQuestionContent(output: NextQuestionResult): string {
-  return output.setup === undefined
-    ? output.question
-    : `${output.setup}\n\n${output.question}`;
-}
-
 function challengeContent(output: ChallengeResult): string {
   switch (output.kind) {
     case 'blind_spot':
@@ -857,7 +851,7 @@ export class ConversationService {
         'next_question',
         output.kind === 'immediate_safety'
           ? immediateSafetyContent(output)
-          : nextQuestionContent(output),
+          : output.question,
       );
       const updatedThread = threadSchema.parse({
         ...thread,

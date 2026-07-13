@@ -8,6 +8,7 @@ export const MAX_UNDERSTANDING_ITEMS = 32;
 export const MAX_UNDERSTANDING_ITEM_LENGTH = 500;
 export const MAX_RESULT_TEXT_LENGTH = 4_000;
 export const MAX_PROVENANCE_ITEMS = 50;
+export const MAX_NEXT_QUESTION_WORDS = 28;
 
 const identifierSchema = z
   .string()
@@ -77,7 +78,6 @@ export const workingConclusionSchema = z.object({
 
 export const nextQuestionResultSchema = z.object({
   kind: z.literal('question'),
-  setup: resultTextSchema.optional(),
   question: resultTextSchema,
   understanding: threadUnderstandingSchema,
 }).strict();

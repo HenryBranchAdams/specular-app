@@ -1,7 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import {
+  MAX_NEXT_QUESTION_WORDS,
   MAX_RESULT_TEXT_LENGTH,
   immediateSafetyResultSchema,
+  nextQuestionResultSchema,
   operationResponseSchema,
   threadContextSchema,
 } from './schemas';
@@ -99,5 +101,30 @@ describe('immediateSafetyResultSchema', () => {
     { ...valid, extra: 'not allowed' },
   ])('rejects invalid, overlong, or unknown fields', (value) => {
     expect(immediateSafetyResultSchema.safeParse(value).success).toBe(false);
+  });
+});
+
+describe('nextQuestionResultSchema', () => {
+  const valid = {
+    kind: 'question',
+    question: 'Which customer would notice the launch change first?',
+    understanding: EMPTY_UNDERSTANDING,
+  } as const;
+
+  it('defines the ordinary-question limit once and accepts only the current fields', () => {
+    expect(MAX_NEXT_QUESTION_WORDS).toBe(28);
+    expect(nextQuestionResultSchema.parse(valid)).toEqual(valid);
+    expect(Object.keys(nextQuestionResultSchema.parse(valid)).sort()).toEqual([
+      'kind',
+      'question',
+      'understanding',
+    ]);
+  });
+
+  it('rejects the removed setup field', () => {
+    expect(nextQuestionResultSchema.safeParse({
+      ...valid,
+      setup: 'Let us make the boundary concrete.',
+    }).success).toBe(false);
   });
 });

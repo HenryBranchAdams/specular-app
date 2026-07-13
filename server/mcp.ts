@@ -144,7 +144,6 @@ const safetyJsonBranch = {
 
 const nextQuestionToolOutputSchema = z4.object({
   kind: z4.enum(['question', 'immediate_safety']),
-  setup: toolResultTextSchema.optional(),
   question: toolResultTextSchema,
   understanding: toolUnderstandingSchema.optional(),
   guidance: toolResultTextSchema.optional(),
@@ -165,7 +164,6 @@ const nextQuestionToolOutputSchema = z4.object({
       type: 'object',
       properties: {
         kind: { type: 'string', const: 'question' },
-        setup: {},
         question: {},
         understanding: {},
       },
@@ -312,9 +310,7 @@ function toolMetadata(invoking: string, invoked: string) {
 function textFallback(value: OperationResponse): string {
   switch (value.kind) {
     case 'question':
-      return value.setup === undefined
-        ? value.question
-        : `${value.setup} ${value.question}`;
+      return value.question;
     case 'blind_spot':
       return `Test this thread: ${value.question}`;
     case 'counter_position':

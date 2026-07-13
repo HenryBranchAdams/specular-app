@@ -10,8 +10,9 @@ import type {
   WorkingConclusionResult,
 } from './contracts';
 import {
-  immediateSafetyResultSchema,
   challengeResultSchema,
+  immediateSafetyResultSchema,
+  MAX_NEXT_QUESTION_WORDS,
   nextQuestionResultSchema,
   workingConclusionResultSchema,
 } from './schemas';
@@ -111,9 +112,6 @@ const NON_NOUN_TOKENS = new Set([
 ]);
 const DEMONSTRATIVES = new Set(['that', 'these', 'this', 'those']);
 const ALWAYS_UNQUALIFIED_REFERENCES = new Set(['former', 'here', 'latter']);
-const SENTENCE_TERMINATORS = new Set(['!', '.', '?', '。', '！', '？']);
-const HONORIFICS = new Set(['dr', 'jr', 'mr', 'mrs', 'ms', 'mx', 'prof', 'sr', 'st']);
-const INTERNAL_MULTI_PERIOD_ABBREVIATION = /\b(?:e\.g|i\.e)\./giu;
 
 interface ReferenceToken {
   normalized: string;
@@ -144,100 +142,6 @@ export function containsFiller(value: string): boolean {
 
 function containsUnsolicitedSynthesis(value: string): boolean {
   return UNSOLICITED_SYNTHESIS_PATTERNS.some((pattern) => pattern.test(value));
-}
-
-function setupSentenceCount(value: string): number {
-  const normalized = value.trim();
-  if (normalized.length === 0) {
-    return 0;
-  }
-
-  const internalAbbreviationPeriods = new Set<number>();
-  for (const match of normalized.matchAll(INTERNAL_MULTI_PERIOD_ABBREVIATION)) {
-    for (let offset = 0; offset < match[0].length; offset += 1) {
-      if (match[0][offset] === '.') {
-        internalAbbreviationPeriods.add(match.index + offset);
-      }
-    }
-  }
-
-  let sentenceCount = 0;
-  let hasContent = false;
-  let index = 0;
-
-  while (index < normalized.length) {
-    const character = normalized[index];
-    if (character === undefined) {
-      break;
-    }
-    if (!SENTENCE_TERMINATORS.has(character)) {
-      if (!/\s/u.test(character)) {
-        hasContent = true;
-      }
-      index += 1;
-      continue;
-    }
-
-    let clusterEnd = index + 1;
-    while (clusterEnd < normalized.length) {
-      const clusteredCharacter = normalized[clusterEnd];
-      if (clusteredCharacter === undefined || !SENTENCE_TERMINATORS.has(clusteredCharacter)) {
-        break;
-      }
-      clusterEnd += 1;
-    }
-
-    const isSinglePeriod = character === '.' && clusterEnd === index + 1;
-    if (isSinglePeriod && (
-      internalAbbreviationPeriods.has(index)
-      || isHonorificPeriod(normalized, index)
-      || isContinuingEtcPeriod(normalized, index)
-      || isNumericSeparatorPeriod(normalized, index)
-    )) {
-      index = clusterEnd;
-      continue;
-    }
-
-    if (hasContent) {
-      sentenceCount += 1;
-      hasContent = false;
-    }
-    index = clusterEnd;
-  }
-
-  return sentenceCount + (hasContent ? 1 : 0);
-}
-
-function isHonorificPeriod(value: string, periodIndex: number): boolean {
-  const honorific = /([\p{L}]+)$/u
-    .exec(value.slice(0, periodIndex))?.[1]
-    ?.toLocaleLowerCase('en-US');
-  if (honorific === undefined || !HONORIFICS.has(honorific)) {
-    return false;
-  }
-
-  return /^\s*[\p{Lu}\p{Lt}]/u.test(value.slice(periodIndex + 1));
-}
-
-function isContinuingEtcPeriod(value: string, periodIndex: number): boolean {
-  const precedingWord = /([\p{L}]+)$/u
-    .exec(value.slice(0, periodIndex))?.[1]
-    ?.toLocaleLowerCase('en-US');
-  if (precedingWord !== 'etc') {
-    return false;
-  }
-
-  const nextCharacter = /\S/u.exec(value.slice(periodIndex + 1))?.[0];
-  return nextCharacter !== undefined && !/[\p{Lu}\p{Lt}\d]/u.test(nextCharacter);
-}
-
-function isNumericSeparatorPeriod(value: string, periodIndex: number): boolean {
-  const previous = value[periodIndex - 1];
-  const next = value[periodIndex + 1];
-  return previous !== undefined
-    && next !== undefined
-    && /\d/u.test(previous)
-    && /\d/u.test(next);
 }
 
 function tokenizeQuestion(value: string): ReferenceToken[] {
@@ -386,18 +290,11 @@ function validateNextQuestion(value: unknown): NextQuestionResult {
     fail('schema_invalid', 'next_question', 'The response does not match the next-question schema.');
   }
 
-  const combined = [parsed.data.setup, parsed.data.question].filter(Boolean).join(' ');
-  validateQuestionText('next_question', combined, 45);
-  if (parsed.data.setup !== undefined && questionMarkCount(parsed.data.setup) !== 0) {
-    fail('question_count', 'next_question', 'A normal-turn setup cannot contain a question mark.');
-  }
-  if (parsed.data.setup !== undefined && setupSentenceCount(parsed.data.setup) > 1) {
-    fail('schema_invalid', 'next_question', 'A normal-turn setup can contain at most one sentence.');
-  }
+  validateQuestionText('next_question', parsed.data.question, MAX_NEXT_QUESTION_WORDS);
   if (questionMarkCount(parsed.data.question) !== 1 || !endsWithQuestionMark(parsed.data.question)) {
     fail('question_count', 'next_question', 'The normal-turn question must contain and end in exactly one question mark.');
   }
-  if (containsUnsolicitedSynthesis(combined)) {
+  if (containsUnsolicitedSynthesis(parsed.data.question)) {
     fail('unsolicited_synthesis', 'next_question', 'The response synthesizes before the user requested a conclusion.');
   }
   if (containsUnqualifiedReference(parsed.data.question)) {

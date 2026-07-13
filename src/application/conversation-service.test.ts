@@ -65,7 +65,6 @@ const UPDATED_UNDERSTANDING: ThreadUnderstanding = {
 
 const VALID_QUESTION: NextQuestionResult = {
   kind: 'question',
-  setup: 'Let us make the boundary concrete.',
   question: 'Which customer would notice the launch change first?',
   understanding: UPDATED_UNDERSTANDING,
 };
@@ -417,8 +416,8 @@ describe('ConversationService orchestration', () => {
       transcript: 'Which assumption is weakest? Which evidence would change the decision?',
     },
     {
-      label: 'over-45-word',
-      transcript: `${Array.from({ length: 46 }, () => 'boundary').join(' ')}?`,
+      label: 'over-28-word',
+      transcript: `${Array.from({ length: 29 }, () => 'boundary').join(' ')}?`,
     },
     { label: 'oversized', transcript: `${'x'.repeat(MAX_TURN_CONTENT_LENGTH)}?` },
   ])('rejects a $label final assistant voice transcript without writing', async ({ transcript }) => {
@@ -652,7 +651,7 @@ describe('ConversationService orchestration', () => {
       role: 'specular',
       operation: 'next_question',
       deliveryState: 'accepted',
-      content: 'Let us make the boundary concrete.\n\nWhich customer would notice the launch change first?',
+      content: 'Which customer would notice the launch change first?',
     });
     expect((await repositories.threads.get(thread.id))?.understanding).toEqual(
       UPDATED_UNDERSTANDING,

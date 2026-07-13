@@ -109,6 +109,7 @@ describe('createSpecularMcpServer descriptors and resource', () => {
         case 'next_question':
           expect(serializedOutput).toContain('question');
           expect(serializedOutput).toContain('understanding');
+          expect(serializedOutput).not.toContain('setup');
           break;
         case 'challenge':
           expect(serializedOutput).toContain('blind_spot');
@@ -350,13 +351,18 @@ describe('createSpecularMcpServer operation delegation', () => {
 
   it('uses testing and extractive gathering semantics in text fallbacks', async () => {
     const { client } = await connectMcp(new RecordingOperationService());
+    const questioned = await call(client, 'next_question', context('next_question'));
     const tested = await call(client, 'challenge', context('challenge'));
     const gathered = await call(client, 'draft_conclusion', context('conclusion'));
+    const questionedText = questioned.content.flatMap(
+      (block) => block.type === 'text' ? [block.text] : [],
+    );
     const testedText = tested.content.flatMap((block) => block.type === 'text' ? [block.text] : []);
     const gatheredText = gathered.content.flatMap(
       (block) => block.type === 'text' ? [block.text] : [],
     );
 
+    expect(questionedText).toEqual([VALID_NEXT_QUESTION.question]);
     expect(testedText.join(' ')).toContain('Test this thread');
     expect(testedText.join(' ')).not.toContain('Challenge');
     expect(gatheredText.join(' ')).toContain('Gather this thread');
@@ -506,7 +512,16 @@ describe('shared model validation and MCP errors', () => {
       operation: 'next_question' as const,
       invalid: {
         ...VALID_NEXT_QUESTION,
-        question: `${Array.from({ length: 46 }, () => 'boundary').join(' ')}?`,
+        question: `${Array.from({ length: 29 }, () => 'boundary').join(' ')}?`,
+      },
+    },
+    {
+      label: 'the removed setup field',
+      tool: 'next_question' as const,
+      operation: 'next_question' as const,
+      invalid: {
+        ...VALID_NEXT_QUESTION,
+        setup: 'Let us make the boundary concrete.',
       },
     },
     {
@@ -617,7 +632,10 @@ describe('shared model validation and MCP errors', () => {
           resolveProviderCompleted?.();
           resolve(attempt({
             ...VALID_NEXT_QUESTION,
-            setup: PRIVATE_SENTINEL,
+            understanding: {
+              ...VALID_NEXT_QUESTION.understanding,
+              claims: [PRIVATE_SENTINEL],
+            },
           }));
         }, { once: true });
       })],
@@ -690,15 +708,24 @@ describe('MCP request statelessness', () => {
       generate: [
         (request) => attempt({
           ...VALID_NEXT_QUESTION,
-          setup: `Current marker: ${request.context.turns[0]?.content ?? 'missing'}.`,
+          understanding: {
+            ...VALID_NEXT_QUESTION.understanding,
+            claims: [`Current marker: ${request.context.turns[0]?.content ?? 'missing'}.`],
+          },
         }),
         (request) => attempt({
           ...VALID_NEXT_QUESTION,
-          setup: `Current marker: ${request.context.turns[0]?.content ?? 'missing'}.`,
+          understanding: {
+            ...VALID_NEXT_QUESTION.understanding,
+            claims: [`Current marker: ${request.context.turns[0]?.content ?? 'missing'}.`],
+          },
         }),
         (request) => attempt({
           ...VALID_NEXT_QUESTION,
-          setup: `Current marker: ${request.context.turns[0]?.content ?? 'missing'}.`,
+          understanding: {
+            ...VALID_NEXT_QUESTION.understanding,
+            claims: [`Current marker: ${request.context.turns[0]?.content ?? 'missing'}.`],
+          },
         }),
       ],
     });

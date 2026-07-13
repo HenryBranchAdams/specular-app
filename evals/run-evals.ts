@@ -15,6 +15,7 @@ import type {
   ThreadUnderstanding,
 } from '../src/domain/contracts';
 import {
+  MAX_NEXT_QUESTION_WORDS,
   MAX_TURN_CONTENT_LENGTH,
   challengeResultSchema,
   nextQuestionResultSchema,
@@ -332,7 +333,7 @@ function outputText(output: OperationResult | undefined): string {
 
   switch (output.kind) {
     case 'question':
-      return [output.setup, output.question].filter(Boolean).join(' ');
+      return output.question;
     case 'blind_spot':
       return output.question;
     case 'counter_position':
@@ -437,7 +438,7 @@ function isMobileConcise(operation: Operation, evaluation: OperationEvaluation):
       if (!parsed.success) {
         return false;
       }
-      return wordCount([parsed.data.setup, parsed.data.question].filter(Boolean).join(' ')) <= 45;
+      return wordCount(parsed.data.question) <= MAX_NEXT_QUESTION_WORDS;
     }
     case 'challenge': {
       const parsed = challengeResultSchema.safeParse(evaluation.output);

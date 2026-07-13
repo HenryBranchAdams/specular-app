@@ -1,5 +1,6 @@
 import { assertNever } from '../src/domain/contracts';
 import type { Operation, ThreadContext } from '../src/domain/contracts';
+import { MAX_NEXT_QUESTION_WORDS } from '../src/domain/schemas';
 import type { ProductValidationErrorCode } from '../src/domain/validators';
 import type { ProviderRepairInput } from './operation-service';
 
@@ -13,7 +14,7 @@ export interface OperationPrompt {
 function operationInstruction(operation: Operation): string {
   switch (operation) {
     case 'next_question':
-      return 'Return exactly one concise, topic-focused question and an updated structured understanding. Leave setup empty.';
+      return 'Return exactly one concise, topic-focused question and an updated structured understanding. Do not return setup text.';
     case 'challenge':
       return 'Return one blind-spot or testing question. Use the blind_spot shape. Do not return a counter-position.';
     case 'conclusion':
@@ -28,7 +29,7 @@ function systemInstructions(operation: Operation): string {
     ? []
     : [
         'Ask exactly one focused question and never ask why or demand justification.',
-        'Use no setup sentence and keep the question to 28 words or fewer.',
+        `Use no setup sentence and keep the question to ${String(MAX_NEXT_QUESTION_WORDS)} words or fewer.`,
         'Prefer concrete questions about evidence, assumptions, constraints, trade-offs, stakeholders, and decision criteria.',
         'Use explicit noun phrases so every question stands on its own.',
       ];

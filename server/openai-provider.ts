@@ -39,7 +39,6 @@ const apiResultTextSchema = z.string().trim().min(1).max(MAX_RESULT_TEXT_LENGTH)
 
 const openAiNextQuestionSchema = z.object({
   kind: z.literal('question'),
-  setup: apiResultTextSchema.nullable(),
   question: apiResultTextSchema,
   understanding: threadUnderstandingSchema,
 }).strict();
@@ -69,9 +68,7 @@ function parseApiOutput(operation: Operation, value: unknown): unknown {
       if (!parsed.success) {
         return value;
       }
-      const { setup, ...required } = parsed.data;
-      const sharedValue = setup === null ? required : { ...required, setup };
-      const shared = nextQuestionResultSchema.safeParse(sharedValue);
+      const shared = nextQuestionResultSchema.safeParse(parsed.data);
       return shared.success ? shared.data : value;
     }
     case 'challenge': {

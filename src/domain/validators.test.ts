@@ -1,5 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import {
+  MAX_NEXT_QUESTION_WORDS,
+  turnSchema,
+} from './schemas';
+import {
   containsFiller,
   containsProhibitedQuestion,
   questionMarkCount,
@@ -8,7 +12,6 @@ import {
   validateOperationResult,
   wordCount,
 } from './validators';
-import { turnSchema } from './schemas';
 
 const EMPTY_UNDERSTANDING = {
   claims: [],
@@ -21,10 +24,9 @@ const EMPTY_UNDERSTANDING = {
   unexploredBlindSpots: [],
 };
 
-function normalResult(question: string, setup?: string) {
+function normalResult(question: string) {
   return {
     kind: 'question',
-    ...(setup === undefined ? {} : { setup }),
     question,
     understanding: EMPTY_UNDERSTANDING,
   };
@@ -60,7 +62,6 @@ describe('validateOperationResult', () => {
   it('accepts one concise normal question', () => {
     expect(validateOperationResult('next_question', {
       kind: 'question',
-      setup: 'Let us make the boundary concrete.',
       question: 'Which customer would notice the difference first?',
       understanding: { claims: [], observations: [], stakeholders: ['customer'], contexts: [], distinctions: [], tensions: [], exploredBlindSpots: [], unexploredBlindSpots: [] },
     }).kind).toBe('question');
@@ -90,8 +91,7 @@ describe('validateOperationResult', () => {
   it('rejects unsolicited conclusion content as a normal turn', () => {
     expect(() => validateOperationResult('next_question', {
       kind: 'question',
-      setup: 'The answer is that you should leave.',
-      question: 'Which detail supports that decision?',
+      question: 'The answer is settled; which launch detail supports the decision?',
       understanding: { claims: [], observations: [], stakeholders: [], contexts: [], distinctions: [], tensions: [], exploredBlindSpots: [], unexploredBlindSpots: [] },
     })).toThrow(/unsolicited_synthesis/);
   });
@@ -105,14 +105,12 @@ describe('validateOperationResult', () => {
     })).toThrow(/schema_invalid/);
     expect(() => validateOperationResult('next_question', {
       kind: 'question',
-      setup: Array.from({ length: 42 }, () => 'context').join(' '),
-      question: 'What concrete detail changed first?',
+      question: questionWithWordCount(29),
       understanding: { claims: [], observations: [], stakeholders: [], contexts: [], distinctions: [], tensions: [], exploredBlindSpots: [], unexploredBlindSpots: [] },
     })).toThrow(/word_limit/);
     expect(() => validateOperationResult('next_question', {
       kind: 'question',
-      setup: 'That is a great point.',
-      question: 'What concrete detail changed first?',
+      question: 'That is a great point. Which launch detail changed first?',
       understanding: { claims: [], observations: [], stakeholders: [], contexts: [], distinctions: [], tensions: [], exploredBlindSpots: [], unexploredBlindSpots: [] },
     })).toThrow(/filler/);
   });
@@ -228,82 +226,15 @@ describe('validateOperationResult', () => {
     expect(containsFiller('Thanks for sharing. What changed?')).toBe(true);
   });
 
-  it('accepts an omitted setup and a single-sentence setup', () => {
+  it('accepts the strict question-only shape and rejects a setup field', () => {
     expect(validateOperationResult(
       'next_question',
       normalResult('Which customer notices the difference first?'),
     ).kind).toBe('question');
-    expect(validateOperationResult(
-      'next_question',
-      normalResult(
-        'Which customer notices the difference first?',
-        'Let us make the boundary concrete.',
-      ),
-    ).kind).toBe('question');
-  });
-
-  it('rejects a question mark in setup even when the question has none', () => {
     expect(() => validateOperationResult(
       'next_question',
-      normalResult(
-        'Which customer notices the difference first.',
-        'Could this be the boundary?',
-      ),
-    )).toThrow(/question_count/);
-  });
-
-  it('rejects more than one setup sentence', () => {
-    expect(() => validateOperationResult(
-      'next_question',
-      normalResult(
-        'Which customer notices the difference first?',
-        'One boundary is visible. Another remains open.',
-      ),
+      { ...normalResult('Which customer notices the difference first?'), setup: 'Removed.' },
     )).toThrow(/schema_invalid/);
-  });
-
-  it('rejects adjacent setup sentences without whitespace', () => {
-    expect(() => validateOperationResult(
-      'next_question',
-      normalResult(
-        'Which launch constraint matters most?',
-        'First sentence.Second sentence.',
-      ),
-    )).toThrow(/schema_invalid/);
-  });
-
-  it('treats an honorific abbreviation as part of one setup sentence', () => {
-    expect(validateOperationResult(
-      'next_question',
-      normalResult(
-        'Which launch constraint matters most?',
-        'Dr. Patel disagreed.',
-      ),
-    ).kind).toBe('question');
-  });
-
-  it.each([
-    'First sentence.second sentence.',
-    'We considered speed, cost, etc. Another constraint remains.',
-    'First sentence.2nd sentence.',
-    'First sentence!!!Second sentence.',
-  ])('rejects an explicit second setup sentence boundary: %s', (setup) => {
-    expect(() => validateOperationResult(
-      'next_question',
-      normalResult('Which launch constraint matters most?', setup),
-    )).toThrow(/schema_invalid/);
-  });
-
-  it.each([
-    'A concrete example may help, e.g. a delayed launch.',
-    'A concrete distinction may help, i.e. demand versus timing.',
-    'One emphatic sentence!!!',
-    'Version 2.0 remains stable.',
-  ])('accepts one setup sentence with an internal abbreviation or terminator cluster: %s', (setup) => {
-    expect(validateOperationResult(
-      'next_question',
-      normalResult('Which launch constraint matters most?', setup),
-    ).kind).toBe('question');
   });
 
   it('requires the normal question to end in its only question mark', () => {
@@ -313,10 +244,10 @@ describe('validateOperationResult', () => {
     )).toThrow(/question_count/);
   });
 
-  it('rejects a normal question that depends on a vague setup reference', () => {
+  it('rejects a normal question that depends on a vague reference', () => {
     expect(() => validateOperationResult(
       'next_question',
-      normalResult('What does that mean?', 'One boundary is visible.'),
+      normalResult('What does that mean?'),
     )).toThrow(/question_independence/);
   });
 
@@ -378,14 +309,15 @@ describe('validateOperationResult', () => {
     )).toThrow(/question_independence/);
   });
 
-  it('accepts a normal turn at 45 words and rejects one at 46 words', () => {
+  it('accepts a normal turn at 28 words and rejects one at 29 words', () => {
+    expect(MAX_NEXT_QUESTION_WORDS).toBe(28);
     expect(validateOperationResult(
       'next_question',
-      normalResult(questionWithWordCount(45)),
+      normalResult(questionWithWordCount(28)),
     ).kind).toBe('question');
     expect(() => validateOperationResult(
       'next_question',
-      normalResult(questionWithWordCount(46)),
+      normalResult(questionWithWordCount(29)),
     )).toThrow(/word_limit/);
   });
 
