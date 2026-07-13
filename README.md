@@ -152,7 +152,7 @@ docker build --target production -t specular:production .
 
 `npm run eval:live` is an additional authorized model-quality smoke test. It reports an explicit skip when no `OPENAI_API_KEY` is present. The fixed corpus remains the non-billable hard-invariant release gate. Browser compatibility evidence and the physical-device release procedure are recorded in `tests/e2e/browser-compatibility.md`.
 
-`npm run test:e2e` includes the 320/375/430px Chromium and WebKit product matrix, axe checks across all important UI states, 44px target checks, and an interaction-attributed long-task trace. Lighthouse requires performance at least 90, accessibility 100, and a clean console. PWA installability remains a separate deterministic gate: the E2E suite exercises the installed service worker offline, and `verify:production` requires both the built manifest and service worker from the immutable server.
+`npm run test:e2e` is a two-stage browser gate. It first runs the full 320/375/430px Chromium and WebKit functional matrix, including axe checks across all important UI states and 44px target checks, while excluding performance-marked tests. It then runs the interaction-attributed long-task trace once in Chromium at 375px with one worker and no retries. Lighthouse requires performance at least 90, accessibility 100, and a clean console. PWA installability remains a separate deterministic gate: the E2E suite exercises the installed service worker offline, and `verify:production` requires both the built manifest and service worker from the immutable server.
 
 ## Deployment
 
