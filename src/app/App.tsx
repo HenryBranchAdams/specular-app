@@ -16,6 +16,7 @@ import { ThreadActions } from '../components/ThreadActions';
 import { ThreadHeader } from '../components/ThreadHeader';
 import { Transcript } from '../components/Transcript';
 import type { Turn } from '../domain/contracts';
+import { isGatherEligible } from '../domain/validators';
 import type { CompletedRealtimeExchange } from '../voice/realtime-client';
 import {
   useVoice,
@@ -108,11 +109,8 @@ export function App({
   const challengeState = specular.activity === 'challenge'
     || latestTurn?.operation === 'challenge';
   const conclusionState = specular.activity === 'conclusion' || specular.conclusion !== null;
-  const acceptedUserTurnCount = specular.turns.filter((turn) => (
-    turn.role === 'user' && turn.deliveryState === 'accepted'
-  )).length;
   const gathered = specular.thread?.provisionalConclusion !== undefined;
-  const gatherAvailable = acceptedUserTurnCount >= 2 || gathered;
+  const gatherAvailable = isGatherEligible(specular.turns) || gathered;
   const stateClass = conclusionState
     ? 'app-shell--conclusion'
     : challengeState

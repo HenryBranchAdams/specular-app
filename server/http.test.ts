@@ -255,20 +255,23 @@ function config(overrides: Partial<ServerConfig> = {}): ServerConfig {
 function context(
   operation: Operation,
   content = 'The handoff is where the launch gets stuck.',
+  acceptedUserTurnCount = 1,
 ): ThreadContext {
   return threadContextSchema.parse({
     thread: { id: 'thread-1' },
-    turns: [{
-      id: 'turn-1',
+    turns: Array.from({ length: acceptedUserTurnCount }, (_, position) => ({
+      id: `turn-${String(position + 1)}`,
       ownerScope: 'local',
       threadId: 'thread-1',
       role: 'user',
-      content,
+      content: position === 0
+        ? content
+        : 'A second accepted user-authored detail makes gathering eligible.',
       modality: 'text',
-      createdAt: 1,
-      position: 0,
+      createdAt: position + 1,
+      position,
       deliveryState: 'accepted',
-    }],
+    })),
     understanding: UNDERSTANDING,
     operation,
   });
@@ -509,7 +512,11 @@ async function stalledBodyRequest(server: Server, timeoutMs = 2_000): Promise<Na
   });
 }
 
-function operationRequest(operation: Operation, content?: string): NativeRequestOptions {
+function operationRequest(
+  operation: Operation,
+  content?: string,
+  acceptedUserTurnCount = 1,
+): NativeRequestOptions {
   return {
     method: 'POST',
     path: pathFor(operation),
@@ -517,7 +524,7 @@ function operationRequest(operation: Operation, content?: string): NativeRequest
       'content-type': 'application/json',
       origin: 'https://specular.test',
     },
-    body: JSON.stringify({ context: context(operation, content) }),
+    body: JSON.stringify({ context: context(operation, content, acceptedUserTurnCount) }),
   };
 }
 
@@ -573,11 +580,32 @@ describe('stateless model HTTP service', () => {
 
     const response = await nativeRequest(
       server,
-      operationRequest(operation, operation === 'conclusion' ? CONCLUSION_SOURCE : undefined),
+      operationRequest(
+        operation,
+        operation === 'conclusion' ? CONCLUSION_SOURCE : undefined,
+        operation === 'conclusion' ? 2 : 1,
+      ),
     );
 
     expect(response.body).toEqual({ ok: true, value });
     expect(validateOperationResult(operation, successValue(response))).toEqual(value);
+  });
+
+  it('rejects an ordinary one-turn conclusion before provider readiness or execution', async () => {
+    const provider = new ScriptedRepairingProvider({ configured: false });
+    const telemetry = new CapturingMetadataSink();
+    const { server } = await startServer({ provider, telemetry });
+
+    const response = await nativeRequest(
+      server,
+      operationRequest('conclusion', CONCLUSION_SOURCE),
+    );
+
+    expect(response.status).toBe(502);
+    expect(failure(response)).toMatchObject({ code: 'invalid_output', retryable: true });
+    expect(provider.generateCalls).toBe(0);
+    expect(provider.repairCalls).toBe(0);
+    expect(telemetry.events).toEqual([]);
   });
 
   it('rejects unknown request fields, invalid bounded context, and operation/path mismatch', async () => {
@@ -816,7 +844,7 @@ describe('stateless model HTTP service', () => {
 
     const response = await nativeRequest(
       server,
-      operationRequest('conclusion', CONCLUSION_SOURCE),
+      operationRequest('conclusion', CONCLUSION_SOURCE, 2),
     );
 
     expect(successValue(response)).toEqual(VALID_CONCLUSION);
@@ -850,7 +878,7 @@ describe('stateless model HTTP service', () => {
 
     const response = await nativeRequest(
       server,
-      operationRequest('conclusion', CONCLUSION_SOURCE),
+      operationRequest('conclusion', CONCLUSION_SOURCE, 2),
     );
 
     expect(response.status).toBe(502);
@@ -1011,7 +1039,7 @@ describe('stateless model HTTP service', () => {
   });
 
   it.each(['next_question', 'challenge', 'conclusion'] as const)(
-    'uses the conservative configured-region safety path for %s without provider work',
+    'uses immediate safety before ordinary conclusion eligibility for %s without provider work',
     async (operation) => {
       const provider = new ScriptedRepairingProvider();
       const telemetry = new CapturingMetadataSink();

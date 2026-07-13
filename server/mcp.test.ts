@@ -371,6 +371,42 @@ describe('createSpecularMcpServer operation delegation', () => {
     expect(gatheredText.join(' ')).not.toContain('Working conclusion');
   });
 
+  it('rejects a one-turn conclusion before provider readiness through real MCP transport', async () => {
+    const provider = new ScriptedProvider({ configured: false });
+    const { client } = await connectMcp(serviceWithProvider(provider));
+
+    const result = await call(client, 'draft_conclusion', context('conclusion'));
+
+    expect(result.isError).toBe(true);
+    expect(result.structuredContent).toBeUndefined();
+    expect(typedError(result)).toMatchObject({
+      code: 'invalid_output',
+      retryable: true,
+    });
+    expect(provider.generateCalls).toBe(0);
+    expect(provider.repairCalls).toBe(0);
+    expectTextResult(result);
+  });
+
+  it('gathers after two accepted user turns through real MCP transport', async () => {
+    const provider = new ScriptedProvider({
+      generate: [attempt(VALID_CONCLUSION)],
+    });
+    const { client } = await connectMcp(serviceWithProvider(provider));
+
+    const result = await call(
+      client,
+      'draft_conclusion',
+      context('conclusion', { turns: 3 }),
+    );
+
+    expect(result.isError).not.toBe(true);
+    expect(result.structuredContent).toEqual(VALID_CONCLUSION);
+    expect(provider.generateCalls).toBe(1);
+    expect(provider.repairCalls).toBe(0);
+    expectTextResult(result);
+  });
+
   it.each([
     ['next_question', 'next_question'],
     ['challenge', 'challenge'],
@@ -557,7 +593,11 @@ describe('shared model validation and MCP errors', () => {
     });
     const { client } = await connectMcp(serviceWithProvider(provider));
     await client.listTools();
-    const result = await call(client, tool, context(operation));
+    const result = await call(
+      client,
+      tool,
+      context(operation, operation === 'conclusion' ? { turns: 3 } : {}),
+    );
 
     expect(provider.generateCalls).toBe(1);
     expect(provider.repairCalls).toBe(1);

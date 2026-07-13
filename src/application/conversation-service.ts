@@ -33,6 +33,7 @@ import {
   workingConclusionSchema,
 } from '../domain/schemas';
 import {
+  isGatherEligible,
   ProductValidationError,
   validateConclusionAuthorship,
   validateOperationResponse,
@@ -445,6 +446,9 @@ export class ConversationService {
       context = await buildThreadContext(threadId, 'conclusion', this.repositories);
     } catch {
       return failure('storage_failure');
+    }
+    if (!isGatherEligible(context.turns)) {
+      return failure('invalid_output');
     }
     await this.recordTelemetry('conclusion_requested');
 

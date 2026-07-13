@@ -113,6 +113,8 @@ const NON_NOUN_TOKENS = new Set([
 const DEMONSTRATIVES = new Set(['that', 'these', 'this', 'those']);
 const ALWAYS_UNQUALIFIED_REFERENCES = new Set(['former', 'here', 'latter']);
 
+export const GATHER_REQUIRED_ACCEPTED_USER_TURN_COUNT = 2;
+
 interface ReferenceToken {
   normalized: string;
   original: string;
@@ -138,6 +140,12 @@ export function containsProhibitedQuestion(value: string): boolean {
 
 export function containsFiller(value: string): boolean {
   return FILLER_PATTERNS.some((pattern) => pattern.test(value));
+}
+
+export function isGatherEligible(turns: readonly Turn[]): boolean {
+  return turns.filter((turn) => (
+    turn.role === 'user' && turn.deliveryState === 'accepted'
+  )).length >= GATHER_REQUIRED_ACCEPTED_USER_TURN_COUNT;
 }
 
 function containsUnsolicitedSynthesis(value: string): boolean {

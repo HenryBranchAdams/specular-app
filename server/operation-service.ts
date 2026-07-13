@@ -10,6 +10,7 @@ import type {
   ThreadContext,
 } from '../src/domain/contracts';
 import {
+  isGatherEligible,
   ProductValidationError,
   type ProductValidationErrorCode,
   validateConclusionAuthorship,
@@ -269,6 +270,11 @@ export function createOperationService(options: OperationServiceOptions): Operat
           usage,
         ));
         return { ok: true, value };
+      }
+
+      if (request.operation === 'conclusion' && !isGatherEligible(request.context.turns)) {
+        const error = createServiceError('invalid_output', request.requestId);
+        return { ok: false, error };
       }
 
       if (!options.provider.configured) {

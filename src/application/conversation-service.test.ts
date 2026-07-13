@@ -304,6 +304,16 @@ function makeTurn(
   });
 }
 
+async function addSecondAcceptedUserTurn(
+  service: ConversationService,
+  threadId: ThreadId,
+): Promise<void> {
+  unwrap(await service.submitUserTurn(
+    threadId,
+    'A second accepted user-authored detail makes gathering eligible.',
+  ));
+}
+
 const openRepositories: LocalRepositories[] = [];
 
 afterEach(() => {
@@ -508,6 +518,7 @@ describe('ConversationService orchestration', () => {
     };
 
     unwrap(await service.challenge(thread.id));
+    await addSecondAcceptedUserTurn(service, thread.id);
     unwrap(await service.draftConclusion(thread.id));
 
     expect(challengeContext?.operation).toBe('challenge');
@@ -737,8 +748,8 @@ describe('ConversationService orchestration', () => {
     },
   );
 
-  it('runs Challenge and conclusion only through their explicit operations', async () => {
-    const { repositories, service } = await createServiceFixture();
+  it('runs Challenge and eligible conclusion only through their explicit operations', async () => {
+    const { client, repositories, service } = await createServiceFixture();
     const thread = unwrap(await service.startThread('Explicit operations'));
     const submitted = unwrap(await service.submitUserTurn(thread.id, 'A small launch seems safer.'));
 
@@ -754,6 +765,14 @@ describe('ConversationService orchestration', () => {
     expect(challenged.responseTurn.operation).toBe('challenge');
     expect((await repositories.threads.get(thread.id))?.provisionalConclusion).toBeUndefined();
 
+    const draftConclusion = vi.spyOn(client, 'draftConclusion');
+    await expect(service.draftConclusion(thread.id)).resolves.toMatchObject({
+      ok: false,
+      error: { code: 'invalid_output' },
+    });
+    expect(draftConclusion).not.toHaveBeenCalled();
+
+    await addSecondAcceptedUserTurn(service, thread.id);
     const concluded = unwrap(await service.draftConclusion(thread.id));
     const conclusion = workingConclusion(concluded.output);
     expect(conclusion).toMatchObject({
@@ -764,6 +783,48 @@ describe('ConversationService orchestration', () => {
     expect((await repositories.threads.get(thread.id))?.provisionalConclusion).toEqual(
       conclusion,
     );
+  });
+
+  it('does not count a pending user turn toward conclusion eligibility', async () => {
+    const { client, repositories, service } = await createServiceFixture();
+    const thread = unwrap(await service.startThread('Pending gather eligibility'));
+    unwrap(await service.submitUserTurn(thread.id, 'One accepted thought is not enough.'));
+    const pendingResponse = createDeferred<NextQuestionResult>();
+    client.nextQuestionHandler = () => pendingResponse.promise;
+    const pendingSubmission = service.submitUserTurn(
+      thread.id,
+      'This thought is still pending delivery.',
+    );
+
+    await expect.poll(async () => (
+      (await repositories.turns.listByThread(thread.id)).at(-1)?.deliveryState
+    )).toBe('pending');
+    const draftConclusion = vi.spyOn(client, 'draftConclusion');
+
+    await expect(service.draftConclusion(thread.id)).resolves.toMatchObject({
+      ok: false,
+      error: { code: 'invalid_output' },
+    });
+    expect(draftConclusion).not.toHaveBeenCalled();
+
+    pendingResponse.resolve(VALID_QUESTION);
+    unwrap(await pendingSubmission);
+  });
+
+  it('does not count a failed user turn toward conclusion eligibility', async () => {
+    const { client, repositories, service } = await createServiceFixture();
+    const thread = unwrap(await service.startThread('Failed gather eligibility'));
+    unwrap(await service.submitUserTurn(thread.id, 'One accepted thought is not enough.'));
+    client.nextQuestionHandler = () => Promise.reject(new QuestioningClientError('offline'));
+    await service.submitUserTurn(thread.id, 'This thought failed delivery.');
+    expect((await repositories.turns.listByThread(thread.id)).at(-1)?.deliveryState).toBe('failed');
+    const draftConclusion = vi.spyOn(client, 'draftConclusion');
+
+    await expect(service.draftConclusion(thread.id)).resolves.toMatchObject({
+      ok: false,
+      error: { code: 'invalid_output' },
+    });
+    expect(draftConclusion).not.toHaveBeenCalled();
   });
 
   it('accepts an immediate-safety next response while preserving understanding', async () => {
@@ -793,6 +854,7 @@ describe('ConversationService orchestration', () => {
     const { client, repositories, service } = await createServiceFixture();
     const thread = unwrap(await service.startThread('Safety challenge'));
     await service.submitUserTurn(thread.id, 'The handoff is still uncertain.');
+    await addSecondAcceptedUserTurn(service, thread.id);
     const drafted = unwrap(await service.draftConclusion(thread.id));
     const conclusion = workingConclusion(drafted.output);
     client.challengeHandler = () => Promise.resolve(IMMEDIATE_SAFETY);
@@ -813,6 +875,7 @@ describe('ConversationService orchestration', () => {
     const { client, repositories, service } = await createServiceFixture();
     const thread = unwrap(await service.startThread('Safety gathering'));
     await service.submitUserTurn(thread.id, 'The handoff is still uncertain.');
+    await addSecondAcceptedUserTurn(service, thread.id);
     client.conclusionHandler = () => Promise.resolve(IMMEDIATE_SAFETY);
 
     const gathered = unwrap(await service.draftConclusion(thread.id));
@@ -831,6 +894,7 @@ describe('ConversationService orchestration', () => {
     const { client, service } = await createServiceFixture();
     const thread = unwrap(await service.startThread('Authorship boundary'));
     await service.submitUserTurn(thread.id, 'The handoff is where ownership disappears.');
+    await addSecondAcceptedUserTurn(service, thread.id);
     client.conclusionHandler = (context) => {
       const specularTurn = context.turns.find((turn) => turn.role === 'specular');
       if (specularTurn === undefined) {
@@ -849,6 +913,7 @@ describe('ConversationService orchestration', () => {
     const { repositories, service } = await createServiceFixture();
     const thread = unwrap(await service.startThread('Keep digging'));
     await service.submitUserTurn(thread.id, 'The handoff creates the uncertainty.');
+    await addSecondAcceptedUserTurn(service, thread.id);
     const drafted = unwrap(await service.draftConclusion(thread.id));
     const edited: WorkingConclusion = {
       ...workingConclusion(drafted.output),
@@ -877,6 +942,7 @@ describe('ConversationService orchestration', () => {
     const { repositories, service } = await createServiceFixture();
     const thread = unwrap(await service.startThread('Capsule source'));
     const submission = unwrap(await service.submitUserTurn(thread.id, 'The handoff is the constraint.'));
+    await addSecondAcceptedUserTurn(service, thread.id);
     const drafted = unwrap(await service.draftConclusion(thread.id));
     const edited: WorkingConclusion = {
       ...workingConclusion(drafted.output),
@@ -918,6 +984,7 @@ describe('ConversationService orchestration', () => {
       thread.id,
       'The launch handoff is still the constraint.',
     ));
+    await addSecondAcceptedUserTurn(service, thread.id);
     const drafted = unwrap(await service.draftConclusion(thread.id));
 
     const completed = unwrap(await service.saveAndFinish({
@@ -962,6 +1029,7 @@ describe('ConversationService orchestration', () => {
       source.id,
       'The handoff needs one observable ownership signal.',
     ));
+    await addSecondAcceptedUserTurn(service, source.id);
     const drafted = unwrap(await service.draftConclusion(source.id));
     const capsule = unwrap(await service.saveCapsule({
       threadId: source.id,
@@ -1002,6 +1070,7 @@ describe('ConversationService orchestration', () => {
       thread.id,
       'The source remains attached to this exact thread.',
     ));
+    await addSecondAcceptedUserTurn(service, thread.id);
     const drafted = unwrap(await service.draftConclusion(thread.id));
     const capsule = unwrap(await service.saveCapsule({
       threadId: thread.id,
@@ -1048,6 +1117,7 @@ describe('ConversationService orchestration', () => {
       thread.id,
       'The capsule must outlive the inquiry that produced it.',
     ));
+    await addSecondAcceptedUserTurn(service, thread.id);
     const drafted = unwrap(await service.draftConclusion(thread.id));
     const capsule = unwrap(await service.saveCapsule({
       threadId: thread.id,
@@ -1089,6 +1159,7 @@ describe('ConversationService orchestration', () => {
       sourceThread.id,
       'This exact source id must not be reassigned across threads.',
     ));
+    await addSecondAcceptedUserTurn(service, sourceThread.id);
     const drafted = unwrap(await service.draftConclusion(sourceThread.id));
     const capsule = unwrap(await service.saveCapsule({
       threadId: sourceThread.id,
@@ -1119,6 +1190,7 @@ describe('ConversationService orchestration', () => {
     const { repositories, service } = await createServiceFixture();
     const thread = unwrap(await service.startThread('Validated capsule source'));
     const submission = unwrap(await service.submitUserTurn(thread.id, 'Keep the range exact.'));
+    await addSecondAcceptedUserTurn(service, thread.id);
     const drafted = unwrap(await service.draftConclusion(thread.id));
     const capsule = unwrap(await service.saveCapsule({
       threadId: thread.id,
@@ -1146,6 +1218,7 @@ describe('ConversationService orchestration', () => {
     const { repositories, service } = await createServiceFixture();
     const oldThread = unwrap(await service.startThread('Old line'));
     await service.submitUserTurn(oldThread.id, 'The old line contains private context.');
+    await addSecondAcceptedUserTurn(service, oldThread.id);
     await service.draftConclusion(oldThread.id);
 
     const freshThread = unwrap(await service.finishThread(oldThread.id));
@@ -1167,6 +1240,7 @@ describe('ConversationService orchestration', () => {
     const { repositories, service } = await createServiceFixture();
     const thread = unwrap(await service.startThread('Delete me'));
     const submitted = unwrap(await service.submitUserTurn(thread.id, 'Keep deletion owner-scoped.'));
+    await addSecondAcceptedUserTurn(service, thread.id);
     const drafted = unwrap(await service.draftConclusion(thread.id));
     const capsule = unwrap(await service.saveCapsule({
       threadId: thread.id,

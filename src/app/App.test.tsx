@@ -635,6 +635,22 @@ describe('Specular mobile thinking loop', () => {
     expect(await screen.findByText('Notes gathered.')).toBeVisible();
   });
 
+  it('opens a stored gathered conclusion locally without another provider call', async () => {
+    const fixture = await createFixture();
+    const thread = await seedActiveThread(fixture, ['First thought', 'Second thought']);
+    unwrap(await fixture.service.draftConclusion(thread.id));
+    expect(fixture.provider.conclusionCalls).toBe(1);
+    const draftConclusion = vi.spyOn(fixture.service, 'draftConclusion');
+    const user = userEvent.setup();
+    render(<App dependencies={fixture.dependencies} />);
+
+    await user.click(await screen.findByRole('button', { name: 'Open gathered notes' }));
+
+    expect(await screen.findByRole('textbox', { name: 'Working position' })).toBeVisible();
+    expect(draftConclusion).not.toHaveBeenCalled();
+    expect(fixture.provider.conclusionCalls).toBe(1);
+  });
+
   it('renders immediate gathering support without opening the conclusion editor', async () => {
     const fixture = await createFixture();
     fixture.provider.conclusionHandler = () => Promise.resolve(IMMEDIATE_SAFETY);

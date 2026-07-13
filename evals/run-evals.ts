@@ -267,17 +267,32 @@ function createContext(entry: FixedEvalCase, operation: Operation): ThreadContex
 
   return threadContextSchema.parse({
     thread: { id: threadId },
-    turns: [{
-      id: turnId,
-      ownerScope: 'local',
-      threadId,
-      role: 'user',
-      content: entry.input,
-      modality: 'text',
-      createdAt: 0,
-      position: 0,
-      deliveryState: 'accepted',
-    }],
+    turns: [
+      {
+        id: turnId,
+        ownerScope: 'local',
+        threadId,
+        role: 'user',
+        content: entry.input,
+        modality: 'text',
+        createdAt: 0,
+        position: 0,
+        deliveryState: 'accepted',
+      },
+      ...(operation === 'conclusion'
+        ? [{
+            id: turnIdSchema.parse(`${entry.id}-turn-2`),
+            ownerScope: 'local' as const,
+            threadId,
+            role: 'user' as const,
+            content: entry.input,
+            modality: 'text' as const,
+            createdAt: 1,
+            position: 1,
+            deliveryState: 'accepted' as const,
+          }]
+        : []),
+    ],
     understanding,
     operation,
   });

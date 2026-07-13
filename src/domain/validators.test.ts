@@ -6,6 +6,8 @@ import {
 import {
   containsFiller,
   containsProhibitedQuestion,
+  GATHER_REQUIRED_ACCEPTED_USER_TURN_COUNT,
+  isGatherEligible,
   questionMarkCount,
   validateConclusionAuthorship,
   validateOperationResponse,
@@ -43,6 +45,24 @@ function repeatedWords(count: number, word = 'position'): string {
   return Array.from({ length: count }, () => word).join(' ');
 }
 
+function gatherEligibilityTurn(
+  position: number,
+  role: 'user' | 'specular' | 'system' = 'user',
+  deliveryState: 'pending' | 'accepted' | 'failed' = 'accepted',
+) {
+  return turnSchema.parse({
+    id: `gather-turn-${String(position)}`,
+    ownerScope: 'local',
+    threadId: 'gather-thread',
+    role,
+    content: `Gather eligibility turn ${String(position)}.`,
+    modality: 'text',
+    createdAt: position + 1,
+    position,
+    deliveryState,
+  });
+}
+
 function conclusionWith(
   insights: string[],
   tensions: string[],
@@ -57,6 +77,33 @@ function conclusionWith(
     provenance: [{ turnId: 'turn-1', excerpt: 'The handoff is where it gets stuck.' }],
   };
 }
+
+describe('isGatherEligible', () => {
+  const acceptedUserTurns = [
+    gatherEligibilityTurn(0),
+    gatherEligibilityTurn(1),
+  ];
+
+  it('requires exactly the shared two-turn threshold', () => {
+    expect(GATHER_REQUIRED_ACCEPTED_USER_TURN_COUNT).toBe(2);
+    expect(isGatherEligible([])).toBe(false);
+    expect(isGatherEligible(acceptedUserTurns.slice(0, 1))).toBe(false);
+    expect(isGatherEligible(acceptedUserTurns)).toBe(true);
+  });
+
+  it('ignores pending, failed, Specular, and system turns', () => {
+    const mixedTurns = [
+      gatherEligibilityTurn(0),
+      gatherEligibilityTurn(1, 'user', 'pending'),
+      gatherEligibilityTurn(2, 'user', 'failed'),
+      gatherEligibilityTurn(3, 'specular'),
+      gatherEligibilityTurn(4, 'system'),
+    ];
+
+    expect(isGatherEligible(mixedTurns)).toBe(false);
+    expect(isGatherEligible([...mixedTurns, gatherEligibilityTurn(5)])).toBe(true);
+  });
+});
 
 describe('validateOperationResult', () => {
   it('accepts one concise normal question', () => {
