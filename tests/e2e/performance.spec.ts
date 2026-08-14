@@ -1,112 +1,46 @@
 import { expect, test, type Page } from '@playwright/test';
-import { installOperationMocks, openSpecular, submitThought } from './helpers';
+import { installThinkingMocks, openSpecular } from './helpers';
 
-interface NamedLongTask {
-  readonly duration: number;
-  readonly operation: string;
-}
-
+interface NamedLongTask { duration: number; operation: string }
 const LONG_TASK_THRESHOLD_MS = 50;
 
 async function installLongTaskObserver(page: Page): Promise<void> {
   await page.evaluate(() => {
-    const state = window as typeof window & {
-      __specularLongTasks?: NamedLongTask[];
-      __specularOperation?: string | undefined;
-      __specularLongTaskObserver?: PerformanceObserver;
-    };
-    state.__specularLongTaskObserver?.disconnect();
+    const state = window as typeof window & { __specularLongTasks?: NamedLongTask[]; __specularOperation?: string; __specularLongTaskObserver?: PerformanceObserver };
     state.__specularLongTasks = [];
-    state.__specularOperation = undefined;
     state.__specularLongTaskObserver = new PerformanceObserver((list) => {
-      for (const entry of list.getEntries()) {
-        state.__specularLongTasks?.push({
-          duration: entry.duration,
-          operation: state.__specularOperation ?? 'unattributed',
-        });
-      }
+      for (const entry of list.getEntries()) state.__specularLongTasks?.push({ duration: entry.duration, operation: state.__specularOperation ?? 'unattributed' });
     });
     state.__specularLongTaskObserver.observe({ type: 'longtask' });
   });
 }
 
-async function expectInteractionWithoutLongTasks(
-  page: Page,
-  operation: string,
-  action: () => Promise<void>,
-): Promise<void> {
+async function withoutLongTasks(page: Page, operation: string, action: () => Promise<void>): Promise<void> {
   await page.evaluate((name) => {
-    const state = window as typeof window & {
-      __specularLongTasks?: NamedLongTask[];
-      __specularOperation?: string | undefined;
-      __specularLongTaskObserver?: PerformanceObserver;
-    };
-    state.__specularLongTaskObserver?.takeRecords();
+    const state = window as typeof window & { __specularLongTasks?: NamedLongTask[]; __specularOperation?: string };
     state.__specularLongTasks = [];
     state.__specularOperation = name;
   }, operation);
-
   await action();
-  await page.evaluate(() => new Promise<void>((resolve) => {
-    requestAnimationFrame(() => requestAnimationFrame(() => { resolve(); }));
-  }));
-
-  const longTasks = await page.evaluate((name) => {
-    const state = window as typeof window & {
-      __specularLongTasks?: NamedLongTask[];
-      __specularOperation?: string | undefined;
-      __specularLongTaskObserver?: PerformanceObserver;
-    };
-    for (const entry of state.__specularLongTaskObserver?.takeRecords() ?? []) {
-      state.__specularLongTasks?.push({
-        duration: entry.duration,
-        operation: state.__specularOperation ?? 'unattributed',
-      });
-    }
-    const operationEntries = (state.__specularLongTasks ?? [])
-      .filter((entry) => entry.operation === name);
-    state.__specularOperation = undefined;
-    return operationEntries;
+  await page.evaluate(() => new Promise<void>((resolve) => { requestAnimationFrame(() => { requestAnimationFrame(() => { resolve(); }); }); }));
+  const tasks = await page.evaluate((name) => {
+    const state = window as typeof window & { __specularLongTasks?: NamedLongTask[]; __specularOperation?: string; __specularLongTaskObserver?: PerformanceObserver };
+    for (const entry of state.__specularLongTaskObserver?.takeRecords() ?? []) state.__specularLongTasks?.push({ duration: entry.duration, operation: state.__specularOperation ?? 'unattributed' });
+    delete state.__specularOperation;
+    return (state.__specularLongTasks ?? []).filter((entry) => entry.operation === name);
   }, operation);
-  expect(
-    longTasks,
-    `${operation} produced browser tasks longer than ${String(LONG_TASK_THRESHOLD_MS)} milliseconds:\n${JSON.stringify(longTasks, null, 2)}`,
-  ).toEqual([]);
+  expect(tasks, `${operation} produced tasks longer than ${String(LONG_TASK_THRESHOLD_MS)}ms`).toEqual([]);
 }
 
 test.beforeEach(async ({ page }) => {
-  await installOperationMocks(page);
+  await installThinkingMocks(page);
   await openSpecular(page);
   await installLongTaskObserver(page);
 });
 
-test('@performance scripted mobile interactions produce no task longer than 50 milliseconds', async ({ page }) => {
-  await expectInteractionWithoutLongTasks(page, 'send', async () => {
-    await submitThought(page, 'The launch handoff is still the constraint.');
-  });
-
-  await expectInteractionWithoutLongTasks(page, 'test-transition', async () => {
-    await page.getByRole('button', { name: 'Test this' }).click();
-    await expect(page.getByText(/stakeholder absorbs the cost/iu)).toBeVisible();
-  });
-
-  const secondThought = 'The owner should be explicit before the handoff begins.';
-  await expectInteractionWithoutLongTasks(page, 'second-send', async () => {
-    await page.getByRole('textbox', { name: 'Idea, context, or response' }).fill(secondThought);
-    await page.getByRole('button', { name: 'Send input' }).click();
-    await expect(page.getByText(secondThought, { exact: true })).toBeVisible();
-    await expect(page.getByRole('button', { name: 'Gather this thread' })).toBeVisible();
-  });
-
-  await expectInteractionWithoutLongTasks(page, 'gather-transition', async () => {
-    await page.getByRole('button', { name: 'Gather this thread' }).click();
-    await expect(page.getByRole('textbox', { name: 'Working position' })).toBeVisible();
-  });
-
-  await expectInteractionWithoutLongTasks(page, 'capsule-navigation', async () => {
-    await page.getByRole('button', { name: 'Save as capsule' }).click();
-    await expect(page.getByText('Capsule saved.')).toBeVisible();
-    await page.getByRole('button', { name: /Open capsule library/u }).click();
-    await expect(page.getByRole('dialog', { name: 'Capsules' })).toBeVisible();
-  });
+test('@performance core writing interactions produce no task longer than 50 milliseconds', async ({ page }) => {
+  await withoutLongTasks(page, 'write', async () => { await page.getByRole('textbox', { name: 'Thought writing block' }).fill('Attention is not certainty.'); });
+  await withoutLongTasks(page, 'reflect', async () => { await page.getByRole('button', { name: 'Reflect' }).click(); await expect(page.getByText(/separating attention/iu)).toBeVisible(); });
+  await withoutLongTasks(page, 'branch', async () => { await page.getByRole('button', { name: /What exactly can attention justify/iu }).click(); await expect(page.getByText('Working from')).toBeVisible(); });
+  await withoutLongTasks(page, 'connections', async () => { await page.getByRole('button', { name: 'Connections' }).click(); await expect(page.getByRole('region', { name: 'Connections' })).toBeVisible(); });
 });

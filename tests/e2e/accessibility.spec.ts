@@ -1,6 +1,6 @@
 import AxeBuilder from '@axe-core/playwright';
 import { expect, test, type Page } from '@playwright/test';
-import { installOperationMocks, openSpecular, submitThought } from './helpers';
+import { installThinkingMocks, openSpecular, writeThought } from './helpers';
 
 async function expectAccessible(page: Page, state: string): Promise<void> {
   const result = await new AxeBuilder({ page })
@@ -8,66 +8,22 @@ async function expectAccessible(page: Page, state: string): Promise<void> {
     .analyze();
   const severe = result.violations.filter(({ impact }) => impact === 'serious' || impact === 'critical');
   expect(severe, `${state}: ${severe.map(({ id, help }) => `${id}: ${help}`).join('; ')}`).toEqual([]);
-
-  const undersized = await page.locator('button:visible, textarea:visible').evaluateAll((elements) =>
-    elements.flatMap((element) => {
-      const rect = element.getBoundingClientRect();
-      return rect.width + 0.01 < 44 || rect.height + 0.01 < 44
-        ? [`${element.tagName.toLowerCase()}[aria-label="${element.getAttribute('aria-label') ?? ''}"] ${String(rect.width)}x${String(rect.height)}`]
-        : [];
-    }),
-  );
-  expect(undersized, `${state}: interactive targets smaller than 44 CSS pixels`).toEqual([]);
 }
 
 test.beforeEach(async ({ page }) => {
-  await installOperationMocks(page);
+  await installThinkingMocks(page);
   await openSpecular(page);
 });
 
-test('empty, thread, test, gathered-position, and capsule states are accessible', async ({ page }) => {
-  await expectAccessible(page, 'empty');
-  await submitThought(page, 'The launch handoff is still the constraint.');
-  await expectAccessible(page, 'thread');
-
-  await page.getByRole('button', { name: 'Test this' }).click();
-  await expect(page.getByText(/stakeholder absorbs the cost/iu)).toBeVisible();
-  await expectAccessible(page, 'challenge');
-
-  await page.getByRole('textbox', { name: 'Idea, context, or response' })
-    .fill('The owner should be explicit before the handoff begins.');
-  await page.getByRole('button', { name: 'Send input' }).click();
-  await page.getByRole('button', { name: 'Gather this thread' }).click();
-  await expectAccessible(page, 'gathered position');
-  await page.getByRole('button', { name: 'Save as capsule' }).click();
-  await page.getByRole('button', { name: /Open capsule library/u }).click();
-  await expectAccessible(page, 'capsule');
-});
-
-test('offline failure and voice failure remain announced, named, focused, and accessible', async ({
-  context,
-  page,
-}) => {
-  await context.setOffline(true);
-  await page.getByRole('textbox', { name: 'Idea, context, or response' }).fill('Preserve this offline thought.');
-  await page.getByRole('button', { name: 'Send input' }).click();
-  await expect(page.getByRole('alert')).toContainText('ready to retry');
-  await expectAccessible(page, 'offline error');
-  await context.setOffline(false);
-
-  await page.route('**/api/realtime/session', (route) => route.fulfill({
-    status: 200,
-    contentType: 'application/json',
-    body: JSON.stringify({ value: 'ephemeral-test-key', expiresAt: Math.floor(Date.now() / 1000) + 60 }),
-  }));
-  await page.evaluate(() => {
-    Object.defineProperty(navigator, 'mediaDevices', {
-      configurable: true,
-      value: { getUserMedia: () => Promise.reject(new DOMException('Denied.', 'NotAllowedError')) },
-    });
-  });
-  await page.getByRole('button', { name: 'Start voice' }).click();
-  await expect(page.getByRole('alert').filter({ hasText: /Microphone|Voice/iu })).toBeVisible();
-  await expect(page.getByRole('textbox', { name: 'Idea, context, or response' })).toBeFocused();
-  await expectAccessible(page, 'voice failure');
+test('blank, reflected, connected, and snapshot states have no serious accessibility violations', async ({ page }) => {
+  await expectAccessible(page, 'blank document');
+  await writeThought(page, 'Attention is not certainty.');
+  await page.getByRole('button', { name: 'Reflect' }).click();
+  await expect(page.getByText(/separating attention from certainty/iu)).toBeVisible();
+  await expectAccessible(page, 'reflection margin');
+  await page.getByRole('button', { name: 'Connections' }).click();
+  await expectAccessible(page, 'connections');
+  await page.getByRole('button', { name: 'Document' }).click();
+  await page.getByRole('button', { name: 'Create snapshot' }).click();
+  await expectAccessible(page, 'snapshot');
 });

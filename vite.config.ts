@@ -1,27 +1,48 @@
+import { sites } from '@openai/sites-vite-plugin';
 import tailwindcss from '@tailwindcss/vite';
 import react from '@vitejs/plugin-react';
 import { VitePWA } from 'vite-plugin-pwa';
 import { defineConfig } from 'vitest/config';
+import hostingConfig from './.openai/hosting.json';
 
 const manifestLinkPattern = /<link\s+rel="manifest"[^>]*>/gu;
 
-export default defineConfig({
+export default defineConfig(async ({ mode }) => {
+  const deploymentPlugins = mode === 'test'
+    ? []
+    : [
+        sites(),
+        ...(await import('@cloudflare/vite-plugin')).cloudflare({
+          viteEnvironment: { name: 'server' },
+          config: {
+            main: './worker/index.ts',
+            compatibility_flags: ['nodejs_compat'],
+            d1_databases: [{
+              binding: hostingConfig.d1,
+              database_name: 'specular-sites-local',
+              database_id: '00000000-0000-4000-8000-000000000000',
+            }],
+          },
+        }),
+      ];
+  return {
   plugins: [
     tailwindcss(),
     react(),
+    ...deploymentPlugins,
     VitePWA({
       registerType: 'prompt',
       injectRegister: false,
       manifest: {
         name: 'Specular',
         short_name: 'Specular',
-        description: 'A private workspace for developing ideas, testing theses, and making decisions.',
+        description: 'A private place to write until the thought becomes visible.',
         start_url: '/',
         scope: '/',
         display: 'standalone',
         orientation: 'portrait-primary',
-        background_color: '#070711',
-        theme_color: '#070711',
+        background_color: '#faf8f2',
+        theme_color: '#faf8f2',
         icons: [
           {
             src: '/icons/icon.svg',
@@ -48,9 +69,9 @@ export default defineConfig({
       enforce: 'post',
       transformIndexHtml: {
         order: 'post',
-        handler(html) {
+        handler(html: string) {
           let foundManifest = false;
-          return html.replace(manifestLinkPattern, (link) => {
+          return html.replace(manifestLinkPattern, (link: string) => {
             if (foundManifest) {
               return '';
             }
@@ -69,11 +90,6 @@ export default defineConfig({
   server: {
     port: 5177,
     strictPort: true,
-    proxy: {
-      '/api': {
-        target: process.env.SPECULAR_DEV_API_ORIGIN ?? 'http://127.0.0.1:8788',
-      },
-    },
   },
   test: {
     environment: 'jsdom',
@@ -81,4 +97,5 @@ export default defineConfig({
     setupFiles: ['./src/test/setup.ts'],
     restoreMocks: true,
   },
+  };
 });

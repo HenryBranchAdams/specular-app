@@ -1,7 +1,7 @@
 {
   "compilerOptions": {
     "target": "ES2022",
-    "lib": ["ES2022"],
+    "lib": ["ES2022", "DOM"],
     "strict": true,
     "noUncheckedIndexedAccess": true,
     "exactOptionalPropertyTypes": true,
@@ -14,5 +14,5 @@
     "types": ["node"],
     "skipLibCheck": true
   },
-  "include": ["vite.config.ts", "vite.server.config.ts", "server/**/*.ts"]
+  "include": ["vite.config.ts", "vite.server.config.ts", "drizzle.config.ts", "db/**/*.ts", "server/**/*.ts", "worker/**/*.ts"]
 }

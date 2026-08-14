@@ -3,18 +3,12 @@ import { describe, expect, it } from 'vitest';
 import './main';
 
 describe('production Specular bootstrap', () => {
-  it('renders the canonical thinking loop without modes or lens labels', async () => {
-    expect(await screen.findByRole('heading', { name: 'Specular' })).toBeVisible();
-    expect(screen.getByRole('heading', { name: 'Something unfinished.' })).toBeVisible();
-    expect(screen.getByRole('textbox', { name: 'Idea, context, or response' })).toBeVisible();
-    expect(screen.queryByRole('button', { name: /voice/iu })).not.toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Send input' })).toBeVisible();
-
-    expect(screen.queryAllByText(/^Clarify$/u)).toHaveLength(0);
-    expect(screen.queryAllByText(/^Invert$/u)).toHaveLength(0);
-    expect(screen.queryAllByText(/^Distill$/u)).toHaveLength(0);
-    expect(screen.queryAllByText(
-      /core question|assumption audit|precision check|generated (?:clarification|inversion|distillation)/iu,
-    )).toHaveLength(0);
+  it('renders the canonical human-owned thinking document', async () => {
+    expect(await screen.findByRole('button', { name: 'Specular' })).toBeVisible();
+    expect(screen.getByRole('textbox', { name: 'Document title' })).toBeVisible();
+    expect(screen.getByRole('textbox', { name: 'Thought writing block' })).toBeVisible();
+    expect(screen.getByRole('button', { name: 'Reflect' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: 'Connections' })).toBeVisible();
+    expect(screen.queryByRole('log')).not.toBeInTheDocument();
   });
 });
