@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import worker from './index';
 
 class MemoryDatabase {
@@ -43,15 +43,58 @@ function environment(database = new MemoryDatabase()) {
 }
 
 describe('Sites worker', () => {
+  afterEach(() => { vi.unstubAllGlobals(); });
+
   it('reports health without a model credential and keeps reflection unavailable', async () => {
     const env = environment();
     const health = await worker.fetch(new Request('https://specular.test/healthz'), env);
     expect(health.status).toBe(200);
     await expect(health.json()).resolves.toEqual({ ok: true });
+    expect(health.headers.get('permissions-policy')).toContain('microphone=(self)');
 
     const reflection = await worker.fetch(new Request('https://specular.test/api/reflect', { method: 'POST' }), env);
     expect(reflection.status).toBe(503);
     await expect(reflection.json()).resolves.toEqual({ error: 'provider_unavailable' });
+  });
+
+  it('proxies a bounded audio checkpoint to the transcription endpoint', async () => {
+    const provider = vi.fn<(input: RequestInfo | URL, init?: RequestInit) => Promise<Response>>(() => Promise.resolve(new Response(JSON.stringify({ text: 'A checkpointed thought.' }), { status: 200 })));
+    vi.stubGlobal('fetch', provider);
+    const form = new FormData();
+    form.set('audio', new Blob(['audio'], { type: 'audio/webm' }), 'checkpoint.webm');
+
+    const response = await worker.fetch(new Request('https://specular.test/api/dictation/transcribe', {
+      method: 'POST',
+      body: form,
+    }), { ...environment(), OPENAI_API_KEY: 'test-key' });
+
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toEqual({ transcript: 'A checkpointed thought.' });
+    expect(provider).toHaveBeenCalledWith('https://api.openai.com/v1/audio/transcriptions', expect.objectContaining({ method: 'POST' }));
+    const providerForm = provider.mock.calls[0]?.[1]?.body as FormData;
+    expect(providerForm.get('model')).toBe('gpt-4o-mini-transcribe');
+    expect(providerForm.get('file')).toBeInstanceOf(Blob);
+  });
+
+  it('runs faithful cleanup separately with storage disabled', async () => {
+    const provider = vi.fn<(input: RequestInfo | URL, init?: RequestInit) => Promise<Response>>(() => Promise.resolve(new Response(JSON.stringify({
+      output: [{ content: [{ type: 'output_text', text: JSON.stringify({ cleaned: 'The thought is clearer.' }) }] }],
+    }), { status: 200 })));
+    vi.stubGlobal('fetch', provider);
+
+    const response = await worker.fetch(new Request('https://specular.test/api/dictation/cleanup', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ verbatim: 'Um, the thought is clearer.' }),
+    }), { ...environment(), OPENAI_API_KEY: 'test-key' });
+
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toEqual({ cleaned: 'The thought is clearer.' });
+    const providerBody = provider.mock.calls[0]?.[1]?.body;
+    if (typeof providerBody !== 'string') throw new Error('Expected a JSON provider body.');
+    const request = JSON.parse(providerBody) as Record<string, unknown>;
+    expect(request).toMatchObject({ store: false });
+    expect(String(request.instructions)).toContain('Never summarize, reorder, add, complete, or reinterpret');
   });
 
   it('publishes and reads an immutable user-authored snapshot', async () => {

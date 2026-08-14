@@ -9,10 +9,14 @@ import {
   Library,
   Link2,
   LoaderCircle,
+  Mic,
   Network,
+  Pause,
+  Play,
   Plus,
   Printer,
   Share2,
+  Square,
   X,
 } from 'lucide-react';
 import {
@@ -20,12 +24,19 @@ import {
   useRef,
   useState,
 } from 'react';
+import {
+  BrowserDictationController,
+  type DictationCaptureHandlers,
+  type DictationController,
+} from '../dictation/capture';
+import { HttpDictationService, type DictationService } from '../dictation/client';
 import { downloadMarkdown } from '../thinking/export';
 import {
   createInitialWorkspace,
   effectiveStatus,
   newId,
   type ContextScope,
+  type DictationDraft,
   type MarginAnnotation,
   type ReflectionDirection,
   type ReflectionMove,
@@ -57,8 +68,8 @@ export interface AppProps {
   dependencies?: unknown;
   downloadFile?: unknown;
   runtime?: unknown;
-  voiceControllerFactory?: unknown;
-  voiceEnabled?: boolean;
+  dictationController?: DictationController;
+  dictationService?: DictationService;
 }
 
 type WorkspaceView = 'document' | 'connections';
@@ -206,11 +217,22 @@ function PublishedPage({ slug }: { slug: string }) {
 
 function BlockEditor({
   block,
+  dictationActive,
+  dictationDraft,
+  dictationError,
   dormancyDays,
   focused,
   onBlur,
   onChange,
   onDelete,
+  onDictationCancel,
+  onDictationChange,
+  onDictationFinish,
+  onDictationKeep,
+  onDictationPause,
+  onDictationResume,
+  onDictationStart,
+  onDictationUseVerbatim,
   onFocus,
   onKindChange,
   onReferenceChange,
@@ -219,11 +241,22 @@ function BlockEditor({
   placeholder,
 }: {
   block: ThoughtBlock;
+  dictationActive: boolean;
+  dictationDraft: DictationDraft | null;
+  dictationError: string | null;
   dormancyDays: number;
   focused: boolean;
   onBlur: () => void;
   onChange: (content: string) => void;
   onDelete: () => void;
+  onDictationCancel: () => void;
+  onDictationChange: (content: string) => void;
+  onDictationFinish: () => void;
+  onDictationKeep: () => void;
+  onDictationPause: () => void;
+  onDictationResume: () => void;
+  onDictationStart: (offset: number) => void;
+  onDictationUseVerbatim: () => void;
   onFocus: () => void;
   onKindChange: (kind: ThoughtKind) => void;
   onReferenceChange: (field: keyof Pick<SourceReference, 'author' | 'excerpt' | 'title' | 'url'>, value: string) => void;
@@ -262,6 +295,15 @@ function BlockEditor({
           <span>{status}</span>
           {block.parentId === null ? null : <span className="thought-card__linked"><Link2 size={12} /> linked</span>}
           <button aria-label="Delete block" className="delete-block" onClick={onDelete} type="button">Delete</button>
+          {focused && !dictationActive ? (
+            <button
+              aria-label="Start dictation"
+              className="dictation-trigger"
+              onClick={() => { onDictationStart(textareaRef.current?.selectionStart ?? block.content.length); }}
+              title="Dictate into this block"
+              type="button"
+            ><Mic size={15} /></button>
+          ) : null}
         </div>
         {block.originPrompt === null ? null : (
           <p className="thought-card__origin"><span>Working from</span>{block.originPrompt}</p>
@@ -278,8 +320,52 @@ function BlockEditor({
             ? 'Start anywhere. Write what is actually there.'
             : 'Continue in your own words…')}
           ref={textareaRef}
+          readOnly={dictationActive}
           value={block.content}
         />
+        {dictationDraft === null ? null : (
+          <section aria-label="Dictation review" className={`dictation-draft dictation-draft--${dictationDraft.status}`}>
+            <div className="dictation-draft__status" aria-live="polite">
+              <span className="dictation-dot" aria-hidden="true" />
+              {dictationDraft.status === 'recording' ? 'Recording · keep Specular open'
+                : dictationDraft.status === 'requesting' ? 'Waiting for microphone permission…'
+                : dictationDraft.status === 'paused' ? 'Paused · edit if you need to'
+                  : dictationDraft.status === 'processing' ? 'Preparing your transcript…'
+                    : dictationDraft.status === 'review' ? 'Review before it becomes writing'
+                      : 'Dictation was interrupted. Your transcribed text is safe.'}
+            </div>
+            {dictationDraft.status === 'interrupted' ? (
+              <p className="dictation-interruption" role="alert">Dictation was interrupted. Check the text below, then continue when ready.</p>
+            ) : null}
+            <textarea
+              aria-label="Dictation draft"
+              onChange={(event) => { onDictationChange(event.target.value); }}
+              readOnly={dictationDraft.status === 'requesting' || dictationDraft.status === 'recording' || dictationDraft.status === 'processing'}
+              value={dictationDraft.content}
+            />
+            {dictationError === null ? null : <p className="inline-error" role="alert">{dictationError}</p>}
+            <div className="dictation-draft__actions">
+              {dictationDraft.status === 'recording' ? <button aria-label="Pause dictation" onClick={onDictationPause} type="button"><Pause size={14} />Pause</button> : null}
+              {dictationDraft.status === 'paused' ? <button aria-label="Resume dictation" onClick={onDictationResume} type="button"><Play size={14} />Resume</button> : null}
+              {dictationDraft.status === 'interrupted' ? <button onClick={onDictationResume} type="button"><Mic size={14} />Continue dictating</button> : null}
+              {dictationDraft.status === 'recording' || dictationDraft.status === 'paused'
+                ? <button aria-label="Finish dictation" onClick={onDictationFinish} type="button"><Square size={13} />Done</button>
+                : null}
+              {dictationDraft.status === 'review' ? (
+                <>
+                  {dictationDraft.content === dictationDraft.verbatim ? null : <button onClick={onDictationUseVerbatim} type="button">Use verbatim</button>}
+                  <button className="primary-action" onClick={onDictationKeep} type="button"><Check size={14} />Keep dictation</button>
+                </>
+              ) : null}
+              <button onClick={onDictationCancel} type="button">Cancel</button>
+            </div>
+            <small>This remains a private draft until you choose Keep.</small>
+            <details className="dictation-privacy">
+              <summary>Voice privacy</summary>
+              <p>Audio is sent in short checkpoints for transcription, then discarded rather than saved in your workspace. Faithful cleanup sends the transcript through a separate text request that may be retained for abuse monitoring for up to 30 days under standard API controls. Choose Verbatim in Library to skip cleanup.</p>
+            </details>
+          </section>
+        )}
         {block.kind !== 'reference' ? null : (
           <div className="reference-fields">
             <input aria-label="Reference title" onChange={(event) => { onReferenceChange('title', event.target.value); }} placeholder="Source title" value={block.references[0]?.title ?? ''} />
@@ -564,6 +650,8 @@ function SnapshotEditor({
 }
 
 export function App({
+  dictationController,
+  dictationService,
   initialState,
   reflector = new HttpReflector(),
   sharePublisher = new HttpSharePublisher(),
@@ -587,7 +675,12 @@ export function App({
   const [shareError, setShareError] = useState<string | null>(null);
   const [snapshotId, setSnapshotId] = useState<string | null>(null);
   const [publishing, setPublishing] = useState(false);
+  const [dictationError, setDictationError] = useState<string | null>(null);
   const storeRef = useRef<WorkspaceStore | null>(null);
+  const dictationServiceRef = useRef<DictationService>(dictationService ?? new HttpDictationService());
+  const dictationControllerRef = useRef<DictationController>(dictationController ?? new BrowserDictationController(dictationServiceRef.current));
+  const dictationDraftRef = useRef<DictationDraft | null>(state.dictationDraft);
+  dictationDraftRef.current = state.dictationDraft;
 
   useEffect(() => {
     if (initialState !== undefined) return;
@@ -617,6 +710,162 @@ export function App({
   )) ?? null;
   const currentSnapshot = state.snapshots.find((snapshot) => snapshot.id === snapshotId) ?? null;
   const isBlank = blocks.every((block) => block.content.trim().length === 0);
+
+  const setDictationDraft = (update: DictationDraft | null | ((draft: DictationDraft | null) => DictationDraft | null)) => {
+    setState((current) => {
+      const next = typeof update === 'function' ? update(current.dictationDraft) : update;
+      dictationDraftRef.current = next;
+      return { ...current, dictationDraft: next };
+    });
+  };
+
+  const captureHandlers = (): DictationCaptureHandlers => ({
+    onStarted: () => {
+      setDictationDraft((draft) => draft === null ? null : {
+        ...draft,
+        status: 'recording',
+        interruptionReason: null,
+        updatedAt: Date.now(),
+      });
+    },
+    onTranscript: (transcript) => {
+      const addition = transcript.trim();
+      if (addition.length === 0) return;
+      setDictationDraft((draft) => {
+        if (draft === null) return null;
+        const join = draft.verbatim.trim().length === 0 ? '' : ' ';
+        const verbatim = `${draft.verbatim}${join}${addition}`.slice(0, 40_000);
+        return { ...draft, content: verbatim, verbatim, updatedAt: Date.now() };
+      });
+    },
+    onInterrupted: (reason) => {
+      setDictationError(null);
+      setDictationDraft((draft) => draft === null ? null : {
+        ...draft,
+        status: 'interrupted',
+        interruptionReason: reason,
+        updatedAt: Date.now(),
+      });
+    },
+    onError: (message) => {
+      setDictationError(message);
+      setDictationDraft((draft) => draft === null ? null : {
+        ...draft,
+        status: 'interrupted',
+        interruptionReason: 'transcription_failure',
+        updatedAt: Date.now(),
+      });
+    },
+  });
+
+  const startDictation = async (blockId: string, insertionOffset: number) => {
+    if (dictationDraftRef.current !== null) {
+      setSelectedBlockId(dictationDraftRef.current.blockId);
+      return;
+    }
+    const now = Date.now();
+    setDictationError(null);
+    setDictationDraft({
+      id: newId('dictation'),
+      blockId,
+      content: '',
+      verbatim: '',
+      insertionOffset,
+      cleanupMode: state.settings.dictationCleanup,
+      status: 'requesting',
+      interruptionReason: null,
+      startedAt: now,
+      updatedAt: now,
+    });
+    try {
+      await dictationControllerRef.current.start(captureHandlers());
+    } catch (error) {
+      captureHandlers().onError(error instanceof Error ? error.message : 'Microphone access failed.');
+    }
+  };
+
+  const pauseDictation = async () => {
+    await dictationControllerRef.current.pause();
+    setDictationDraft((draft) => draft === null ? null : { ...draft, status: 'paused', updatedAt: Date.now() });
+  };
+
+  const resumeDictation = async () => {
+    const draft = dictationDraftRef.current;
+    if (draft === null) return;
+    setDictationError(null);
+    try {
+      if (draft.status === 'interrupted') await dictationControllerRef.current.start(captureHandlers());
+      else await dictationControllerRef.current.resume();
+    } catch (error) {
+      captureHandlers().onError(error instanceof Error ? error.message : 'Microphone access failed.');
+    }
+  };
+
+  const finishDictation = async () => {
+    setDictationError(null);
+    setDictationDraft((draft) => draft === null ? null : { ...draft, status: 'processing', updatedAt: Date.now() });
+    try {
+      await dictationControllerRef.current.finish();
+      const draft = dictationDraftRef.current;
+      if (draft === null) return;
+      const cleaned = draft.cleanupMode === 'faithful' && draft.verbatim.trim().length > 0
+        ? await dictationServiceRef.current.clean(draft.verbatim)
+        : draft.verbatim;
+      setDictationDraft((current) => current === null ? null : {
+        ...current,
+        content: cleaned,
+        status: 'review',
+        interruptionReason: null,
+        updatedAt: Date.now(),
+      });
+    } catch (error) {
+      const draft = dictationDraftRef.current;
+      setDictationError(error instanceof Error ? error.message : 'Cleanup unavailable. The verbatim transcript is safe.');
+      setDictationDraft(draft === null ? null : {
+        ...draft,
+        content: draft.verbatim,
+        cleanupMode: 'verbatim',
+        status: 'review',
+        interruptionReason: null,
+        updatedAt: Date.now(),
+      });
+    }
+  };
+
+  const cancelDictation = () => {
+    const draft = dictationDraftRef.current;
+    if (draft !== null && draft.content.trim().length > 0 && !globalThis.confirm('Discard this dictation draft? Its provisional text will be removed.')) return;
+    dictationControllerRef.current.cancel();
+    setDictationError(null);
+    setDictationDraft(null);
+  };
+
+  const keepDictation = () => {
+    const draft = dictationDraftRef.current;
+    if (draft?.status !== 'review') return;
+    const now = Date.now();
+    setState((current) => ({
+      ...current,
+      dictationDraft: null,
+      blocks: current.blocks.map((block) => {
+        if (block.id !== draft.blockId) return block;
+        const offset = Math.min(draft.insertionOffset, block.content.length);
+        const content = `${block.content.slice(0, offset)}${draft.content}${block.content.slice(offset)}`;
+        return {
+          ...block,
+          content,
+          status: 'active',
+          updatedAt: now,
+          versions: [...block.versions, { content, createdAt: now }].slice(-500),
+        };
+      }),
+      documents: current.documents.map((document) => document.id === current.activeDocumentId
+        ? { ...document, status: 'active', updatedAt: now }
+        : document),
+    }));
+    dictationDraftRef.current = null;
+    setDictationError(null);
+  };
 
   const updateDocument = (patch: Partial<ThoughtDocument>) => {
     const now = Date.now();
@@ -690,6 +939,10 @@ export function App({
   };
 
   const deleteBlock = (blockId: string) => {
+    if (state.dictationDraft?.blockId === blockId) {
+      globalThis.alert('Keep or cancel the dictation draft before deleting this block.');
+      return;
+    }
     const block = state.blocks.find((item) => item.id === blockId);
     if (block === undefined) return;
     const hasAuthoredMaterial = block.content.trim().length > 0
@@ -907,7 +1160,10 @@ export function App({
               </button>
             ))}
           </div>
-          <footer><span>Becomes dormant after</span><select aria-label="Dormancy period" onChange={(event) => { setState((current) => ({ ...current, settings: { ...current.settings, dormancyDays: Number(event.target.value) } })); }} value={state.settings.dormancyDays}><option value={7}>7 days</option><option value={14}>14 days</option><option value={30}>30 days</option><option value={90}>90 days</option></select></footer>
+          <footer>
+            <label><span>Becomes dormant after</span><select aria-label="Dormancy period" onChange={(event) => { setState((current) => ({ ...current, settings: { ...current.settings, dormancyDays: Number(event.target.value) } })); }} value={state.settings.dormancyDays}><option value={7}>7 days</option><option value={14}>14 days</option><option value={30}>30 days</option><option value={90}>90 days</option></select></label>
+            <label><span>Dictation transcript</span><select aria-label="Dictation cleanup" onChange={(event) => { setState((current) => ({ ...current, settings: { ...current.settings, dictationCleanup: event.target.value as 'faithful' | 'verbatim' } })); }} value={state.settings.dictationCleanup}><option value="faithful">Faithful cleanup</option><option value="verbatim">Verbatim</option></select></label>
+          </footer>
         </aside>
       ) : null}
 
@@ -969,12 +1225,23 @@ export function App({
               {blocks.map((block) => (
                 <BlockEditor
                   block={block}
+                  dictationActive={state.dictationDraft !== null}
+                  dictationDraft={state.dictationDraft?.blockId === block.id ? state.dictationDraft : null}
+                  dictationError={state.dictationDraft?.blockId === block.id ? dictationError : null}
                   dormancyDays={state.settings.dormancyDays}
                   focused={selectedBlock?.id === block.id}
                   key={block.id}
                   onBlur={() => { window.setTimeout(() => { commitVersion(block.id); }, 0); }}
                   onChange={(content) => { updateBlock(block.id, (current) => ({ ...current, content, status: 'active', updatedAt: Date.now() })); }}
                   onDelete={() => { deleteBlock(block.id); }}
+                  onDictationCancel={cancelDictation}
+                  onDictationChange={(content) => { setDictationDraft((draft) => draft === null ? null : { ...draft, content, verbatim: content, updatedAt: Date.now() }); }}
+                  onDictationFinish={() => { void finishDictation(); }}
+                  onDictationKeep={keepDictation}
+                  onDictationPause={() => { void pauseDictation(); }}
+                  onDictationResume={() => { void resumeDictation(); }}
+                  onDictationStart={(offset) => { void startDictation(block.id, offset); }}
+                  onDictationUseVerbatim={() => { setDictationDraft((draft) => draft === null ? null : { ...draft, content: draft.verbatim, cleanupMode: 'verbatim', updatedAt: Date.now() }); }}
                   onFocus={() => { setSelectedBlockId(block.id); setSelection(''); }}
                   onKindChange={(kind) => { updateBlock(block.id, (current) => ({ ...current, kind, updatedAt: Date.now() })); }}
                   onReferenceChange={(field, value) => { updateBlock(block.id, (current) => {

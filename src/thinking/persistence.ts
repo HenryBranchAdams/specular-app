@@ -15,13 +15,30 @@ export interface WorkspaceStore {
   close(): void;
 }
 
+export function recoverWorkspaceState(state: WorkspaceState): WorkspaceState {
+  const draft = state.dictationDraft;
+  if (draft === null || !['requesting', 'recording', 'processing'].includes(draft.status)) {
+    return state;
+  }
+
+  return workspaceStateSchema.parse({
+    ...state,
+    dictationDraft: {
+      ...draft,
+      status: 'interrupted',
+      interruptionReason: 'storage_failure',
+      updatedAt: Date.now(),
+    },
+  });
+}
+
 class IndexedDbWorkspaceStore implements WorkspaceStore {
   constructor(private readonly repositories: LocalRepositories) {}
 
   async load(): Promise<WorkspaceState> {
     const value = await this.repositories.preferences.get(WORKSPACE_KEY);
     const parsed = workspaceStateSchema.safeParse(value);
-    return parsed.success ? parsed.data : createInitialWorkspace();
+    return parsed.success ? recoverWorkspaceState(parsed.data) : createInitialWorkspace();
   }
 
   async save(state: WorkspaceState): Promise<void> {

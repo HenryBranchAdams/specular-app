@@ -32,6 +32,34 @@ export const reflectionMoveSchema = z.enum([
   'calibrate',
 ]);
 
+export const dictationDraftStatusSchema = z.enum([
+  'requesting',
+  'recording',
+  'paused',
+  'processing',
+  'review',
+  'interrupted',
+]);
+
+export const dictationDraftSchema = z.object({
+  id: z.string().min(1).max(128),
+  blockId: z.string().min(1).max(128),
+  content: z.string().max(40_000),
+  verbatim: z.string().max(40_000),
+  insertionOffset: z.number().int().nonnegative().max(40_000),
+  cleanupMode: z.enum(['faithful', 'verbatim']),
+  status: dictationDraftStatusSchema,
+  interruptionReason: z.enum([
+    'backgrounded',
+    'connection_lost',
+    'microphone_lost',
+    'storage_failure',
+    'transcription_failure',
+  ]).nullable(),
+  startedAt: z.number().int().nonnegative(),
+  updatedAt: z.number().int().nonnegative(),
+}).strict();
+
 const blockVersionSchema = z.object({
   content: z.string().max(40_000),
   createdAt: z.number().int().nonnegative(),
@@ -121,6 +149,7 @@ export const thoughtSnapshotSchema = z.object({
 export const workspaceStateSchema = z.object({
   version: z.literal(1),
   activeDocumentId: z.string().min(1).max(128),
+  dictationDraft: dictationDraftSchema.nullable().default(null),
   documents: z.array(thoughtDocumentSchema).min(1).max(1_000),
   blocks: z.array(thoughtBlockSchema).max(50_000),
   connections: z.array(connectionSchema).max(100_000),
@@ -129,6 +158,7 @@ export const workspaceStateSchema = z.object({
   settings: z.object({
     contextScope: contextScopeSchema,
     dormancyDays: z.number().int().min(1).max(365),
+    dictationCleanup: z.enum(['faithful', 'verbatim']).default('faithful'),
   }).strict(),
 }).strict();
 
@@ -137,6 +167,8 @@ export type ThoughtStatus = z.infer<typeof thoughtStatusSchema>;
 export type Relationship = z.infer<typeof relationshipSchema>;
 export type ContextScope = z.infer<typeof contextScopeSchema>;
 export type ReflectionMove = z.infer<typeof reflectionMoveSchema>;
+export type DictationDraft = z.infer<typeof dictationDraftSchema>;
+export type DictationDraftStatus = z.infer<typeof dictationDraftStatusSchema>;
 export type SourceReference = z.infer<typeof sourceReferenceSchema>;
 export type ThoughtBlock = z.infer<typeof thoughtBlockSchema>;
 export type ThoughtDocument = z.infer<typeof thoughtDocumentSchema>;
@@ -156,6 +188,7 @@ export function createInitialWorkspace(now = Date.now()): WorkspaceState {
   return workspaceStateSchema.parse({
     version: 1,
     activeDocumentId: documentId,
+    dictationDraft: null,
     documents: [{
       id: documentId,
       title: '',
@@ -183,6 +216,7 @@ export function createInitialWorkspace(now = Date.now()): WorkspaceState {
     settings: {
       contextScope: 'document',
       dormancyDays: 14,
+      dictationCleanup: 'faithful',
     },
   });
 }

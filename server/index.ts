@@ -42,7 +42,7 @@ const server = createHttpServer({
   service,
   createMcpServer: () => createSpecularMcpServer({ service, widgetHtml }),
   realtimeService,
-  staticRoot: fileURLToPath(new URL('../dist/', import.meta.url)),
+  staticRoot: fileURLToPath(new URL('../dist/client/', import.meta.url)),
 });
 
 server.listen(config.port, config.host, () => {

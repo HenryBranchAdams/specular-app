@@ -7,6 +7,7 @@ The hosted release keeps the workspace corpus in the browser. Only the context t
 ## Product invariants
 
 - Every substantive word in the thinking document is written by the user.
+- Dictation remains a provisional text draft until the author explicitly chooses Keep.
 - Reflection is explicit, selection-aware, provisional, and kept in the margin.
 - Calibration chat is ephemeral; clarity must return to the canonical document.
 - Context can be limited to a selection, connected blocks, the current document, or the workspace.
@@ -24,7 +25,9 @@ npm ci
 npm run dev
 ```
 
-Open `http://127.0.0.1:5177`. The Sites-compatible development worker reads ignored local configuration from `.env.local`; `OPENAI_API_KEY` enables live reflection. The interface and deterministic tests do not require a key.
+Open `http://127.0.0.1:5177`. The Sites-compatible development worker reads ignored local configuration from `.env.local`; `OPENAI_API_KEY` enables live reflection, dictation transcription, and optional faithful cleanup. The interface and deterministic tests do not require a key.
+
+Dictation is available from the microphone button on the focused writing block. Keep Specular visible while speaking: mobile browsers may suspend microphone capture when the app is backgrounded or the screen locks. Specular checkpoints speech as text, marks interruptions explicitly, and never promotes a draft into canonical writing without Keep. Audio is not retained in the workspace. The optional cleanup preference is local and can be set to Verbatim to skip the separate text cleanup request.
 
 ## Validation
 
@@ -43,6 +46,8 @@ npm run test:e2e
 The Ready to Use version is packaged and deployed with ChatGPT Sites. Its Worker exposes:
 
 - `POST /api/reflect` for explicit margin reflection
+- `POST /api/dictation/transcribe` for bounded audio checkpoints
+- `POST /api/dictation/cleanup` for optional faithful transcript cleanup
 - `POST /api/shares` for immutable snapshot publication
 - `GET /api/shares/:slug` for published artifacts
 - `GET /healthz` for deployment health

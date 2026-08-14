@@ -2,6 +2,8 @@ import { cleanup, render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { createInitialWorkspace } from '../thinking/model';
+import type { DictationCaptureHandlers, DictationController } from '../dictation/capture';
+import type { DictationService } from '../dictation/client';
 import type { Reflector } from '../thinking/reflect-client';
 import type { SharePublisher } from '../thinking/share-client';
 import { App } from './App';
@@ -20,7 +22,21 @@ function reflection(mirror = 'You are separating attention from certainty.') {
   };
 }
 
-function setup(options: { reflector?: Reflector; sharePublisher?: SharePublisher } = {}) {
+class FakeDictationController implements DictationController {
+  handlers: DictationCaptureHandlers | null = null;
+  start = vi.fn((handlers: DictationCaptureHandlers) => { this.handlers = handlers; handlers.onStarted(); return Promise.resolve(); });
+  pause = vi.fn(() => Promise.resolve());
+  resume = vi.fn(() => Promise.resolve());
+  finish = vi.fn(() => Promise.resolve());
+  cancel = vi.fn(() => undefined);
+}
+
+function setup(options: {
+  reflector?: Reflector;
+  sharePublisher?: SharePublisher;
+  dictationController?: DictationController;
+  dictationService?: DictationService;
+} = {}) {
   const reflector = options.reflector ?? { reflect: vi.fn(() => Promise.resolve(reflection())) };
   const sharePublisher = options.sharePublisher ?? {
     publish: vi.fn(() => Promise.resolve({ url: 'https://specular.example/s/abcdefghijklmnop' })),
@@ -30,12 +46,72 @@ function setup(options: { reflector?: Reflector; sharePublisher?: SharePublisher
       initialState={createInitialWorkspace(1_800_000_000_000)}
       reflector={reflector}
       sharePublisher={sharePublisher}
+      {...(options.dictationController === undefined ? {} : { dictationController: options.dictationController })}
+      {...(options.dictationService === undefined ? {} : { dictationService: options.dictationService })}
     />,
   );
   return { reflector, sharePublisher };
 }
 
 describe('Specular thinking workspace', () => {
+  it('reviews dictated text in the focused block before one canonical Keep', async () => {
+    const user = userEvent.setup();
+    const controller = new FakeDictationController();
+    const clean = vi.fn(() => Promise.resolve('A spoken thought without filler.'));
+    setup({
+      dictationController: controller,
+      dictationService: { transcribe: vi.fn(), clean },
+    });
+
+    const canonical = screen.getByRole<HTMLTextAreaElement>('textbox', { name: 'Thought writing block' });
+    canonical.focus();
+    canonical.setSelectionRange(0, 0);
+    await user.click(screen.getByRole('button', { name: 'Start dictation' }));
+    controller.handlers?.onTranscript('Um, a spoken thought without filler.');
+
+    expect(await screen.findByRole('textbox', { name: 'Dictation draft' })).toHaveValue('Um, a spoken thought without filler.');
+    expect(canonical).toHaveValue('');
+    expect(screen.getByRole('button', { name: 'Create snapshot' })).toBeDisabled();
+
+    await user.click(screen.getByRole('button', { name: 'Pause dictation' }));
+    expect(screen.getByRole('textbox', { name: 'Dictation draft' })).not.toHaveAttribute('readonly');
+    await user.click(screen.getByRole('button', { name: 'Finish dictation' }));
+    expect(await screen.findByRole('textbox', { name: 'Dictation draft' })).toHaveValue('A spoken thought without filler.');
+    expect(clean).toHaveBeenCalledWith('Um, a spoken thought without filler.');
+
+    await user.click(screen.getByRole('button', { name: 'Keep dictation' }));
+    expect(canonical).toHaveValue('A spoken thought without filler.');
+    expect(screen.queryByRole('textbox', { name: 'Dictation draft' })).not.toBeInTheDocument();
+  });
+
+  it('makes an interrupted dictation unmistakable and keeps its text provisional', async () => {
+    const user = userEvent.setup();
+    const controller = new FakeDictationController();
+    setup({ dictationController: controller, dictationService: { transcribe: vi.fn(), clean: vi.fn() } });
+    await user.click(screen.getByRole('button', { name: 'Start dictation' }));
+    controller.handlers?.onTranscript('Words before interruption.');
+    controller.handlers?.onInterrupted('connection_lost');
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('Dictation was interrupted');
+    expect(screen.getByRole('textbox', { name: 'Thought writing block' })).toHaveValue('');
+    expect(screen.getByRole('button', { name: 'Continue dictating' })).toBeVisible();
+  });
+
+  it('requires resolving a nonempty draft before deleting its block or dictating elsewhere', async () => {
+    const user = userEvent.setup();
+    const controller = new FakeDictationController();
+    const alert = vi.spyOn(globalThis, 'alert').mockImplementation(() => undefined);
+    setup({ dictationController: controller, dictationService: { transcribe: vi.fn(), clean: vi.fn() } });
+    await user.click(screen.getByRole('button', { name: 'Start dictation' }));
+    controller.handlers?.onTranscript('Still provisional.');
+
+    await user.click(screen.getByRole('button', { name: 'Delete block' }));
+    expect(alert).toHaveBeenCalledWith('Keep or cancel the dictation draft before deleting this block.');
+    expect(screen.getByRole('textbox', { name: 'Dictation draft' })).toHaveValue('Still provisional.');
+    await user.click(screen.getByRole('button', { name: 'New block' }));
+    expect(screen.queryByRole('button', { name: 'Start dictation' })).not.toBeInTheDocument();
+    alert.mockRestore();
+  });
   it('keeps optional intentions behind a help control and never inserts them as prose', async () => {
     const user = userEvent.setup();
     setup();
@@ -161,5 +237,7 @@ describe('Specular thinking workspace', () => {
     await user.click(screen.getByRole('button', { name: 'Library' }));
     await user.selectOptions(screen.getByRole('combobox', { name: 'Dormancy period' }), '30');
     expect(screen.getByRole('combobox', { name: 'Dormancy period' })).toHaveValue('30');
+    await user.selectOptions(screen.getByRole('combobox', { name: 'Dictation cleanup' }), 'verbatim');
+    expect(screen.getByRole('combobox', { name: 'Dictation cleanup' })).toHaveValue('verbatim');
   });
 });

@@ -52,7 +52,7 @@ function operationContext(operation) {
 }
 
 await Promise.all([
-  access(new URL('../dist/index.html', import.meta.url)),
+  access(new URL('../dist/client/index.html', import.meta.url)),
   access(new URL('../dist-server/index.js', import.meta.url)),
   access(new URL('../dist-server/specular-widget.html', import.meta.url)),
 ]);
@@ -154,7 +154,7 @@ try {
 
   await delay(100);
   invariant(!logs.join('').includes(SENTINEL), 'Server logs leaked seeded user-authored content.');
-  invariant(!(await readFile(new URL('../dist/index.html', import.meta.url), 'utf8')).includes(SENTINEL),
+  invariant(!(await readFile(new URL('../dist/client/index.html', import.meta.url), 'utf8')).includes(SENTINEL),
     'A private sentinel leaked into the immutable static artifact.');
 
   process.stdout.write(JSON.stringify({

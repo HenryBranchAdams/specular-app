@@ -29,6 +29,7 @@ interface Env {
   DB: D1DatabaseLike;
   OPENAI_API_KEY?: string;
   OPENAI_MODEL?: string;
+  OPENAI_TRANSCRIPTION_MODEL?: string;
 }
 
 const reflectionRequestSchema = z.object({
@@ -64,6 +65,16 @@ const publishedSnapshotSchema = z.object({
     references: z.array(sourceSchema).max(50),
   }).strict()).min(1).max(1_000),
 }).strict();
+
+const cleanupRequestSchema = z.object({
+  verbatim: z.string().trim().min(1).max(40_000),
+}).strict();
+
+const cleanupResponseSchema = z.object({
+  cleaned: z.string().trim().min(1).max(40_000),
+}).strict();
+
+const transcriptionProviderSchema = z.object({ text: z.string().max(40_000) }).passthrough();
 
 const responseJsonSchema = {
   type: 'object',
@@ -113,7 +124,7 @@ const responseJsonSchema = {
 
 const SECURITY_HEADERS: Readonly<Record<string, string>> = {
   'content-security-policy': "default-src 'self'; base-uri 'none'; connect-src 'self'; font-src 'self'; form-action 'self'; frame-ancestors 'none'; img-src 'self' data:; object-src 'none'; script-src 'self'; style-src 'self' 'unsafe-inline'; worker-src 'self' blob:",
-  'permissions-policy': 'camera=(), microphone=(), geolocation=(), payment=(), usb=()',
+  'permissions-policy': 'camera=(), microphone=(self), geolocation=(), payment=(), usb=()',
   'referrer-policy': 'no-referrer',
   'x-content-type-options': 'nosniff',
 };
@@ -246,6 +257,97 @@ async function handleReflection(request: Request, env: Env): Promise<Response> {
   }
 }
 
+async function handleTranscription(request: Request, env: Env): Promise<Response> {
+  const apiKey = env.OPENAI_API_KEY?.trim();
+  if (apiKey === undefined || apiKey.length === 0) return json({ error: 'provider_unavailable' }, 503);
+  const declared = request.headers.get('content-length');
+  if (declared !== null && Number(declared) > 5 * 1024 * 1024) return json({ error: 'payload_too_large' }, 413);
+
+  let audio: Blob;
+  try {
+    const form = await request.formData();
+    const value = form.get('audio');
+    if (value === null || typeof value === 'string' || value.size === 0 || value.size > 5 * 1024 * 1024) {
+      return json({ error: 'invalid_audio' }, 400);
+    }
+    const allowed = new Set(['audio/webm', 'audio/ogg', 'audio/mpeg', 'audio/mp4', 'audio/wav', 'audio/x-m4a', 'audio/flac']);
+    const mime = value.type.split(';', 1)[0]?.toLowerCase() ?? '';
+    if (!allowed.has(mime)) return json({ error: 'invalid_audio' }, 400);
+    audio = new Blob([await value.arrayBuffer()], { type: value.type });
+  } catch {
+    return json({ error: 'invalid_audio' }, 400);
+  }
+
+  const providerForm = new FormData();
+  const extension = audio.type.includes('ogg') ? 'ogg' : audio.type.includes('mpeg') ? 'mp3' : audio.type.includes('wav') ? 'wav' : 'webm';
+  providerForm.set('file', audio, `checkpoint.${extension}`);
+  const configuredTranscriptionModel = env.OPENAI_TRANSCRIPTION_MODEL?.trim();
+  providerForm.set('model', configuredTranscriptionModel === undefined || configuredTranscriptionModel.length === 0 ? 'gpt-4o-mini-transcribe' : configuredTranscriptionModel);
+  const providerResponse = await fetch('https://api.openai.com/v1/audio/transcriptions', {
+    method: 'POST',
+    headers: { authorization: `Bearer ${apiKey}` },
+    body: providerForm,
+  });
+  if (!providerResponse.ok) return json({ error: 'provider_unavailable' }, 503);
+  try {
+    const result = transcriptionProviderSchema.parse(await providerResponse.json());
+    return json({ transcript: result.text });
+  } catch {
+    return json({ error: 'invalid_output' }, 502);
+  }
+}
+
+const cleanupJsonSchema = {
+  type: 'object',
+  additionalProperties: false,
+  required: ['cleaned'],
+  properties: { cleaned: { type: 'string', minLength: 1, maxLength: 40_000 } },
+} as const;
+
+function cleanupInstructions(): string {
+  return [
+    'Faithfully clean a voice dictation transcript while preserving the speaker\'s substance, sequence, uncertainty, emphasis, and voice.',
+    'Remove filler words, immediate accidental repetitions, and explicit false starts that the speaker clearly corrected.',
+    'Add only punctuation, capitalization, paragraph breaks, and minimal grammatical agreement needed to make the spoken words readable.',
+    'Never summarize, reorder, add, complete, or reinterpret any idea. Never improve the argument or supply missing reasoning.',
+    'When a correction is ambiguous, preserve both phrasings. When unsure, preserve the original words.',
+    'Return only the strict structured object.',
+  ].join('\n');
+}
+
+async function handleCleanup(request: Request, env: Env): Promise<Response> {
+  const apiKey = env.OPENAI_API_KEY?.trim();
+  if (apiKey === undefined || apiKey.length === 0) return json({ error: 'provider_unavailable' }, 503);
+  let input: z.infer<typeof cleanupRequestSchema>;
+  try { input = cleanupRequestSchema.parse(await boundedJson(request, 64 * 1024)); }
+  catch { return json({ error: 'invalid_request' }, 400); }
+  const configuredCleanupModel = env.OPENAI_MODEL?.trim();
+
+  const providerResponse = await fetch('https://api.openai.com/v1/responses', {
+    method: 'POST',
+    headers: { authorization: `Bearer ${apiKey}`, 'content-type': 'application/json' },
+    body: JSON.stringify({
+      model: configuredCleanupModel === undefined || configuredCleanupModel.length === 0 ? 'gpt-5.5' : configuredCleanupModel,
+      instructions: cleanupInstructions(),
+      input: input.verbatim,
+      text: { format: { type: 'json_schema', name: 'faithful_dictation_cleanup', strict: true, schema: cleanupJsonSchema } },
+      max_output_tokens: 12_000,
+      store: false,
+    }),
+  });
+  if (!providerResponse.ok) return json({ error: 'provider_unavailable' }, 503);
+  const output = responseText(await providerResponse.json());
+  if (output === null) return json({ error: 'invalid_output' }, 502);
+  try {
+    const parsed = cleanupResponseSchema.parse(JSON.parse(output) as unknown);
+    const maximumExpansion = Math.max(input.verbatim.length + 200, Math.ceil(input.verbatim.length * 1.25));
+    if (parsed.cleaned.length > maximumExpansion) return json({ error: 'unfaithful_output' }, 422);
+    return json(parsed);
+  } catch {
+    return json({ error: 'invalid_output' }, 502);
+  }
+}
+
 let shareSchemaReady: Promise<void> | undefined;
 
 function ensureShareSchema(database: D1DatabaseLike): Promise<void> {
@@ -295,6 +397,12 @@ const worker = {
     if (url.pathname === '/healthz') return json({ ok: true });
     if (url.pathname === '/api/reflect' && request.method === 'POST') {
       try { return await handleReflection(request, env); } catch { return json({ error: 'provider_unavailable' }, 503); }
+    }
+    if (url.pathname === '/api/dictation/transcribe' && request.method === 'POST') {
+      try { return await handleTranscription(request, env); } catch { return json({ error: 'provider_unavailable' }, 503); }
+    }
+    if (url.pathname === '/api/dictation/cleanup' && request.method === 'POST') {
+      try { return await handleCleanup(request, env); } catch { return json({ error: 'provider_unavailable' }, 503); }
     }
     if (url.pathname === '/api/shares' && request.method === 'POST') {
       try { return await createShare(request, env); } catch { return json({ error: 'storage_failure' }, 503); }
