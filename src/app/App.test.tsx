@@ -97,6 +97,25 @@ describe('Specular thinking workspace', () => {
     expect(screen.getByRole('button', { name: 'Continue dictating' })).toBeVisible();
   });
 
+  it('does not hide a final checkpoint failure behind cleanup or review', async () => {
+    const user = userEvent.setup();
+    const controller = new FakeDictationController();
+    const clean = vi.fn(() => Promise.resolve('Should not run.'));
+    controller.finish.mockImplementationOnce(() => {
+      controller.handlers?.onError('The final checkpoint could not be transcribed.');
+      return Promise.resolve();
+    });
+    setup({ dictationController: controller, dictationService: { transcribe: vi.fn(), clean } });
+    await user.click(screen.getByRole('button', { name: 'Start dictation' }));
+    controller.handlers?.onTranscript('Earlier checkpoint text.');
+    await user.click(screen.getByRole('button', { name: 'Finish dictation' }));
+
+    expect(await screen.findByText('The final checkpoint could not be transcribed.')).toBeVisible();
+    expect(screen.getByRole('button', { name: 'Continue dictating' })).toBeVisible();
+    expect(screen.queryByRole('button', { name: 'Keep dictation' })).not.toBeInTheDocument();
+    expect(clean).not.toHaveBeenCalled();
+  });
+
   it('requires resolving a nonempty draft before deleting its block or dictating elsewhere', async () => {
     const user = userEvent.setup();
     const controller = new FakeDictationController();

@@ -786,7 +786,9 @@ export function App({
 
   const pauseDictation = async () => {
     await dictationControllerRef.current.pause();
-    setDictationDraft((draft) => draft === null ? null : { ...draft, status: 'paused', updatedAt: Date.now() });
+    setDictationDraft((draft) => draft === null || draft.status === 'interrupted'
+      ? draft
+      : { ...draft, status: 'paused', updatedAt: Date.now() });
   };
 
   const resumeDictation = async () => {
@@ -807,7 +809,7 @@ export function App({
     try {
       await dictationControllerRef.current.finish();
       const draft = dictationDraftRef.current;
-      if (draft === null) return;
+      if (draft === null || draft.status === 'interrupted') return;
       const cleaned = draft.cleanupMode === 'faithful' && draft.verbatim.trim().length > 0
         ? await dictationServiceRef.current.clean(draft.verbatim)
         : draft.verbatim;
