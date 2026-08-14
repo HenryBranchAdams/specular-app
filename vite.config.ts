@@ -31,7 +31,7 @@ export default defineConfig(async ({ mode }) => {
     react(),
     ...deploymentPlugins,
     VitePWA({
-      registerType: 'prompt',
+      registerType: 'autoUpdate',
       injectRegister: false,
       manifest: {
         name: 'Specular',
@@ -59,9 +59,11 @@ export default defineConfig(async ({ mode }) => {
         ],
       },
       workbox: {
+        clientsClaim: true,
         cleanupOutdatedCaches: true,
         globPatterns: ['**/*.{css,html,js}'],
         navigateFallback: '/index.html',
+        skipWaiting: true,
       },
     }),
     {
