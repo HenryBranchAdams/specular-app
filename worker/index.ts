@@ -74,7 +74,7 @@ const cleanupResponseSchema = z.object({
   cleaned: z.string().trim().min(1).max(40_000),
 }).strict();
 
-const transcriptionProviderSchema = z.object({ text: z.string().trim().min(1).max(40_000) }).passthrough();
+const transcriptionProviderSchema = z.object({ text: z.string().trim().max(40_000) }).passthrough();
 
 const responseJsonSchema = {
   type: 'object',

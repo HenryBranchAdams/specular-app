@@ -77,7 +77,7 @@ describe('Sites worker', () => {
     expect(providerForm.get('file')).toBeInstanceOf(Blob);
   });
 
-  it('rejects an empty provider transcript instead of reporting a successful checkpoint', async () => {
+  it('treats an empty provider transcript as a successful silent checkpoint', async () => {
     vi.stubGlobal('fetch', vi.fn(() => Promise.resolve(new Response(JSON.stringify({ text: '' }), { status: 200 }))));
     const form = new FormData();
     form.set('audio', new Blob(['audio'], { type: 'audio/webm' }), 'checkpoint.webm');
@@ -87,8 +87,8 @@ describe('Sites worker', () => {
       body: form,
     }), { ...environment(), OPENAI_API_KEY: 'test-key' });
 
-    expect(response.status).toBe(502);
-    await expect(response.json()).resolves.toEqual({ error: 'invalid_output' });
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toEqual({ transcript: '' });
   });
 
   it('runs faithful cleanup separately with storage disabled', async () => {

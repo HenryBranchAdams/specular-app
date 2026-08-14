@@ -134,10 +134,10 @@ describe('Specular thinking workspace', () => {
     expect(screen.getByRole('button', { name: 'Continue dictating' })).toBeVisible();
   });
 
-  it('does not hide a final checkpoint failure behind cleanup or review', async () => {
+  it('reviews and cleans completed checkpoints when the final checkpoint fails', async () => {
     const user = userEvent.setup();
     const controller = new FakeDictationController();
-    const clean = vi.fn(() => Promise.resolve('Should not run.'));
+    const clean = vi.fn(() => Promise.resolve('Earlier checkpoint text.'));
     controller.finish.mockImplementationOnce(() => {
       controller.handlers?.onError('The final checkpoint could not be transcribed.');
       return Promise.resolve();
@@ -147,10 +147,11 @@ describe('Specular thinking workspace', () => {
     controller.handlers?.onTranscript('Earlier checkpoint text.');
     await user.click(screen.getByRole('button', { name: 'Finish dictation' }));
 
-    expect(await screen.findByText('The final checkpoint could not be transcribed.')).toBeVisible();
-    expect(screen.getByRole('button', { name: 'Continue dictating' })).toBeVisible();
-    expect(screen.queryByRole('button', { name: 'Keep dictation' })).not.toBeInTheDocument();
-    expect(clean).not.toHaveBeenCalled();
+    expect(await screen.findByText('The last checkpoint could not be transcribed. Review the saved text before keeping it.')).toBeVisible();
+    expect(screen.getByRole('textbox', { name: 'Dictation draft' })).toHaveValue('Earlier checkpoint text.');
+    expect(screen.getByRole('button', { name: 'Keep dictation' })).toBeVisible();
+    expect(screen.queryByRole('button', { name: 'Continue dictating' })).not.toBeInTheDocument();
+    expect(clean).toHaveBeenCalledWith('Earlier checkpoint text.');
   });
 
   it('preserves the verbatim transcript while the cleaned review is edited', async () => {

@@ -829,12 +829,19 @@ export function App({
   };
 
   const finishDictation = async () => {
+    let partialTranscriptWarning: string | null = null;
     setDictationError(null);
     setDictationDraft((draft) => draft === null ? null : { ...draft, status: 'processing', updatedAt: Date.now() });
     try {
       await dictationControllerRef.current.finish();
       const draft = dictationDraftRef.current;
-      if (draft === null || draft.status === 'interrupted') return;
+      if (draft === null) return;
+      if (draft.status === 'interrupted') {
+        const hasCompletedCheckpoint = draft.verbatim.trim().length > 0;
+        if (draft.interruptionReason !== 'transcription_failure' || !hasCompletedCheckpoint) return;
+        partialTranscriptWarning = 'The last checkpoint could not be transcribed. Review the saved text before keeping it.';
+        setDictationError(partialTranscriptWarning);
+      }
       if (draft.verbatim.trim().length === 0) {
         setDictationError('No speech was transcribed. Continue dictating and try again.');
         setDictationDraft({
@@ -857,7 +864,8 @@ export function App({
       });
     } catch (error) {
       const draft = dictationDraftRef.current;
-      setDictationError(error instanceof Error ? error.message : 'Cleanup unavailable. The verbatim transcript is safe.');
+      const cleanupError = error instanceof Error ? error.message : 'Cleanup unavailable. The verbatim transcript is safe.';
+      setDictationError(partialTranscriptWarning === null ? cleanupError : `${partialTranscriptWarning} ${cleanupError}`);
       setDictationDraft(draft === null ? null : {
         ...draft,
         content: draft.verbatim,
