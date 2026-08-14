@@ -238,18 +238,17 @@ describe('Specular thinking workspace', () => {
     expect(screen.getAllByRole('textbox', { name: 'Thought writing block' })).toHaveLength(1);
   });
 
-  it('requires confirmation before removing authored material', async () => {
+  it('uses visible in-page confirmation before removing authored material', async () => {
     const user = userEvent.setup();
-    const confirm = vi.spyOn(globalThis, 'confirm').mockReturnValue(false);
     setup();
     await user.type(screen.getByRole('textbox', { name: 'Thought writing block' }), 'A thought worth protecting.');
     await user.click(screen.getByRole('button', { name: 'Delete block' }));
     expect(screen.getByRole('textbox', { name: 'Thought writing block' })).toHaveValue('A thought worth protecting.');
+    expect(screen.getByRole('button', { name: 'Confirm delete block' })).toBeVisible();
+    expect(screen.getByRole('button', { name: 'Cancel block deletion' })).toBeVisible();
 
-    confirm.mockReturnValue(true);
-    await user.click(screen.getByRole('button', { name: 'Delete block' }));
+    await user.click(screen.getByRole('button', { name: 'Confirm delete block' }));
     expect(screen.getByRole('textbox', { name: 'Thought writing block' })).toHaveValue('');
-    confirm.mockRestore();
   });
 
   it('presents reflection as a text action without an AI sparkle mark', () => {

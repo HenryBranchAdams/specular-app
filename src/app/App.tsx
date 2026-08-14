@@ -221,11 +221,14 @@ function BlockEditor({
   dictationActive,
   dictationDraft,
   dictationError,
+  deletePending,
   dormancyDays,
   focused,
   onBlur,
   onChange,
   onDelete,
+  onDeleteCancel,
+  onDeleteConfirm,
   onDictationCancel,
   onDictationChange,
   onDictationFinish,
@@ -246,11 +249,14 @@ function BlockEditor({
   dictationActive: boolean;
   dictationDraft: DictationDraft | null;
   dictationError: string | null;
+  deletePending: boolean;
   dormancyDays: number;
   focused: boolean;
   onBlur: () => void;
   onChange: (content: string) => void;
   onDelete: () => void;
+  onDeleteCancel: () => void;
+  onDeleteConfirm: () => void;
   onDictationCancel: () => void;
   onDictationChange: (content: string) => void;
   onDictationFinish: () => void;
@@ -296,8 +302,13 @@ function BlockEditor({
           </select>
           <span>{status}</span>
           {block.parentId === null ? null : <span className="thought-card__linked"><Link2 size={12} /> linked</span>}
-          <button aria-label="Delete block" className="delete-block" onClick={onDelete} type="button">Delete</button>
-          {focused && !dictationActive && canDictate ? (
+          {deletePending ? (
+            <span aria-label="Confirm block deletion" className="delete-confirmation" role="group">
+              <button aria-label="Confirm delete block" className="delete-block delete-block--confirm" onClick={onDeleteConfirm} type="button">Delete?</button>
+              <button aria-label="Cancel block deletion" className="delete-block" onClick={onDeleteCancel} type="button">Cancel</button>
+            </span>
+          ) : <button aria-label="Delete block" className="delete-block" onClick={onDelete} type="button">Delete</button>}
+          {focused && !dictationActive && canDictate && !deletePending ? (
             <button
               aria-label="Start dictation"
               className="dictation-trigger"
@@ -683,6 +694,7 @@ export function App({
   const [publishing, setPublishing] = useState(false);
   const [dictationError, setDictationError] = useState<string | null>(null);
   const [storageError, setStorageError] = useState<string | null>(null);
+  const [pendingDeleteBlockId, setPendingDeleteBlockId] = useState<string | null>(null);
   const storeRef = useRef<WorkspaceStore | null>(null);
   const dictationServiceRef = useRef<DictationService>(dictationService ?? new HttpDictationService());
   const dictationControllerRef = useRef<DictationController>(dictationController ?? new BrowserDictationController(dictationServiceRef.current));
@@ -990,15 +1002,6 @@ export function App({
     }
     const block = state.blocks.find((item) => item.id === blockId);
     if (block === undefined) return;
-    const hasAuthoredMaterial = block.content.trim().length > 0
-      || block.versions.length > 0
-      || block.references.some((reference) => (
-        reference.title.trim().length > 0
-        || reference.author.trim().length > 0
-        || reference.url.trim().length > 0
-        || reference.excerpt.trim().length > 0
-      ));
-    if (hasAuthoredMaterial && !globalThis.confirm('Delete this block? Its writing and local history will be removed from this workspace.')) return;
 
     const remainingBlocks = blocks.filter((item) => item.id !== blockId);
     const deletedIndex = blocks.findIndex((item) => item.id === blockId);
@@ -1050,8 +1053,31 @@ export function App({
         blockIds: snapshot.blockIds.filter((id) => id !== blockId),
       })),
     }));
+    setPendingDeleteBlockId(null);
     setSelectedBlockId(nextBlockId);
     setSelection('');
+  };
+
+  const requestDeleteBlock = (blockId: string) => {
+    if (state.dictationDraft?.blockId === blockId) {
+      globalThis.alert('Keep or cancel the dictation draft before deleting this block.');
+      return;
+    }
+    const block = state.blocks.find((item) => item.id === blockId);
+    if (block === undefined) return;
+    const hasAuthoredMaterial = block.content.trim().length > 0
+      || block.versions.length > 0
+      || block.references.some((reference) => (
+        reference.title.trim().length > 0
+        || reference.author.trim().length > 0
+        || reference.url.trim().length > 0
+        || reference.excerpt.trim().length > 0
+      ));
+    if (hasAuthoredMaterial) {
+      setPendingDeleteBlockId(blockId);
+      return;
+    }
+    deleteBlock(blockId);
   };
 
   const createDocument = () => {
@@ -1272,6 +1298,7 @@ export function App({
                 <BlockEditor
                   block={block}
                   canDictate={storageError === null}
+                  deletePending={pendingDeleteBlockId === block.id}
                   dictationActive={state.dictationDraft !== null}
                   dictationDraft={state.dictationDraft?.blockId === block.id ? state.dictationDraft : null}
                   dictationError={state.dictationDraft?.blockId === block.id ? dictationError : null}
@@ -1280,7 +1307,9 @@ export function App({
                   key={block.id}
                   onBlur={() => { window.setTimeout(() => { commitVersion(block.id); }, 0); }}
                   onChange={(content) => { updateBlock(block.id, (current) => ({ ...current, content, status: 'active', updatedAt: Date.now() })); }}
-                  onDelete={() => { deleteBlock(block.id); }}
+                  onDelete={() => { requestDeleteBlock(block.id); }}
+                  onDeleteCancel={() => { setPendingDeleteBlockId(null); }}
+                  onDeleteConfirm={() => { deleteBlock(block.id); }}
                   onDictationCancel={cancelDictation}
                   onDictationChange={(content) => { setDictationDraft((draft) => draft === null ? null : {
                     ...draft,

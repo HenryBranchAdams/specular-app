@@ -385,6 +385,21 @@ a:focus-visible {
   color: var(--danger);
 }
 
+.delete-confirmation {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.2rem;
+  margin-left: auto;
+}
+
+.delete-confirmation .delete-block {
+  margin-left: 0;
+}
+
+.delete-block--confirm {
+  color: var(--danger);
+}
+
 .dictation-trigger {
   display: inline-grid;
   width: 1.85rem;
