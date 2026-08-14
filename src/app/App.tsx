@@ -217,6 +217,7 @@ function PublishedPage({ slug }: { slug: string }) {
 
 function BlockEditor({
   block,
+  canDictate,
   dictationActive,
   dictationDraft,
   dictationError,
@@ -241,6 +242,7 @@ function BlockEditor({
   placeholder,
 }: {
   block: ThoughtBlock;
+  canDictate: boolean;
   dictationActive: boolean;
   dictationDraft: DictationDraft | null;
   dictationError: string | null;
@@ -295,7 +297,7 @@ function BlockEditor({
           <span>{status}</span>
           {block.parentId === null ? null : <span className="thought-card__linked"><Link2 size={12} /> linked</span>}
           <button aria-label="Delete block" className="delete-block" onClick={onDelete} type="button">Delete</button>
-          {focused && !dictationActive ? (
+          {focused && !dictationActive && canDictate ? (
             <button
               aria-label="Start dictation"
               className="dictation-trigger"
@@ -332,10 +334,14 @@ function BlockEditor({
                 : dictationDraft.status === 'paused' ? 'Paused · edit if you need to'
                   : dictationDraft.status === 'processing' ? 'Preparing your transcript…'
                     : dictationDraft.status === 'review' ? 'Review before it becomes writing'
-                      : 'Dictation was interrupted. Your transcribed text is safe.'}
+                      : dictationDraft.interruptionReason === 'storage_failure'
+                        ? 'Local saving failed · copy this draft before leaving'
+                        : 'Dictation was interrupted. Your checkpointed text is still here.'}
             </div>
             {dictationDraft.status === 'interrupted' ? (
-              <p className="dictation-interruption" role="alert">Dictation was interrupted. Check the text below, then continue when ready.</p>
+              <p className="dictation-interruption" role="alert">{dictationDraft.interruptionReason === 'storage_failure'
+                ? 'Specular could not save this draft locally. Copy the text below before closing or reloading.'
+                : 'Dictation was interrupted. Check the text below, then continue when ready.'}</p>
             ) : null}
             <textarea
               aria-label="Dictation draft"
@@ -347,7 +353,7 @@ function BlockEditor({
             <div className="dictation-draft__actions">
               {dictationDraft.status === 'recording' ? <button aria-label="Pause dictation" onClick={onDictationPause} type="button"><Pause size={14} />Pause</button> : null}
               {dictationDraft.status === 'paused' ? <button aria-label="Resume dictation" onClick={onDictationResume} type="button"><Play size={14} />Resume</button> : null}
-              {dictationDraft.status === 'interrupted' ? <button onClick={onDictationResume} type="button"><Mic size={14} />Continue dictating</button> : null}
+              {dictationDraft.status === 'interrupted' && dictationDraft.interruptionReason !== 'storage_failure' ? <button onClick={onDictationResume} type="button"><Mic size={14} />Continue dictating</button> : null}
               {dictationDraft.status === 'recording' || dictationDraft.status === 'paused'
                 ? <button aria-label="Finish dictation" onClick={onDictationFinish} type="button"><Square size={13} />Done</button>
                 : null}
@@ -676,6 +682,7 @@ export function App({
   const [snapshotId, setSnapshotId] = useState<string | null>(null);
   const [publishing, setPublishing] = useState(false);
   const [dictationError, setDictationError] = useState<string | null>(null);
+  const [storageError, setStorageError] = useState<string | null>(null);
   const storeRef = useRef<WorkspaceStore | null>(null);
   const dictationServiceRef = useRef<DictationService>(dictationService ?? new HttpDictationService());
   const dictationControllerRef = useRef<DictationController>(dictationController ?? new BrowserDictationController(dictationServiceRef.current));
@@ -691,13 +698,33 @@ export function App({
       const loaded = await store.load();
       setState(loaded);
       setInitialized(true);
-    }).catch(() => { if (active) setInitialized(true); });
+    }).catch(() => {
+      if (!active) return;
+      setStorageError('This browser could not open local storage. Dictation is unavailable so your speech is never presented as safely checkpointed.');
+      setInitialized(true);
+    });
     return () => { active = false; storeRef.current?.close(); storeRef.current = null; };
   }, [initialState, storeFactory]);
 
   useEffect(() => {
     if (!initialized || initialState !== undefined) return;
-    const timeout = window.setTimeout(() => { void storeRef.current?.save(state); }, 180);
+    const timeout = window.setTimeout(() => {
+      const store = storeRef.current;
+      if (store === null) return;
+      void store.save(state).catch(() => {
+        setStorageError('Local saving failed. Dictation has stopped; copy any provisional text before leaving this page.');
+        const draft = dictationDraftRef.current;
+        if (draft === null || !['requesting', 'recording', 'processing'].includes(draft.status)) return;
+        dictationControllerRef.current.cancel();
+        setDictationError('Local saving failed. Copy this draft before closing or reloading.');
+        setDictationDraft((current) => current === null ? null : {
+          ...current,
+          status: 'interrupted',
+          interruptionReason: 'storage_failure',
+          updatedAt: Date.now(),
+        });
+      });
+    }, 180);
     return () => { window.clearTimeout(timeout); };
   }, [initialState, initialized, state]);
 
@@ -1135,12 +1162,12 @@ export function App({
         <button className="brand" onClick={() => { setView('document'); }} type="button">Specular</button>
         <div className="header-actions">
           <button disabled={blocks.every((block) => block.content.trim().length === 0)} onClick={createSnapshot} type="button"><FileText size={15} />Create snapshot</button>
-          <button aria-expanded={libraryOpen} onClick={() => { setLibraryOpen((open) => !open); }} type="button"><Library size={15} />Library</button>
+          <button aria-expanded={libraryOpen} disabled={state.dictationDraft !== null} onClick={() => { setLibraryOpen((open) => !open); }} type="button"><Library size={15} />Library</button>
         </div>
       </header>
       <nav aria-label="Workspace views" className="workspace-nav">
         <button aria-current={view === 'document' ? 'page' : undefined} onClick={() => { setView('document'); }} type="button"><BookOpen size={15} />Document</button>
-        <button aria-current={view === 'connections' ? 'page' : undefined} onClick={() => { setView('connections'); }} type="button"><Network size={15} />Connections</button>
+        <button aria-current={view === 'connections' ? 'page' : undefined} disabled={state.dictationDraft !== null} onClick={() => { setView('connections'); }} type="button"><Network size={15} />Connections</button>
       </nav>
 
       {libraryOpen ? (
@@ -1179,6 +1206,7 @@ export function App({
       ) : (
         <section className="workspace-grid">
           <article aria-label="Thinking document" className="thinking-document">
+            {storageError === null ? null : <p className="workspace-storage-error" role="alert">{storageError}</p>}
             <div className="document-status">
               <span>{effectiveStatus(currentDocument.updatedAt, currentDocument.status, state.settings.dormancyDays)}</span>
               <select aria-label="Document status" onChange={(event) => { updateDocument({ status: event.target.value as ThoughtDocument['status'] }); }} value={currentDocument.status}>
@@ -1227,6 +1255,7 @@ export function App({
               {blocks.map((block) => (
                 <BlockEditor
                   block={block}
+                  canDictate={storageError === null}
                   dictationActive={state.dictationDraft !== null}
                   dictationDraft={state.dictationDraft?.blockId === block.id ? state.dictationDraft : null}
                   dictationError={state.dictationDraft?.blockId === block.id ? dictationError : null}
@@ -1237,7 +1266,12 @@ export function App({
                   onChange={(content) => { updateBlock(block.id, (current) => ({ ...current, content, status: 'active', updatedAt: Date.now() })); }}
                   onDelete={() => { deleteBlock(block.id); }}
                   onDictationCancel={cancelDictation}
-                  onDictationChange={(content) => { setDictationDraft((draft) => draft === null ? null : { ...draft, content, verbatim: content, updatedAt: Date.now() }); }}
+                  onDictationChange={(content) => { setDictationDraft((draft) => draft === null ? null : {
+                    ...draft,
+                    content,
+                    ...(draft.status === 'review' ? {} : { verbatim: content }),
+                    updatedAt: Date.now(),
+                  }); }}
                   onDictationFinish={() => { void finishDictation(); }}
                   onDictationKeep={keepDictation}
                   onDictationPause={() => { void pauseDictation(); }}

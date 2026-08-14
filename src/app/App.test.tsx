@@ -116,6 +116,48 @@ describe('Specular thinking workspace', () => {
     expect(clean).not.toHaveBeenCalled();
   });
 
+  it('preserves the verbatim transcript while the cleaned review is edited', async () => {
+    const user = userEvent.setup();
+    const controller = new FakeDictationController();
+    setup({
+      dictationController: controller,
+      dictationService: { transcribe: vi.fn(), clean: vi.fn(() => Promise.resolve('A cleaned thought.')) },
+    });
+    await user.click(screen.getByRole('button', { name: 'Start dictation' }));
+    controller.handlers?.onTranscript('Um, a cleaned thought.');
+    await user.click(screen.getByRole('button', { name: 'Finish dictation' }));
+    const draft = await screen.findByRole('textbox', { name: 'Dictation draft' });
+    await user.clear(draft);
+    await user.type(draft, 'My own review edit.');
+    await user.click(screen.getByRole('button', { name: 'Use verbatim' }));
+    expect(draft).toHaveValue('Um, a cleaned thought.');
+  });
+
+  it('stops capture and warns when a provisional checkpoint cannot be saved locally', async () => {
+    const user = userEvent.setup();
+    const controller = new FakeDictationController();
+    const workspace = createInitialWorkspace(1_800_000_000_000);
+    const store = {
+      load: vi.fn(() => Promise.resolve(workspace)),
+      save: vi.fn((next: typeof workspace) => next.dictationDraft === null
+        ? Promise.resolve()
+        : Promise.reject(new Error('quota exceeded'))),
+      close: vi.fn(() => undefined),
+    };
+    render(<App
+      dictationController={controller}
+      dictationService={{ transcribe: vi.fn(), clean: vi.fn() }}
+      storeFactory={() => Promise.resolve(store)}
+    />);
+    await user.click(await screen.findByRole('button', { name: 'Start dictation' }));
+    controller.handlers?.onTranscript('Text that only exists in memory.');
+
+    expect(await screen.findByText(/could not save this draft locally/iu)).toBeVisible();
+    expect(controller.cancel).toHaveBeenCalled();
+    expect(screen.queryByRole('button', { name: 'Continue dictating' })).not.toBeInTheDocument();
+    expect(screen.getByRole('textbox', { name: 'Dictation draft' })).toHaveValue('Text that only exists in memory.');
+  });
+
   it('requires resolving a nonempty draft before deleting its block or dictating elsewhere', async () => {
     const user = userEvent.setup();
     const controller = new FakeDictationController();

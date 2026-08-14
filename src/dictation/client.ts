@@ -15,19 +15,42 @@ export class HttpDictationService implements DictationService {
 
   async transcribe(audio: Blob): Promise<string> {
     const form = new FormData();
-    form.set('audio', audio, `dictation.${audio.type.includes('ogg') ? 'ogg' : 'webm'}`);
-    const response = await this.fetcher('/api/dictation/transcribe', { method: 'POST', body: form });
+    const extensionByMime: Readonly<Record<string, string>> = {
+      'audio/flac': 'flac',
+      'audio/mpeg': 'mp3',
+      'audio/mp4': 'mp4',
+      'audio/ogg': 'ogg',
+      'audio/wav': 'wav',
+      'audio/webm': 'webm',
+      'audio/x-m4a': 'm4a',
+    };
+    const extension = extensionByMime[audio.type.split(';', 1)[0]?.toLowerCase() ?? ''] ?? 'webm';
+    form.set('audio', audio, `dictation.${extension}`);
+    const response = await this.fetchWithTimeout('/api/dictation/transcribe', { method: 'POST', body: form });
     if (!response.ok) throw new Error('Transcription unavailable. Your saved draft is safe.');
     return transcriptResponseSchema.parse(await response.json()).transcript;
   }
 
   async clean(verbatim: string): Promise<string> {
-    const response = await this.fetcher('/api/dictation/cleanup', {
+    const response = await this.fetchWithTimeout('/api/dictation/cleanup', {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({ verbatim }),
     });
     if (!response.ok) throw new Error('Faithful cleanup unavailable. You can keep the verbatim transcript.');
     return cleanupResponseSchema.parse(await response.json()).cleaned;
+  }
+
+  private async fetchWithTimeout(input: RequestInfo | URL, init: RequestInit): Promise<Response> {
+    const controller = new AbortController();
+    const timeout = globalThis.setTimeout(() => { controller.abort(); }, 45_000);
+    try {
+      return await this.fetcher(input, { ...init, signal: controller.signal });
+    } catch (error) {
+      if (controller.signal.aborted) throw new Error('The dictation request timed out. Your checkpointed text remains in the draft.', { cause: error });
+      throw error;
+    } finally {
+      globalThis.clearTimeout(timeout);
+    }
   }
 }

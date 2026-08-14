@@ -34,4 +34,18 @@ describe('HttpDictationService', () => {
     expect(JSON.parse(body) as unknown).toEqual({ verbatim: 'Um, the clearer transcript.' });
     await expect(service.clean('Keep this verbatim.')).rejects.toThrow('cleanup unavailable');
   });
+
+  it('aborts a stalled request instead of retaining an unbounded audio backlog', async () => {
+    vi.useFakeTimers();
+    const fetcher = vi.fn<(input: RequestInfo | URL, init?: RequestInit) => Promise<Response>>((_input, init) => (
+      new Promise((_resolve, reject) => {
+        init?.signal?.addEventListener('abort', () => { reject(new DOMException('Aborted', 'AbortError')); }, { once: true });
+      })
+    ));
+    const pending = new HttpDictationService(fetcher).transcribe(new Blob(['audio'], { type: 'audio/webm' }));
+    const rejection = expect(pending).rejects.toThrow('dictation request timed out');
+    await vi.advanceTimersByTimeAsync(45_000);
+    await rejection;
+    vi.useRealTimers();
+  });
 });

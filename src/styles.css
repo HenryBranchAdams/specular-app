@@ -189,6 +189,16 @@ a:focus-visible {
   box-shadow: 0 1.5rem 4rem rgb(41 39 34 / 8%);
 }
 
+.workspace-storage-error {
+  padding: 0.75rem;
+  margin: 0 0 1rem;
+  border: 1px solid color-mix(in srgb, var(--danger) 35%, var(--line));
+  color: var(--danger);
+  background: color-mix(in srgb, var(--danger) 5%, var(--paper-raised));
+  font-size: 0.76rem;
+  line-height: 1.5;
+}
+
 .document-status {
   position: relative;
   display: flex;

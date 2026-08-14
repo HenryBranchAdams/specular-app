@@ -43,6 +43,7 @@ export class BrowserDictationController implements DictationController {
   private wakeLock: WakeLockSentinelLike | null = null;
   private transcriptionQueue: Promise<void> = Promise.resolve();
   private session = 0;
+  private pendingCheckpoints = 0;
   private continuing = false;
   private readonly mediaDevices: MediaDevices | undefined;
   private readonly MediaRecorderClass: typeof MediaRecorder | undefined;
@@ -91,6 +92,7 @@ export class BrowserDictationController implements DictationController {
     await this.stopRecorder(false);
     this.stopStream();
     await this.releaseWakeLock();
+    this.removeLifecycleListeners();
   }
 
   async resume(): Promise<void> {
@@ -161,14 +163,25 @@ export class BrowserDictationController implements DictationController {
   }
 
   private queueTranscription(blob: Blob, session: number): void {
+    if (this.pendingCheckpoints >= 2) {
+      const handlers = this.handlers;
+      this.interrupt('connection_lost');
+      handlers?.onError('Transcription fell behind. Recording stopped and your completed checkpoints remain in the draft.');
+      return;
+    }
+    this.pendingCheckpoints += 1;
     this.transcriptionQueue = this.transcriptionQueue.then(async () => {
       try {
         const transcript = await this.service.transcribe(blob);
         if (session === this.session) this.handlers?.onTranscript(transcript);
       } catch (error) {
         if (session === this.session) {
-          this.handlers?.onError(error instanceof Error ? error.message : 'Transcription failed.');
+          const handlers = this.handlers;
+          this.interrupt('transcription_failure');
+          handlers?.onError(error instanceof Error ? error.message : 'Transcription failed.');
         }
+      } finally {
+        this.pendingCheckpoints = Math.max(0, this.pendingCheckpoints - 1);
       }
     });
   }
@@ -179,11 +192,14 @@ export class BrowserDictationController implements DictationController {
     this.continuing = false;
     this.clearCheckpoint();
     handlers.onInterrupted(reason);
-    void this.stopRecorder(false).finally(() => {
-      this.stopStream();
-      void this.releaseWakeLock();
-      this.removeLifecycleListeners();
-    });
+    const interruptedStream = this.stream;
+    this.stream = null;
+    for (const track of interruptedStream?.getTracks() ?? []) track.stop();
+    const interruptedWakeLock = this.wakeLock;
+    this.wakeLock = null;
+    void interruptedWakeLock?.release().catch(() => undefined);
+    this.removeLifecycleListeners();
+    void this.stopRecorder(false);
   }
 
   private readonly onVisibility = () => {

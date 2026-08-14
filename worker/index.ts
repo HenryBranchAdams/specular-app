@@ -279,7 +279,16 @@ async function handleTranscription(request: Request, env: Env): Promise<Response
   }
 
   const providerForm = new FormData();
-  const extension = audio.type.includes('ogg') ? 'ogg' : audio.type.includes('mpeg') ? 'mp3' : audio.type.includes('wav') ? 'wav' : 'webm';
+  const extensionByMime: Readonly<Record<string, string>> = {
+    'audio/flac': 'flac',
+    'audio/mpeg': 'mp3',
+    'audio/mp4': 'mp4',
+    'audio/ogg': 'ogg',
+    'audio/wav': 'wav',
+    'audio/webm': 'webm',
+    'audio/x-m4a': 'm4a',
+  };
+  const extension = extensionByMime[audio.type.split(';', 1)[0]?.toLowerCase() ?? ''] ?? 'webm';
   providerForm.set('file', audio, `checkpoint.${extension}`);
   const configuredTranscriptionModel = env.OPENAI_TRANSCRIPTION_MODEL?.trim();
   providerForm.set('model', configuredTranscriptionModel === undefined || configuredTranscriptionModel.length === 0 ? 'gpt-4o-mini-transcribe' : configuredTranscriptionModel);
