@@ -6,6 +6,22 @@ test.beforeEach(async ({ page }) => {
   await openSpecular(page);
 });
 
+test('blank blocks can be deleted and starters stay behind contextual help', async ({ page }) => {
+  await expect(page.getByRole('button', { name: 'Explore what I think' })).toHaveCount(0);
+  await page.getByRole('button', { name: 'Writing starters' }).click();
+  await page.getByRole('button', { name: 'Explore what I think' }).click();
+  await expect(page.getByRole('textbox', { name: 'Thought writing block' })).toHaveAttribute(
+    'placeholder',
+    'Begin with the part you can almost say, but not quite.',
+  );
+
+  await page.getByRole('button', { name: 'New block' }).click();
+  await expect(page.getByRole('textbox', { name: 'Thought writing block' })).toHaveCount(2);
+  const extraBlock = page.getByRole('textbox', { name: 'Thought writing block' }).last().locator('xpath=ancestor::article[1]');
+  await extraBlock.getByRole('button', { name: 'Delete block' }).click();
+  await expect(page.getByRole('textbox', { name: 'Thought writing block' })).toHaveCount(1);
+});
+
 test('writing, reflection, branching, connections, snapshot, and local recovery form one workflow', async ({ page }) => {
   const title = 'Attention without certainty';
   const first = 'Attention can justify another look without becoming proof.';

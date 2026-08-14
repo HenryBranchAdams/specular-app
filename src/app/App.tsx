@@ -13,7 +13,6 @@ import {
   Plus,
   Printer,
   Share2,
-  Sparkles,
   X,
 } from 'lucide-react';
 import {
@@ -211,22 +210,26 @@ function BlockEditor({
   focused,
   onBlur,
   onChange,
+  onDelete,
   onFocus,
   onKindChange,
   onReferenceChange,
   onRestoreVersion,
   onSelection,
+  placeholder,
 }: {
   block: ThoughtBlock;
   dormancyDays: number;
   focused: boolean;
   onBlur: () => void;
   onChange: (content: string) => void;
+  onDelete: () => void;
   onFocus: () => void;
   onKindChange: (kind: ThoughtKind) => void;
   onReferenceChange: (field: keyof Pick<SourceReference, 'author' | 'excerpt' | 'title' | 'url'>, value: string) => void;
   onRestoreVersion: (index: number) => void;
   onSelection: (text: string) => void;
+  placeholder: string | null;
 }) {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const resize = () => {
@@ -258,6 +261,7 @@ function BlockEditor({
           </select>
           <span>{status}</span>
           {block.parentId === null ? null : <span className="thought-card__linked"><Link2 size={12} /> linked</span>}
+          <button aria-label="Delete block" className="delete-block" onClick={onDelete} type="button">Delete</button>
         </div>
         {block.originPrompt === null ? null : (
           <p className="thought-card__origin"><span>Working from</span>{block.originPrompt}</p>
@@ -270,9 +274,9 @@ function BlockEditor({
           onFocus={onFocus}
           onKeyUp={readSelection}
           onMouseUp={readSelection}
-          placeholder={block.parentId === null
+          placeholder={placeholder ?? (block.parentId === null
             ? 'Start anywhere. Write what is actually there.'
-            : 'Continue in your own words…'}
+            : 'Continue in your own words…')}
           ref={textareaRef}
           value={block.content}
         />
@@ -353,8 +357,7 @@ function ReflectionMargin({
             ? `“${selection.trim().slice(0, 150)}${selection.trim().length > 150 ? '…' : ''}”`
             : 'Select a passage or focus a block when you reach an edge in your thinking.'}</p>
           <button className="primary-action" disabled={!canReflect || busy} onClick={() => { onMove('reflect'); }} type="button">
-            {busy ? <LoaderCircle className="spin" size={15} /> : <Sparkles size={15} />}
-            Reflect
+            {busy ? 'Reflecting…' : 'Reflect'}
           </button>
           <details className="move-menu">
             <summary>Choose a move <ChevronDown size={14} /></summary>
@@ -577,6 +580,7 @@ export function App({
   const [selectedBlockId, setSelectedBlockId] = useState<string | null>(null);
   const [selection, setSelection] = useState('');
   const [libraryOpen, setLibraryOpen] = useState(false);
+  const [starterOpen, setStarterOpen] = useState(false);
   const [starterPrompt, setStarterPrompt] = useState<string | null>(null);
   const [reflectionBusy, setReflectionBusy] = useState(false);
   const [reflectionError, setReflectionError] = useState<string | null>(null);
@@ -685,6 +689,73 @@ export function App({
     }, 0);
   };
 
+  const deleteBlock = (blockId: string) => {
+    const block = state.blocks.find((item) => item.id === blockId);
+    if (block === undefined) return;
+    const hasAuthoredMaterial = block.content.trim().length > 0
+      || block.versions.length > 0
+      || block.references.some((reference) => (
+        reference.title.trim().length > 0
+        || reference.author.trim().length > 0
+        || reference.url.trim().length > 0
+        || reference.excerpt.trim().length > 0
+      ));
+    if (hasAuthoredMaterial && !globalThis.confirm('Delete this block? Its writing and local history will be removed from this workspace.')) return;
+
+    const remainingBlocks = blocks.filter((item) => item.id !== blockId);
+    const deletedIndex = blocks.findIndex((item) => item.id === blockId);
+    const now = Date.now();
+    const replacement = remainingBlocks.length === 0
+      ? {
+          id: newId('block'),
+          documentId: currentDocument.id,
+          parentId: null,
+          originPrompt: null,
+          content: '',
+          kind: 'thought' as const,
+          status: 'active' as const,
+          createdAt: now,
+          updatedAt: now,
+          versions: [],
+          references: [],
+        }
+      : null;
+    const nextBlockId = remainingBlocks[deletedIndex]?.id
+      ?? remainingBlocks[deletedIndex - 1]?.id
+      ?? replacement?.id
+      ?? null;
+
+    setState((current) => ({
+      ...current,
+      blocks: [
+        ...current.blocks
+          .filter((item) => item.id !== blockId)
+          .map((item) => item.parentId === blockId ? { ...item, parentId: null } : item),
+        ...(replacement === null ? [] : [replacement]),
+      ],
+      connections: current.connections.filter((connection) => (
+        connection.fromBlockId !== blockId && connection.toBlockId !== blockId
+      )),
+      annotations: current.annotations.filter((annotation) => annotation.blockId !== blockId),
+      documents: current.documents.map((document) => document.id === currentDocument.id
+        ? {
+            ...document,
+            blockIds: replacement === null
+              ? document.blockIds.filter((id) => id !== blockId)
+              : [replacement.id],
+            status: 'active',
+            updatedAt: now,
+          }
+        : document),
+      snapshots: current.snapshots.map((snapshot) => ({
+        ...snapshot,
+        blockIds: snapshot.blockIds.filter((id) => id !== blockId),
+      })),
+    }));
+    setSelectedBlockId(nextBlockId);
+    setSelection('');
+  };
+
   const createDocument = () => {
     const now = Date.now();
     const documentId = newId('document');
@@ -697,6 +768,8 @@ export function App({
     }));
     setSelectedBlockId(blockId);
     setLibraryOpen(false);
+    setStarterOpen(false);
+    setStarterPrompt(null);
     setView('document');
   };
 
@@ -825,6 +898,8 @@ export function App({
                 setState((current) => ({ ...current, activeDocumentId: item.id }));
                 setSelectedBlockId(item.blockIds[0] ?? null);
                 setLibraryOpen(false);
+                setStarterOpen(false);
+                setStarterPrompt(null);
                 setView('document');
               }} type="button">
                 <span>{item.title.trim().length > 0 ? item.title : 'Untitled thought'}</span>
@@ -851,6 +926,37 @@ export function App({
               <select aria-label="Document status" onChange={(event) => { updateDocument({ status: event.target.value as ThoughtDocument['status'] }); }} value={currentDocument.status}>
                 <option value="active">Active</option><option value="resting">Resting</option><option value="closed">Closed</option>
               </select>
+              {isBlank ? (
+                <div className="starter-help">
+                  <button
+                    aria-controls="writing-starters"
+                    aria-expanded={starterOpen}
+                    aria-label="Writing starters"
+                    className="starter-help__trigger"
+                    onClick={() => { setStarterOpen((open) => !open); }}
+                    title="Writing starters"
+                    type="button"
+                  >?</button>
+                  {starterOpen ? (
+                    <div className="starter-intentions" id="writing-starters">
+                      <p>{starterPrompt ?? 'Start anywhere, or choose a quiet way in.'}</p>
+                      <div>{STARTERS.map(([label, prompt]) => (
+                        <button key={label} onClick={() => {
+                          const firstBlock = blocks[0];
+                          setStarterPrompt(prompt);
+                          setStarterOpen(false);
+                          if (firstBlock !== undefined) {
+                            setSelectedBlockId(firstBlock.id);
+                            window.setTimeout(() => {
+                              globalThis.document.querySelector<HTMLTextAreaElement>(`[data-block-id="${firstBlock.id}"] textarea`)?.focus();
+                            }, 0);
+                          }
+                        }} type="button">{label}</button>
+                      ))}</div>
+                    </div>
+                  ) : null}
+                </div>
+              ) : null}
             </div>
             <input
               aria-label="Document title"
@@ -859,14 +965,6 @@ export function App({
               placeholder="Untitled thought"
               value={currentDocument.title}
             />
-            {isBlank ? (
-              <div className="starter-intentions">
-                <p>{starterPrompt ?? 'Start anywhere, or choose a quiet way in.'}</p>
-                <div>{STARTERS.map(([label, prompt]) => (
-                  <button key={label} onClick={() => { setStarterPrompt(prompt); }} type="button">{label}</button>
-                ))}</div>
-              </div>
-            ) : null}
             <div className="block-stack">
               {blocks.map((block) => (
                 <BlockEditor
@@ -876,6 +974,7 @@ export function App({
                   key={block.id}
                   onBlur={() => { window.setTimeout(() => { commitVersion(block.id); }, 0); }}
                   onChange={(content) => { updateBlock(block.id, (current) => ({ ...current, content, status: 'active', updatedAt: Date.now() })); }}
+                  onDelete={() => { deleteBlock(block.id); }}
                   onFocus={() => { setSelectedBlockId(block.id); setSelection(''); }}
                   onKindChange={(kind) => { updateBlock(block.id, (current) => ({ ...current, kind, updatedAt: Date.now() })); }}
                   onReferenceChange={(field, value) => { updateBlock(block.id, (current) => {
@@ -898,6 +997,7 @@ export function App({
                     return { ...current, content: version.content, versions, updatedAt: Date.now() };
                   }); }}
                   onSelection={setSelection}
+                  placeholder={block.id === blocks[0]?.id && block.content.trim().length === 0 ? starterPrompt : null}
                 />
               ))}
             </div>

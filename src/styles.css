@@ -13,7 +13,7 @@
   --paper-deep: #e9e5db;
   --ink: #292722;
   --ink-soft: #615d56;
-  --quiet: #918b81;
+  --quiet: #6a655d;
   --line: rgb(41 39 34 / 14%);
   --line-strong: rgb(41 39 34 / 27%);
   --rust: #8a4237;
@@ -182,9 +182,15 @@ a:focus-visible {
 
 .thinking-document {
   min-width: 0;
+  min-height: 52rem;
+  padding: clamp(2rem, 4.5vw, 4.25rem);
+  border: 1px solid var(--line-strong);
+  background: var(--paper-raised);
+  box-shadow: 0 1.5rem 4rem rgb(41 39 34 / 8%);
 }
 
 .document-status {
+  position: relative;
   display: flex;
   align-items: center;
   gap: 0.6rem;
@@ -193,6 +199,33 @@ a:focus-visible {
   font-size: 0.71rem;
   letter-spacing: 0.08em;
   text-transform: uppercase;
+}
+
+.starter-help {
+  position: relative;
+  margin-left: auto;
+  text-transform: none;
+}
+
+.starter-help__trigger {
+  display: grid;
+  width: 1.75rem;
+  height: 1.75rem;
+  place-items: center;
+  padding: 0;
+  border: 1px solid var(--line-strong);
+  border-radius: 50%;
+  color: var(--ink-soft);
+  background: transparent;
+  font-family: Georgia, "Times New Roman", serif;
+  font-size: 0.9rem;
+}
+
+.starter-help__trigger:hover,
+.starter-help__trigger[aria-expanded="true"] {
+  border-color: var(--ink-soft);
+  color: var(--ink);
+  background: var(--paper-deep);
 }
 
 .document-status > span::before {
@@ -238,9 +271,15 @@ a:focus-visible {
 }
 
 .starter-intentions {
-  padding: 0 0 2.5rem 2rem;
-  margin: -2.5rem 0 2rem;
-  border-left: 1px solid var(--line-strong);
+  position: absolute;
+  z-index: 10;
+  top: calc(100% + 0.65rem);
+  right: 0;
+  width: min(31rem, calc(100vw - 4rem));
+  padding: 1.1rem;
+  border: 1px solid var(--line-strong);
+  background: var(--paper-raised);
+  box-shadow: 0 1rem 2.5rem rgb(41 39 34 / 12%);
 }
 
 .starter-intentions p {
@@ -268,6 +307,10 @@ a:focus-visible {
   color: var(--ink-soft);
   background: rgb(250 248 242 / 48%);
   font-size: 0.8rem;
+}
+
+.add-block {
+  min-height: 3rem;
 }
 
 .block-stack {
@@ -300,6 +343,7 @@ a:focus-visible {
 
 .thought-card__meta {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: 0.75rem;
   margin-bottom: 0.75rem;
@@ -313,6 +357,22 @@ a:focus-visible {
   display: inline-flex;
   align-items: center;
   gap: 0.25rem;
+}
+
+.delete-block {
+  min-height: 1.75rem;
+  margin-left: auto;
+  padding: 0 0.25rem;
+  border: 0;
+  color: var(--quiet);
+  background: transparent;
+  font-size: 0.64rem;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.delete-block:hover {
+  color: var(--danger);
 }
 
 .thought-card__origin {
@@ -1113,8 +1173,14 @@ a:focus-visible {
     padding-top: 3rem;
   }
 
+  .thinking-document {
+    min-height: 0;
+    padding: clamp(1.5rem, 6vw, 3rem);
+  }
+
   .reflection-margin {
     position: static;
+    margin-top: 2.5rem;
     padding-bottom: 6rem;
   }
 
@@ -1182,7 +1248,7 @@ a:focus-visible {
   }
 
   .starter-intentions {
-    padding-left: 1rem;
+    width: min(27rem, calc(100vw - 3rem));
   }
 
   .thought-card {

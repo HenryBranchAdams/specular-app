@@ -36,13 +36,50 @@ function setup(options: { reflector?: Reflector; sharePublisher?: SharePublisher
 }
 
 describe('Specular thinking workspace', () => {
-  it('starts with a human-owned blank document and optional intentions', () => {
+  it('keeps optional intentions behind a help control and never inserts them as prose', async () => {
+    const user = userEvent.setup();
     setup();
     expect(screen.getByRole('textbox', { name: 'Document title' })).toHaveValue('');
-    expect(screen.getByRole('textbox', { name: 'Thought writing block' })).toHaveValue('');
-    expect(screen.getByRole('button', { name: 'Explore what I think' })).toBeVisible();
+    const block = screen.getByRole('textbox', { name: 'Thought writing block' });
+    expect(block).toHaveValue('');
+    expect(screen.queryByRole('button', { name: 'Explore what I think' })).not.toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: 'Writing starters' }));
+    await user.click(screen.getByRole('button', { name: 'Explore what I think' }));
+    expect(block).toHaveValue('');
+    expect(block).toHaveAttribute('placeholder', 'Begin with the part you can almost say, but not quite.');
     expect(screen.getByText('Nothing enters your document unless you write it.')).toBeVisible();
     expect(screen.queryByRole('log')).not.toBeInTheDocument();
+  });
+
+  it('deletes an accidentally created blank block', async () => {
+    const user = userEvent.setup();
+    setup();
+    await user.click(screen.getByRole('button', { name: 'New block' }));
+    const blocks = screen.getAllByRole('textbox', { name: 'Thought writing block' });
+    expect(blocks).toHaveLength(2);
+    const secondCard = blocks[1]?.closest('article');
+    if (secondCard === null || secondCard === undefined) throw new Error('Expected a second block card.');
+    await user.click(within(secondCard).getByRole('button', { name: 'Delete block' }));
+    expect(screen.getAllByRole('textbox', { name: 'Thought writing block' })).toHaveLength(1);
+  });
+
+  it('requires confirmation before removing authored material', async () => {
+    const user = userEvent.setup();
+    const confirm = vi.spyOn(globalThis, 'confirm').mockReturnValue(false);
+    setup();
+    await user.type(screen.getByRole('textbox', { name: 'Thought writing block' }), 'A thought worth protecting.');
+    await user.click(screen.getByRole('button', { name: 'Delete block' }));
+    expect(screen.getByRole('textbox', { name: 'Thought writing block' })).toHaveValue('A thought worth protecting.');
+
+    confirm.mockReturnValue(true);
+    await user.click(screen.getByRole('button', { name: 'Delete block' }));
+    expect(screen.getByRole('textbox', { name: 'Thought writing block' })).toHaveValue('');
+    confirm.mockRestore();
+  });
+
+  it('presents reflection as a text action without an AI sparkle mark', () => {
+    setup();
+    expect(screen.getByRole('button', { name: 'Reflect' }).querySelector('svg')).toBeNull();
   });
 
   it('reflects on user writing and opens a linked continuation without inserting prose', async () => {
