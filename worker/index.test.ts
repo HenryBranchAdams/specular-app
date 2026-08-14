@@ -73,6 +73,7 @@ describe('Sites worker', () => {
     expect(provider).toHaveBeenCalledWith('https://api.openai.com/v1/audio/transcriptions', expect.objectContaining({ method: 'POST' }));
     const providerForm = provider.mock.calls[0]?.[1]?.body as FormData;
     expect(providerForm.get('model')).toBe('gpt-4o-mini-transcribe');
+    expect(providerForm.get('language')).toBe('en');
     expect(providerForm.get('file')).toBeInstanceOf(Blob);
   });
 

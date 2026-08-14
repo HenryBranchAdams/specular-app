@@ -292,6 +292,7 @@ async function handleTranscription(request: Request, env: Env): Promise<Response
   providerForm.set('file', audio, `checkpoint.${extension}`);
   const configuredTranscriptionModel = env.OPENAI_TRANSCRIPTION_MODEL?.trim();
   providerForm.set('model', configuredTranscriptionModel === undefined || configuredTranscriptionModel.length === 0 ? 'gpt-4o-mini-transcribe' : configuredTranscriptionModel);
+  providerForm.set('language', 'en');
   const providerResponse = await fetch('https://api.openai.com/v1/audio/transcriptions', {
     method: 'POST',
     headers: { authorization: `Bearer ${apiKey}` },
