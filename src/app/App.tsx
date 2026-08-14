@@ -739,11 +739,9 @@ export function App({
   const isBlank = blocks.every((block) => block.content.trim().length === 0);
 
   const setDictationDraft = (update: DictationDraft | null | ((draft: DictationDraft | null) => DictationDraft | null)) => {
-    setState((current) => {
-      const next = typeof update === 'function' ? update(current.dictationDraft) : update;
-      dictationDraftRef.current = next;
-      return { ...current, dictationDraft: next };
-    });
+    const next = typeof update === 'function' ? update(dictationDraftRef.current) : update;
+    dictationDraftRef.current = next;
+    setState((current) => ({ ...current, dictationDraft: next }));
   };
 
   const captureHandlers = (): DictationCaptureHandlers => ({

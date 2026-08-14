@@ -100,6 +100,27 @@ describe('Specular thinking workspace', () => {
     expect(screen.queryByRole('button', { name: 'Keep dictation' })).not.toBeInTheDocument();
   });
 
+  it('uses a final checkpoint that arrives during Done instead of treating it as empty', async () => {
+    const user = userEvent.setup();
+    const controller = new FakeDictationController();
+    const clean = vi.fn(() => Promise.resolve('Testing, testing, one, two, three.'));
+    controller.finish.mockImplementationOnce(async () => {
+      await Promise.resolve();
+      controller.handlers?.onTranscript('Testing, testing, one, two, three.');
+    });
+    setup({
+      dictationController: controller,
+      dictationService: { transcribe: vi.fn(), clean },
+    });
+
+    await user.click(screen.getByRole('button', { name: 'Start dictation' }));
+    await user.click(screen.getByRole('button', { name: 'Finish dictation' }));
+
+    expect(await screen.findByRole('textbox', { name: 'Dictation draft' })).toHaveValue('Testing, testing, one, two, three.');
+    expect(screen.getByRole('button', { name: 'Keep dictation' })).toBeVisible();
+    expect(screen.queryByRole('button', { name: 'Continue dictating' })).not.toBeInTheDocument();
+  });
+
   it('makes an interrupted dictation unmistakable and keeps its text provisional', async () => {
     const user = userEvent.setup();
     const controller = new FakeDictationController();
