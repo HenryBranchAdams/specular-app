@@ -837,6 +837,16 @@ export function App({
       await dictationControllerRef.current.finish();
       const draft = dictationDraftRef.current;
       if (draft === null || draft.status === 'interrupted') return;
+      if (draft.verbatim.trim().length === 0) {
+        setDictationError('No speech was transcribed. Continue dictating and try again.');
+        setDictationDraft({
+          ...draft,
+          status: 'interrupted',
+          interruptionReason: 'transcription_failure',
+          updatedAt: Date.now(),
+        });
+        return;
+      }
       const cleaned = draft.cleanupMode === 'faithful' && draft.verbatim.trim().length > 0
         ? await dictationServiceRef.current.clean(draft.verbatim)
         : draft.verbatim;

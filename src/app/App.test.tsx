@@ -84,6 +84,22 @@ describe('Specular thinking workspace', () => {
     expect(screen.queryByRole('textbox', { name: 'Dictation draft' })).not.toBeInTheDocument();
   });
 
+  it('never presents an empty transcription as a reviewable dictation', async () => {
+    const user = userEvent.setup();
+    const controller = new FakeDictationController();
+    setup({
+      dictationController: controller,
+      dictationService: { transcribe: vi.fn(), clean: vi.fn() },
+    });
+
+    await user.click(screen.getByRole('button', { name: 'Start dictation' }));
+    await user.click(screen.getByRole('button', { name: 'Finish dictation' }));
+
+    expect(await screen.findByText('No speech was transcribed. Continue dictating and try again.')).toBeVisible();
+    expect(screen.getByRole('button', { name: 'Continue dictating' })).toBeVisible();
+    expect(screen.queryByRole('button', { name: 'Keep dictation' })).not.toBeInTheDocument();
+  });
+
   it('makes an interrupted dictation unmistakable and keeps its text provisional', async () => {
     const user = userEvent.setup();
     const controller = new FakeDictationController();
