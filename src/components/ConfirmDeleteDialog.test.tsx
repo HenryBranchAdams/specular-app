@@ -23,7 +23,7 @@ const styles = readFileSync(join(process.cwd(), 'src/styles.css'), 'utf8');
 const SCROLLABLE_CONFIRM_OVERLAY_PATTERN =
   /\.confirm-delete\s*\{[^}]*overflow-y:\s*auto;/su;
 const SAFELY_CENTERED_CONFIRM_OVERLAY_PATTERN =
-  /\.confirm-delete\s*\{[^}]*align-items:\s*safe center;[^}]*justify-items:\s*center;/su;
+  /\.confirm-delete\s*\{[^}]*(?:align-items:\s*safe center;[^}]*justify-items:\s*center;|place-items:\s*safe center center;)/su;
 const BOUNDED_SCROLLABLE_CONFIRM_SURFACE_PATTERN =
   /\.confirm-delete__surface\s*\{[^}]*max-height:\s*100%;[^}]*overflow-y:\s*auto;/su;
 

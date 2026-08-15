@@ -17,3 +17,7 @@ Implement the approved MagicPath `Specular` defaults as semantic tokens and reus
 - Stylelint begins with correctness and new-value enforcement; existing debt is ratcheted rather than mass-formatted.
 - New raw colors, arbitrary z-index, motion, elevation, radius, and spacing require a documented exception.
 - Reduced-motion, safe-area, dynamic-viewport, and 200% text utilities are covered.
+
+## Comments
+
+- 2026-08-15: Implemented the approved white/black neutral token system, Noto Sans 400 and Playfair Display 400 assets, dark-token contract, reusable button/field/textarea foundations, focus/safe-area/reflow/motion utilities, Stylelint correctness rules, and a prospective raw-value debt ratchet. Focused foundation tests, style checks, Storybook build, and type checks passed.

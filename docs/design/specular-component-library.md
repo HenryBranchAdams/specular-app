@@ -1,5 +1,7 @@
 # Specular component library inventory
 
+Production foundation rules: `docs/design/specular-ui-foundations.md`.
+
 Status: planning registry
 Catalog baseline: [NameThatUI Web, 44 entries](https://namethatui.com/?platform=web), captured 2026-08-15
 Machine-readable source: [`specular-component-library-inventory.json`](specular-component-library-inventory.json)

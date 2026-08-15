@@ -1,0 +1,15 @@
+{
+  "schemaVersion": 1,
+  "policy": "Existing src/styles.css debt may decrease but not increase. New CSS files must be registered with zero raw visual values or a dated, owner-reviewed exception.",
+  "files": {
+    "src/styles.css": {
+      "colors": 57,
+      "elevation": 7,
+      "motion": 6,
+      "radius": 25,
+      "spacing": 338,
+      "zIndex": 10
+    }
+  },
+  "exceptions": []
+}
