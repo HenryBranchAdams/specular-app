@@ -25,6 +25,7 @@ import {
   useEffect,
   useRef,
   useState,
+  type ReactNode,
 } from 'react';
 import {
   BrowserDictationController,
@@ -222,9 +223,11 @@ function PublishedPage({ slug }: { slug: string }) {
       <h1>{snapshot.title}</h1>
       <p className="published-date">Captured {new Date(snapshot.createdAt).toLocaleDateString()}</p>
       <article className="published-body">
-        {snapshot.blocks.map((block) => block.references.length > 0
-          ? <blockquote key={block.id}>{block.content}</blockquote>
-          : <p key={block.id}>{block.content}</p>)}
+        {snapshot.blocks.length === 0
+          ? <p className="published-empty">This snapshot has no published writing.</p>
+          : snapshot.blocks.map((block) => block.references.length > 0
+              ? <blockquote key={block.id}>{block.content}</blockquote>
+              : <p key={block.id}>{block.content}</p>)}
       </article>
       {references.length === 0 ? null : (
         <section className="published-references">
@@ -268,6 +271,10 @@ function DocumentTitleEditor({ onChange, value }: { onChange: (value: string) =>
       value={value}
     />
   );
+}
+
+function AuthoringPageSurface({ children }: { children: ReactNode }) {
+  return <article aria-label="Thinking document" className="thinking-document" data-ui-region="authoring-page">{children}</article>;
 }
 
 function BlockEditor({
@@ -708,10 +715,11 @@ function SnapshotEditor({
   onToggleBlock,
   onTitleChange,
   onTitleConfirm,
-  publishing,
+  operation,
   restoreFocusTo,
   snapshot,
   state,
+  statusMessage,
 }: {
   error: string | null;
   onClose: () => void;
@@ -721,10 +729,11 @@ function SnapshotEditor({
   onToggleBlock: (blockId: string) => void;
   onTitleChange: (title: string) => void;
   onTitleConfirm: () => void;
-  publishing: boolean;
+  operation: 'publish' | 'revoke' | null;
   restoreFocusTo: HTMLElement | null;
   snapshot: ThoughtSnapshot;
   state: WorkspaceState;
+  statusMessage: string;
 }) {
   const payload = snapshotPayload(state, snapshot);
   const allBlocks = documentBlocks(state, activeDocument(state)).filter((block) => block.content.trim().length > 0);
@@ -781,18 +790,22 @@ function SnapshotEditor({
         <footer>
           <button disabled={!snapshot.titleConfirmed || snapshot.title.trim().length === 0} onClick={() => { downloadMarkdown(payload); }} type="button"><Download size={15} />Markdown</button>
           <button disabled={!snapshot.titleConfirmed || snapshot.title.trim().length === 0} onClick={onPrint} type="button"><Printer size={15} />Print / PDF</button>
-          <button className="primary-action" disabled={publishing || payload.blocks.length === 0 || !snapshot.titleConfirmed || snapshot.title.trim().length === 0} onClick={onPublish} type="button">
-            {publishing ? <LoaderCircle className="spin" size={15} /> : <Share2 size={15} />}
-            Publish page
+          <button className="primary-action" disabled={operation !== null || payload.blocks.length === 0 || !snapshot.titleConfirmed || snapshot.title.trim().length === 0} onClick={onPublish} type="button">
+            {operation === 'publish' ? <LoaderCircle className="spin" size={15} /> : <Share2 size={15} />}
+            {operation === 'publish' ? 'Publishing page…' : 'Publish page'}
           </button>
           {snapshot.publishedUrl === null ? null : (
             <>
               <button onClick={() => { void copyLink(); }} type="button">
                 {copied ? <Check size={15} /> : <Copy size={15} />}{copied ? 'Copied' : 'Copy link'}
               </button>
-              <button onClick={onRevoke} type="button"><Trash2 size={15} />Revoke link</button>
+              <button disabled={operation !== null} onClick={onRevoke} type="button">
+                {operation === 'revoke' ? <LoaderCircle className="spin" size={15} /> : <Trash2 size={15} />}
+                {operation === 'revoke' ? 'Revoking link…' : 'Revoke link'}
+              </button>
             </>
           )}
+          {statusMessage.length === 0 ? null : <p aria-label="Snapshot status" aria-live="polite" className="snapshot-status" role="status">{statusMessage}</p>}
           {error === null ? null : <p className="inline-error snapshot-error" role="alert">{error}</p>}
         </footer>
       </section>
@@ -831,8 +844,14 @@ export function App({
   const [reflectionError, setReflectionError] = useState<string | null>(null);
   const [shareError, setShareError] = useState<string | null>(null);
   const [snapshotId, setSnapshotId] = useState<string | null>(null);
-  const [publishing, setPublishing] = useState(false);
+  const [snapshotOperation, setSnapshotOperation] = useState<'publish' | 'revoke' | null>(null);
+  const [snapshotStatusMessage, setSnapshotStatusMessage] = useState('');
   const [hostedSnapshots, setHostedSnapshots] = useState<HostedSnapshotSummary[]>([]);
+  const [publishedLinksStatus, setPublishedLinksStatus] = useState<'idle' | 'loading' | 'ready' | 'error'>('idle');
+  const [publishedLinksRetry, setPublishedLinksRetry] = useState(0);
+  const [libraryOperation, setLibraryOperation] = useState<{ kind: 'archive' } | { kind: 'revoke'; slug: string } | null>(null);
+  const [libraryError, setLibraryError] = useState<string | null>(null);
+  const [libraryStatusMessage, setLibraryStatusMessage] = useState('');
   const [dictationError, setDictationError] = useState<string | null>(null);
   const [storageError, setStorageError] = useState<string | null>(null);
   const [accountError, setAccountError] = useState<string | null>(null);
@@ -954,13 +973,21 @@ export function App({
   useEffect(() => {
     if (!libraryOpen || session === undefined) return;
     let active = true;
+    setPublishedLinksStatus('loading');
+    setLibraryError(null);
     void listPublishedSnapshots().then((snapshots) => {
-      if (active) setHostedSnapshots(snapshots);
+      if (active) {
+        setHostedSnapshots(snapshots);
+        setPublishedLinksStatus('ready');
+      }
     }).catch((error: unknown) => {
-      if (active) setAccountError(error instanceof Error ? error.message : 'Specular could not load your published links.');
+      if (active) {
+        setPublishedLinksStatus('error');
+        setLibraryError(error instanceof Error ? error.message : 'Specular could not load your published links.');
+      }
     });
     return () => { active = false; };
-  }, [libraryOpen, session]);
+  }, [libraryOpen, publishedLinksRetry, session]);
 
   const currentDocument = activeDocument(state);
   const blocks = documentBlocks(state, currentDocument);
@@ -1008,28 +1035,39 @@ export function App({
   const downloadCurrentDeviceRecovery = () => {
     downloadDeviceRecovery(state);
     setDeviceRecoveryFingerprint(JSON.stringify(state));
+    setLibraryError(null);
+    setLibraryStatusMessage('Device recovery downloaded.');
+    announceWorkspace('Device recovery downloaded.');
   };
 
   const downloadHostedArchive = async () => {
-    setAccountError(null);
+    setLibraryOperation({ kind: 'archive' });
+    setLibraryError(null);
+    setLibraryStatusMessage('');
     const store = storeRef.current;
     try {
       if (store !== null) {
         await store.save(state);
         const status = store.currentStatus?.();
         if (status !== undefined && status !== 'synchronized') {
-          setAccountError('The hosted archive is paused until this device synchronizes. Download this device recovery for an immediate local copy.');
+          setLibraryError('The hosted archive is paused until this device synchronizes. Download this device recovery for an immediate local copy.');
           return;
         }
       }
       await downloadAccountArchive();
+      setLibraryStatusMessage('Archive download started.');
+      announceWorkspace('Archive download started.');
     } catch (error) {
-      setAccountError(error instanceof Error ? error.message : 'Specular could not prepare your archive.');
+      setLibraryError(error instanceof Error ? error.message : 'Specular could not prepare your archive.');
+    } finally {
+      setLibraryOperation(null);
     }
   };
 
   const revokeHostedLink = async (slug: string) => {
-    setAccountError(null);
+    setLibraryOperation({ kind: 'revoke', slug });
+    setLibraryError(null);
+    setLibraryStatusMessage('');
     try {
       await revokeHostedSnapshot(slug);
       setHostedSnapshots((snapshots) => snapshots.map((snapshot) => (
@@ -1041,8 +1079,12 @@ export function App({
           ? { ...snapshot, publishedUrl: null }
           : snapshot),
       }));
+      setLibraryStatusMessage('Published link revoked.');
+      announceWorkspace('Published link revoked.');
     } catch (error) {
-      setAccountError(error instanceof Error ? error.message : 'Specular could not revoke this published link.');
+      setLibraryError(error instanceof Error ? error.message : 'Specular could not revoke this published link.');
+    } finally {
+      setLibraryOperation(null);
     }
   };
 
@@ -1630,13 +1672,16 @@ export function App({
       publishedUrl: null,
     };
     setState((current) => ({ ...current, snapshots: [...current.snapshots, snapshot] }));
+    setShareError(null);
+    setSnapshotStatusMessage('');
     setSnapshotId(snapshot.id);
   };
 
   const publishSnapshot = async () => {
     if (currentSnapshot === null) return;
-    setPublishing(true);
+    setSnapshotOperation('publish');
     setShareError(null);
+    setSnapshotStatusMessage('');
     try {
       const result = await sharePublisher.publish(snapshotPayload(state, currentSnapshot));
       setState((current) => ({
@@ -1645,17 +1690,20 @@ export function App({
           ? { ...snapshot, publishedUrl: result.url }
           : snapshot),
       }));
+      setSnapshotStatusMessage('Page published. Link ready to copy.');
+      announceWorkspace('Page published. Link ready to copy.');
     } catch (error) {
       setShareError(error instanceof Error ? error.message : 'Specular could not publish this snapshot.');
     } finally {
-      setPublishing(false);
+      setSnapshotOperation(null);
     }
   };
 
   const revokeSnapshot = async () => {
     if (currentSnapshot?.publishedUrl === null || currentSnapshot === null) return;
-    setPublishing(true);
+    setSnapshotOperation('revoke');
     setShareError(null);
+    setSnapshotStatusMessage('');
     try {
       await revokePublishedSnapshot(currentSnapshot.publishedUrl);
       setState((current) => ({
@@ -1664,10 +1712,12 @@ export function App({
           ? { ...snapshot, publishedUrl: null }
           : snapshot),
       }));
+      setSnapshotStatusMessage('Published link revoked.');
+      announceWorkspace('Published link revoked.');
     } catch (error) {
       setShareError(error instanceof Error ? error.message : 'Specular could not revoke this published link.');
     } finally {
-      setPublishing(false);
+      setSnapshotOperation(null);
     }
   };
 
@@ -1746,15 +1796,33 @@ export function App({
                 <p>Operational limits use content-free counters. Archives exclude margin responses, calibration, audio, and ChatGPT identity; device recovery also excludes interlocutor annotations.</p>
                 <div className="hosted-snapshot-list">
                   <strong>Published links</strong>
-                  {hostedSnapshots.length === 0 ? <span>No published links yet.</span> : hostedSnapshots.map((snapshot) => (
+                  {publishedLinksStatus === 'loading' ? (
+                    <span aria-label="Published links status" aria-live="polite" role="status"><LoaderCircle className="spin" size={14} />Loading published links…</span>
+                  ) : null}
+                  {publishedLinksStatus === 'error' ? (
+                    <div className="hosted-snapshot-list__error">
+                      <p role="alert">{libraryError ?? 'Specular could not load your published links.'}</p>
+                      <button aria-label="Retry published links" onClick={() => { setPublishedLinksRetry((retry) => retry + 1); }} type="button">Try again</button>
+                    </div>
+                  ) : null}
+                  {publishedLinksStatus === 'ready' && hostedSnapshots.length === 0 ? <span>No published links yet.</span> : null}
+                  {publishedLinksStatus === 'ready' ? hostedSnapshots.map((snapshot) => (
                     <div key={snapshot.slug}>
                       <span><b>{snapshot.title}</b><small>{snapshot.revokedAt === null ? new Date(snapshot.createdAt).toLocaleDateString() : 'Revoked'}</small></span>
-                      {snapshot.revokedAt === null ? <button onClick={() => { void revokeHostedLink(snapshot.slug); }} type="button">Revoke</button> : null}
+                      {snapshot.revokedAt === null ? (
+                        <button disabled={libraryOperation !== null} onClick={() => { void revokeHostedLink(snapshot.slug); }} type="button">
+                          {libraryOperation?.kind === 'revoke' && libraryOperation.slug === snapshot.slug ? 'Revoking…' : 'Revoke'}
+                        </button>
+                      ) : null}
                     </div>
-                  ))}
+                  )) : null}
                 </div>
-                <button onClick={() => { void downloadHostedArchive(); }} type="button">Download archive</button>
-                <button onClick={downloadCurrentDeviceRecovery} type="button">Download this device recovery</button>
+                {libraryError === null || publishedLinksStatus === 'error' ? null : <p className="inline-error" role="alert">{libraryError}</p>}
+                {libraryStatusMessage.length === 0 ? null : <p aria-label="Library status" aria-live="polite" className="library-status" role="status">{libraryStatusMessage}</p>}
+                <button disabled={libraryOperation !== null} onClick={() => { void downloadHostedArchive(); }} type="button">
+                  {libraryOperation?.kind === 'archive' ? 'Preparing archive…' : 'Download archive'}
+                </button>
+                <button disabled={libraryOperation !== null} onClick={downloadCurrentDeviceRecovery} type="button">Download this device recovery</button>
                 <button className="danger-action" onClick={() => { setAccountDeleteOpen(true); }} ref={accountDeleteTriggerRef} type="button">Delete account data</button>
               </section>
             )}
@@ -1774,7 +1842,7 @@ export function App({
         />
       ) : (
         <section className="workspace-grid">
-          <article aria-label="Thinking document" className="thinking-document">
+          <AuthoringPageSurface>
             {storageError === null ? null : <p className="workspace-storage-error" role="alert">{storageError}</p>}
             {currentDocument.conflictStatus === 'open' ? (
               <section className="conflict-notice" role="status">
@@ -1885,7 +1953,7 @@ export function App({
               ))}
             </div>
             <button aria-label="New block" className="add-block" onClick={() => { addBlock(); }} title="New block" type="button"><Plus size={17} /></button>
-          </article>
+          </AuthoringPageSurface>
 
           <ReflectionMargin
             annotation={currentAnnotation}
@@ -1925,10 +1993,11 @@ export function App({
           onToggleBlock={(blockId) => { setState((current) => ({ ...current, snapshots: current.snapshots.map((snapshot) => snapshot.id === currentSnapshot.id ? { ...snapshot, blockIds: snapshot.blockIds.includes(blockId) ? snapshot.blockIds.filter((id) => id !== blockId) : [...snapshot.blockIds, blockId] } : snapshot) })); }}
           onTitleChange={(title) => { setState((current) => ({ ...current, snapshots: current.snapshots.map((snapshot) => snapshot.id === currentSnapshot.id ? { ...snapshot, title, titleConfirmed: title.trim().length > 0 } : snapshot) })); }}
           onTitleConfirm={() => { setState((current) => ({ ...current, snapshots: current.snapshots.map((snapshot) => snapshot.id === currentSnapshot.id && snapshot.title.trim().length > 0 ? { ...snapshot, titleConfirmed: true } : snapshot) })); }}
-          publishing={publishing}
+          operation={snapshotOperation}
           restoreFocusTo={snapshotTriggerRef.current}
           snapshot={currentSnapshot}
           state={state}
+          statusMessage={snapshotStatusMessage}
         />
       )}
       {dictationDiscardOpen ? (
@@ -1947,8 +2016,10 @@ export function App({
           artifactTitle="hosted workspace"
           confirmLabel="Delete account data"
           description="This permanently deletes the hosted workspace and revokes every published link. This action cannot be undone."
+          errorMessage="Specular could not delete this account workspace. Nothing was removed."
           onCancel={() => { setAccountDeleteOpen(false); }}
           onConfirm={deleteAccount}
+          pendingLabel="Deleting account data…"
           restoreFocusTo={accountDeleteTriggerRef.current}
           title="Delete account data?"
         />

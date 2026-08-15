@@ -56,4 +56,6 @@ The Ready to Use production package is designed for deployment with ChatGPT Site
 - `GET /api/archive` and `DELETE /api/account` for tenant-scoped data control
 - `GET /healthz` for deployment health
 
-The repository still contains the earlier native/MCP server as a separately built compatibility surface. It does not define the hosted product interaction.
+### Legacy MCP compatibility
+
+The repository still contains the earlier native/MCP server as a separately built compatibility surface. It does not define the hosted product interaction. The hosted UI boundary is documented in [docs/design/legacy-mcp-widget-boundary.md](docs/design/legacy-mcp-widget-boundary.md).

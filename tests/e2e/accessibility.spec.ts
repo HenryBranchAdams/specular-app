@@ -1,6 +1,6 @@
 import AxeBuilder from '@axe-core/playwright';
 import { expect, test, type Page } from '@playwright/test';
-import { installThinkingMocks, openSpecular, writeThought } from './helpers';
+import { installThinkingMocks, openSpecular, openSpecularPath, writeThought } from './helpers';
 
 async function expectAccessible(page: Page, state: string): Promise<void> {
   const result = await new AxeBuilder({ page })
@@ -65,6 +65,50 @@ test('the signed-out gate has no serious accessibility violations', async ({ pag
   await page.goto('/');
   await expect(page.getByRole('link', { name: 'Sign in with ChatGPT' })).toBeVisible();
   await expectAccessible(page, 'signed-out gate');
+});
+
+test('hosted snapshot loading, available, empty, and unavailable states have no serious accessibility violations', async ({ page }) => {
+  let state: 'available' | 'empty' | 'unavailable' = 'available';
+  let release: (() => void) | undefined;
+  const pending = new Promise<void>((resolve) => { release = resolve; });
+  let firstRequest = true;
+  await page.route('**/api/shares/accessible-snapshot', async (route) => {
+    if (firstRequest) {
+      firstRequest = false;
+      await pending;
+    }
+    if (state === 'unavailable') {
+      await route.fulfill({ contentType: 'application/json', status: 404, body: JSON.stringify({ error: 'unavailable' }) });
+      return;
+    }
+    await route.fulfill({ contentType: 'application/json', status: 200, body: JSON.stringify({
+      title: 'An accessible synthetic snapshot',
+      createdAt: 1_800_000_000_000,
+      blocks: state === 'empty' ? [] : [{
+        id: 'synthetic:block',
+        content: 'A synthetic passage keeps the public reading state testable.',
+        kind: 'thought',
+        references: [{ id: 'synthetic:reference', author: 'A. Writer', title: 'Synthetic source', url: 'https://example.com/source' }],
+      }],
+    }) });
+  });
+
+  await openSpecularPath(page, '/s/accessible-snapshot');
+  await expect(page.getByLabel('Loading snapshot')).toBeVisible();
+  await expectAccessible(page, 'hosted snapshot loading');
+  release?.();
+  await expect(page.getByRole('heading', { name: 'An accessible synthetic snapshot' })).toBeVisible();
+  await expectAccessible(page, 'hosted snapshot available with references');
+
+  state = 'empty';
+  await page.reload();
+  await expect(page.getByText('This snapshot has no published writing.')).toBeVisible();
+  await expectAccessible(page, 'hosted snapshot empty');
+
+  state = 'unavailable';
+  await page.reload();
+  await expect(page.getByRole('heading', { name: /unavailable/iu })).toBeVisible();
+  await expectAccessible(page, 'hosted snapshot unavailable');
 });
 
 test('an interrupted dictation state has no serious accessibility violations', async ({ page }) => {

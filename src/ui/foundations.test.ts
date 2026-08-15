@@ -22,7 +22,7 @@ describe('Specular visual foundations', () => {
   it('uses white neutral surfaces and reserves blue for focus or selected emphasis', () => {
     expect(styles).toMatch(/--color-canvas:\s*#fff(?:fff)?;/iu);
     expect(styles).toMatch(/--color-surface:\s*#fff(?:fff)?;/iu);
-    expect(styles).toMatch(/--color-surface-subtle:\s*#f4f4f4;/iu);
+    expect(styles).toMatch(/--color-surface-subtle:\s*#f2f3f4;/iu);
     expect(styles).toMatch(/--color-focus:\s*#0274b6;/iu);
     expect(viteConfig).toMatch(/background_color:\s*'#ffffff'/iu);
     expect(viteConfig).toMatch(/theme_color:\s*'#ffffff'/iu);

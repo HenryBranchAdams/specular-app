@@ -108,6 +108,7 @@ describe('ConfirmDeleteDialog', () => {
       <ConfirmDeleteDialog
         artifactTitle="All local content"
         confirmLabel="Permanently delete all local content"
+        pendingLabel="Deleting all local content…"
         onCancel={vi.fn()}
         onConfirm={onConfirm}
         restoreFocusTo={null}
@@ -124,7 +125,27 @@ describe('ConfirmDeleteDialog', () => {
     expect(onConfirm).toHaveBeenCalledOnce();
     expect(confirm).toBeDisabled();
     expect(cancel).toBeDisabled();
+    expect(screen.getByRole('button', { name: 'Deleting all local content…' })).toBeDisabled();
     deletion.resolve();
+  });
+
+  it('reports an action-specific recoverable failure', async () => {
+    const user = userEvent.setup();
+    render(
+      <ConfirmDeleteDialog
+        artifactTitle="Hosted workspace"
+        confirmLabel="Delete account data"
+        errorMessage="Specular could not delete this account workspace. Nothing was removed."
+        onCancel={vi.fn()}
+        onConfirm={() => Promise.reject(new Error('Synthetic failure'))}
+        restoreFocusTo={null}
+      />,
+    );
+
+    await user.click(screen.getByRole('button', { name: 'Delete account data' }));
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('could not delete this account workspace');
+    expect(screen.getByRole('button', { name: 'Delete account data' })).toBeEnabled();
   });
 
   it('keeps both actions reachable at 320px and 200% text with a maximum-length title', () => {

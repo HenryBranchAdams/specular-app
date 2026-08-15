@@ -10,8 +10,10 @@ export interface ConfirmDeleteDialogProps {
   confirmLabel: string;
   confirmDisabled?: boolean;
   description?: string;
+  errorMessage?: string;
   onCancel: () => void;
   onConfirm: () => Promise<void>;
+  pendingLabel?: string;
   restoreFocusTo: HTMLElement | null;
   title?: string;
 }
@@ -21,8 +23,10 @@ export function ConfirmDeleteDialog({
   confirmLabel,
   confirmDisabled = false,
   description = 'This permanently removes this local content. This action cannot be undone.',
+  errorMessage = 'The action could not be completed. Nothing else was changed.',
   onCancel,
   onConfirm,
+  pendingLabel,
   restoreFocusTo,
   title,
 }: ConfirmDeleteDialogProps) {
@@ -58,7 +62,7 @@ export function ConfirmDeleteDialog({
     } catch {
       confirmingRef.current = false;
       setPending(false);
-      setError('The action could not be completed. Nothing else was changed.');
+      setError(errorMessage);
     }
   };
 
@@ -91,7 +95,7 @@ export function ConfirmDeleteDialog({
             onClick={() => { void confirm(); }}
             type="button"
           >
-            {confirmLabel}
+            {pending ? (pendingLabel ?? confirmLabel) : confirmLabel}
           </button>
         </div>
       </div>

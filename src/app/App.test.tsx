@@ -33,6 +33,19 @@ class FakeDictationController implements DictationController {
   cancel = vi.fn(() => undefined);
 }
 
+function deferred<T>() {
+  let resolve: ((value: T) => void) | undefined;
+  let reject: ((reason?: unknown) => void) | undefined;
+  return {
+    promise: new Promise<T>((promiseResolve, promiseReject) => {
+      resolve = promiseResolve;
+      reject = promiseReject;
+    }),
+    resolve(value: T) { resolve?.(value); },
+    reject(reason?: unknown) { reject?.(reason); },
+  };
+}
+
 function setup(options: {
   reflector?: Reflector;
   sharePublisher?: SharePublisher;
@@ -473,6 +486,44 @@ describe('Specular thinking workspace', () => {
     expect(await within(editor).findByRole('button', { name: 'Copy link' })).toBeVisible();
   });
 
+  it('uses action-specific pending and success states while publishing and revoking a snapshot', async () => {
+    const user = userEvent.setup();
+    const publication = deferred<{ url: string }>();
+    const revocation = deferred<Response>();
+    vi.stubGlobal('fetch', vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
+      if (input === '/api/shares/abcdefghijklmnop' && init?.method === 'DELETE') return revocation.promise;
+      return Promise.reject(new Error('Unexpected request'));
+    }));
+    setup({ sharePublisher: { publish: vi.fn(() => publication.promise) } });
+    await user.type(screen.getByRole('textbox', { name: 'Document title' }), 'A deliberate snapshot');
+    await user.type(screen.getByRole('textbox', { name: 'Thought writing block' }), 'Canonical writing for a synthetic publication state.');
+    await user.click(screen.getByRole('button', { name: 'Create snapshot' }));
+    const editor = screen.getByRole('dialog', { name: 'Snapshot editor' });
+
+    await user.click(within(editor).getByRole('button', { name: 'Publish page' }));
+    expect(within(editor).getByRole('button', { name: 'Publishing page…' })).toBeDisabled();
+    await act(async () => { publication.resolve({ url: 'https://specular.example/s/abcdefghijklmnop' }); await publication.promise; });
+    expect(await within(editor).findByRole('status', { name: 'Snapshot status' })).toHaveTextContent('Page published. Link ready to copy.');
+
+    await user.click(within(editor).getByRole('button', { name: 'Revoke link' }));
+    expect(within(editor).getByRole('button', { name: 'Revoking link…' })).toBeDisabled();
+    await act(async () => { revocation.resolve(new Response(null, { status: 204 })); await revocation.promise; });
+    expect(await within(editor).findByRole('status', { name: 'Snapshot status' })).toHaveTextContent('Published link revoked.');
+    expect(within(editor).queryByRole('button', { name: 'Copy link' })).not.toBeInTheDocument();
+  });
+
+  it('keeps snapshot publication failure action-specific and recoverable', async () => {
+    const user = userEvent.setup();
+    setup({ sharePublisher: { publish: vi.fn(() => Promise.reject(new Error('This page could not be published. Try again.'))) } });
+    await user.type(screen.getByRole('textbox', { name: 'Thought writing block' }), 'Canonical writing remains untouched after publication failure.');
+    await user.click(screen.getByRole('button', { name: 'Create snapshot' }));
+    const editor = screen.getByRole('dialog', { name: 'Snapshot editor' });
+    await user.click(within(editor).getByRole('button', { name: 'Publish page' }));
+
+    expect(await within(editor).findByRole('alert')).toHaveTextContent('could not be published');
+    expect(within(editor).getByRole('button', { name: 'Publish page' })).toBeEnabled();
+  });
+
   it('contains snapshot focus, dismisses with Escape, and restores its trigger', async () => {
     const user = userEvent.setup();
     setup();
@@ -539,6 +590,55 @@ describe('Specular thinking workspace', () => {
     expect(screen.queryByRole('dialog', { name: 'Document library' })).not.toBeInTheDocument();
     expect(trigger).toHaveFocus();
     expect(trigger.closest('header')).not.toHaveAttribute('inert');
+  });
+
+  it('distinguishes published-link loading, empty, and failure states with retry', async () => {
+    const user = userEvent.setup();
+    const firstLoad = deferred<Response>();
+    const fetchMock = vi.fn()
+      .mockImplementationOnce(() => firstLoad.promise)
+      .mockResolvedValueOnce(new Response(JSON.stringify({ error: 'unavailable' }), { status: 503 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({ snapshots: [] }), { status: 200 }));
+    vi.stubGlobal('fetch', fetchMock);
+    const initial = createInitialWorkspace(1_800_000_000_000);
+    render(<App initialState={initial} session={{ authenticated: true, email: 'writer@example.com', cacheNamespace: 'account:writer', signOutUrl: '/signout' }} />);
+
+    await user.click(screen.getByRole('button', { name: 'Library' }));
+    const drawer = screen.getByRole('dialog', { name: 'Document library' });
+    expect(within(drawer).getByRole('status', { name: 'Published links status' })).toHaveTextContent('Loading published links…');
+    expect(within(drawer).queryByText('No published links yet.')).not.toBeInTheDocument();
+    await act(async () => { firstLoad.resolve(new Response(JSON.stringify({ snapshots: [] }), { status: 200 })); await firstLoad.promise; });
+    expect(await within(drawer).findByText('No published links yet.')).toBeVisible();
+
+    await user.click(screen.getByRole('button', { name: 'Close library' }));
+    await user.click(screen.getByRole('button', { name: 'Library' }));
+    const reopenedDrawer = screen.getByRole('dialog', { name: 'Document library' });
+    expect(await within(reopenedDrawer).findByRole('alert')).toHaveTextContent('could not load your published links');
+    await user.click(within(reopenedDrawer).getByRole('button', { name: 'Retry published links' }));
+    expect(await within(reopenedDrawer).findByText('No published links yet.')).toBeVisible();
+  });
+
+  it('reports archive preparation as a specific pending, success, and failure operation', async () => {
+    const user = userEvent.setup();
+    const archive = deferred<Response>();
+    vi.spyOn(globalThis.URL, 'createObjectURL').mockReturnValue('blob:archive');
+    vi.spyOn(globalThis.URL, 'revokeObjectURL').mockImplementation(() => undefined);
+    vi.spyOn(globalThis.HTMLAnchorElement.prototype, 'click').mockImplementation(() => undefined);
+    const fetchMock = vi.fn((input: RequestInfo | URL) => {
+      if (input === '/api/shares') return Promise.resolve(new Response(JSON.stringify({ snapshots: [] }), { status: 200 }));
+      if (input === '/api/archive') return archive.promise;
+      return Promise.reject(new Error('Unexpected request'));
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    const initial = createInitialWorkspace(1_800_000_000_000);
+    render(<App initialState={initial} session={{ authenticated: true, email: 'writer@example.com', cacheNamespace: 'account:writer', signOutUrl: '/signout' }} />);
+    await user.click(screen.getByRole('button', { name: 'Library' }));
+    const drawer = screen.getByRole('dialog', { name: 'Document library' });
+
+    await user.click(within(drawer).getByRole('button', { name: 'Download archive' }));
+    expect(within(drawer).getByRole('button', { name: 'Preparing archive…' })).toBeDisabled();
+    await act(async () => { archive.resolve(new Response('{}', { status: 200 })); await archive.promise; });
+    expect(await within(drawer).findByRole('status', { name: 'Library status' })).toHaveTextContent('Archive download started.');
   });
 
   it('does not clear an unsynchronized device cache during sign out', async () => {

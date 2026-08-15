@@ -32,8 +32,11 @@
     "route:connections": "tests/e2e/specular.spec.ts",
     "route:connections-filtered": "tests/e2e/core-authoring-states.spec.ts",
     "route:library": "tests/e2e/accessibility.spec.ts",
+    "route:library-states": "tests/e2e/secondary-surfaces.spec.ts",
     "route:snapshot-editor": "tests/e2e/specular.spec.ts",
-    "route:hosted-snapshot": "tests/e2e/ui-surfaces.spec.ts"
+    "route:snapshot-states": "tests/e2e/secondary-surfaces.spec.ts",
+    "route:hosted-snapshot": "tests/e2e/ui-surfaces.spec.ts",
+    "route:hosted-snapshot-extreme": "tests/e2e/ui-surfaces.spec.ts"
   },
   "surfaces": [
     {
@@ -109,8 +112,8 @@
       "patternIds": ["dialog-drawer-sheet", "switch-checkbox-radio", "empty-state", "three-dots", "focus-ring-web"],
       "requiredStates": ["open", "empty-publications", "loading-publications", "publication-failure", "account-busy", "account-failure"],
       "storyIds": ["patterns-dialog--destructive", "patterns-dialog--account-deletion", "patterns-dialog--failure-recovery"],
-      "routeScenarios": ["route:library"],
-      "maturity": "transition",
+      "routeScenarios": ["route:library", "route:library-states"],
+      "maturity": "ready",
       "exceptions": []
     },
     {
@@ -120,8 +123,8 @@
       "patternIds": ["dialog-drawer-sheet", "form-field", "switch-checkbox-radio", "alert-callout-banner"],
       "requiredStates": ["draft", "suggested-title", "publishing", "published", "failure", "revoke-pending"],
       "storyIds": ["patterns-dialog--destructive", "patterns-dialog--discard-dictation", "primitives-field--states"],
-      "routeScenarios": ["route:snapshot-editor"],
-      "maturity": "transition",
+      "routeScenarios": ["route:snapshot-editor", "route:snapshot-states"],
+      "maturity": "ready",
       "exceptions": []
     },
     {
@@ -129,10 +132,10 @@
       "label": "Hosted snapshot reader",
       "productionEntry": "src/app/App.tsx",
       "patternIds": ["card", "skeleton-spinner", "empty-state", "truncation"],
-      "requiredStates": ["loading", "available", "unavailable", "extreme-content", "with-references"],
+      "requiredStates": ["loading", "available", "empty", "unavailable", "extreme-content", "with-references"],
       "storyIds": [],
-      "routeScenarios": ["route:hosted-snapshot"],
-      "maturity": "transition",
+      "routeScenarios": ["route:hosted-snapshot", "route:hosted-snapshot-extreme"],
+      "maturity": "ready",
       "exceptions": []
     }
   ],

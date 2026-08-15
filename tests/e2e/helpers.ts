@@ -79,7 +79,18 @@ export async function installThinkingMocks(page: Page): Promise<ThinkingMockCont
     await route.fulfill({ contentType: 'application/json', status: 200, body: JSON.stringify({ cleaned: 'A synthetic dictated thought.' }) });
   });
   await page.route('**/api/shares', async (route) => {
+    if (route.request().method() === 'GET') {
+      await route.fulfill({ contentType: 'application/json', status: 200, body: JSON.stringify({ snapshots: [] }) });
+      return;
+    }
     await route.fulfill({ contentType: 'application/json', status: 201, body: JSON.stringify({ url: '/s/browser-snapshot' }) });
+  });
+  await page.route('**/api/shares/*', async (route) => {
+    if (route.request().method() === 'DELETE') {
+      await route.fulfill({ contentType: 'application/json', status: 200, body: JSON.stringify({ revoked: true }) });
+      return;
+    }
+    await route.fallback();
   });
 
   return {
@@ -112,6 +123,21 @@ export async function openSpecular(page: Page): Promise<void> {
   await page.goto('/');
   await expect(page.getByRole('button', { name: 'Specular' })).toBeVisible();
   await expect(page.getByRole('textbox', { name: 'Thought writing block' })).toBeVisible();
+}
+
+export async function openSpecularPath(page: Page, path: string): Promise<void> {
+  await page.route(`**${path}`, async (route) => {
+    if (route.request().resourceType() !== 'document') {
+      await route.fallback();
+      return;
+    }
+    const root = new URL(route.request().url());
+    root.pathname = '/';
+    root.search = '';
+    const response = await route.fetch({ url: root.toString() });
+    await route.fulfill({ response });
+  });
+  await page.goto(path);
 }
 
 export async function writeThought(page: Page, thought: string): Promise<void> {
