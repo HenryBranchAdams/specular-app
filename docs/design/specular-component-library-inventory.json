@@ -1,0 +1,375 @@
+{
+  "$schema": "./specular-component-library-inventory.schema.json",
+  "catalog": {
+    "name": "NameThatUI Web",
+    "source": "https://namethatui.com/?platform=web",
+    "capturedAt": "2026-08-15",
+    "entryCount": 44,
+    "tierCounts": {
+      "foundation": 7,
+      "core": 15,
+      "conditional": 15,
+      "excluded": 7
+    }
+  },
+  "tiers": {
+    "foundation": "Cross-component visual or behavioral rule implemented once and reused broadly.",
+    "core": "Approved Specular component or product pattern to include in the initial library.",
+    "conditional": "Named recipe retained in the registry but not implemented until a concrete Specular use requires it.",
+    "excluded": "Catalog pattern intentionally excluded by the current product model or interface doctrine."
+  },
+  "entries": [
+    {
+      "id": "steps",
+      "name": "Steps",
+      "source": "https://namethatui.com/web/steps",
+      "tier": "conditional",
+      "specularEntry": "Steps",
+      "use": "Only for a real multi-stage recovery, migration, or onboarding flow; never substitute for tabs, breadcrumbs, or determinate progress."
+    },
+    {
+      "id": "avatar-group",
+      "name": "Avatar Group",
+      "source": "https://namethatui.com/web/avatar-group",
+      "tier": "excluded",
+      "specularEntry": null,
+      "use": "Specular has one private author workspace and no collaboration or social-presence model."
+    },
+    {
+      "id": "multi-select",
+      "name": "Multi-select",
+      "source": "https://namethatui.com/web/multi-select",
+      "tier": "conditional",
+      "specularEntry": "MultiSelect",
+      "use": "Reserve for future bounded metadata or bulk-selection needs; current snapshot inclusion remains explicit checkboxes."
+    },
+    {
+      "id": "scrollspy",
+      "name": "Scrollspy",
+      "source": "https://namethatui.com/web/scrollspy",
+      "tier": "conditional",
+      "specularEntry": "ScrollspyNavigation",
+      "use": "Potentially useful for long hosted snapshots or help content; it is in-page navigation, not tabs."
+    },
+    {
+      "id": "alert-callout-banner",
+      "name": "Inline Alert vs. Callout vs. Banner",
+      "source": "https://namethatui.com/web/alert-callout-banner",
+      "tier": "core",
+      "specularEntry": "InlineAlert | Callout | Banner",
+      "use": "Persistent task errors, authored explanatory notes, and rare workspace-wide conditions must remain distinct from toasts."
+    },
+    {
+      "id": "sign-in-form",
+      "name": "Sign-in Form",
+      "source": "https://namethatui.com/web/sign-in-form",
+      "tier": "core",
+      "specularEntry": "SignInBoundary",
+      "use": "Product-specific single ChatGPT sign-in handoff; do not introduce email, password, passkey, or social-provider form fields."
+    },
+    {
+      "id": "pagination",
+      "name": "Pagination",
+      "source": "https://namethatui.com/web/pagination",
+      "tier": "conditional",
+      "specularEntry": "Pagination",
+      "use": "Introduce only when a bounded collection actually spans addressable pages."
+    },
+    {
+      "id": "date-picker",
+      "name": "Date Picker",
+      "source": "https://namethatui.com/web/date-picker",
+      "tier": "conditional",
+      "specularEntry": "DatePicker",
+      "use": "No current product need; prefer the native control before a custom calendar when a date decision emerges."
+    },
+    {
+      "id": "parallax",
+      "name": "Parallax Scrolling",
+      "source": "https://namethatui.com/web/parallax",
+      "tier": "excluded",
+      "specularEntry": null,
+      "use": "Conflicts with the quiet authored workspace and adds motion without helping an author understand state."
+    },
+    {
+      "id": "carousel",
+      "name": "Carousel",
+      "source": "https://namethatui.com/web/carousel",
+      "tier": "excluded",
+      "specularEntry": null,
+      "use": "Specular has no rotating media or peer-slide requirement; avoid hiding core content behind sequential slides."
+    },
+    {
+      "id": "header-navbar",
+      "name": "Site Header vs. Navigation Bar",
+      "source": "https://namethatui.com/web/header-navbar",
+      "tier": "core",
+      "specularEntry": "AppHeader | PrimaryNavigation",
+      "use": "Keep the page header landmark distinct from its document/Connections navigation."
+    },
+    {
+      "id": "card",
+      "name": "Card",
+      "source": "https://namethatui.com/web/card",
+      "tier": "conditional",
+      "specularEntry": "Card",
+      "use": "Use only for a bounded object preview such as a hosted snapshot; do not turn every region into a beige card."
+    },
+    {
+      "id": "resize-handle",
+      "name": "Resize Handle (Size Grip)",
+      "source": "https://namethatui.com/web/resize-handle",
+      "tier": "foundation",
+      "specularEntry": "ResizableTextareaPolicy",
+      "use": "Allow vertical resizing only where it improves writing; bound dimensions and preserve mobile layout."
+    },
+    {
+      "id": "hamburger-menu",
+      "name": "Hamburger Menu (Nav Drawer)",
+      "source": "https://namethatui.com/web/hamburger-menu",
+      "tier": "conditional",
+      "specularEntry": "NavigationDrawer",
+      "use": "Use only if mobile primary navigation outgrows visible actions; the trigger and navigation drawer are separate parts."
+    },
+    {
+      "id": "bento-grid",
+      "name": "Bento Grid",
+      "source": "https://namethatui.com/web/bento-grid",
+      "tier": "excluded",
+      "specularEntry": null,
+      "use": "A dashboard-like bento composition conflicts with the document-first product and the anti-vibe-coded direction."
+    },
+    {
+      "id": "masonry",
+      "name": "Masonry Layout (Pinterest Grid)",
+      "source": "https://namethatui.com/web/masonry",
+      "tier": "excluded",
+      "specularEntry": null,
+      "use": "Packed visual order is inappropriate for canonical writing, Connections, and accessibility-sensitive reading order."
+    },
+    {
+      "id": "easing",
+      "name": "Easing (Timing Function)",
+      "source": "https://namethatui.com/web/easing",
+      "tier": "foundation",
+      "specularEntry": "MotionTokens",
+      "use": "Centralize restrained entry, exit, and continuity curves with reduced-motion equivalents."
+    },
+    {
+      "id": "spring",
+      "name": "Spring Animation",
+      "source": "https://namethatui.com/web/spring",
+      "tier": "conditional",
+      "specularEntry": "SpringMotionRecipe",
+      "use": "Only for meaningful spatial continuity; never ambient bounce or decorative overshoot."
+    },
+    {
+      "id": "text-scramble",
+      "name": "Text Scramble (Decode Effect)",
+      "source": "https://namethatui.com/web/text-scramble",
+      "tier": "excluded",
+      "specularEntry": null,
+      "use": "Conflicts with legibility, authorship trust, reduced motion, and the non-theatrical interface doctrine."
+    },
+    {
+      "id": "lightbox",
+      "name": "Lightbox",
+      "source": "https://namethatui.com/web/lightbox",
+      "tier": "conditional",
+      "specularEntry": "Lightbox",
+      "use": "Retain for a future source/image preview; no current media requirement justifies implementation."
+    },
+    {
+      "id": "marquee",
+      "name": "Marquee",
+      "source": "https://namethatui.com/web/marquee",
+      "tier": "excluded",
+      "specularEntry": null,
+      "use": "Continuous promotional motion conflicts with concentration, legibility, and reduced-motion expectations."
+    },
+    {
+      "id": "form-field",
+      "name": "Form Field",
+      "source": "https://namethatui.com/web/form-field",
+      "tier": "core",
+      "specularEntry": "Field | TextField | Textarea",
+      "use": "Visible labels, linked help/error text, field-scoped dictation, and editable correction are foundational authoring patterns."
+    },
+    {
+      "id": "truncation",
+      "name": "Truncation (Ellipsis & Line Clamp)",
+      "source": "https://namethatui.com/web/truncation",
+      "tier": "foundation",
+      "specularEntry": "TruncateText",
+      "use": "Allow only in constrained metadata/list rows with an accessible full-value path; never truncate canonical writing."
+    },
+    {
+      "id": "drag-and-drop",
+      "name": "Drag & Drop",
+      "source": "https://namethatui.com/web/drag-and-drop",
+      "tier": "conditional",
+      "specularEntry": "DragDrop",
+      "use": "Potential future block movement or attachment intake; requires equivalent keyboard controls and durable ordering semantics."
+    },
+    {
+      "id": "divider",
+      "name": "Divider vs. Separator vs. Rule",
+      "source": "https://namethatui.com/web/divider",
+      "tier": "foundation",
+      "specularEntry": "ThematicRule | Separator | DecorativeBorder",
+      "use": "Choose semantics from purpose: topic break, structural control separation, or purely visual border."
+    },
+    {
+      "id": "progress-indicators",
+      "name": "Progress Ring vs. Spinner vs. Progress Bar",
+      "source": "https://namethatui.com/web/progress-indicators",
+      "tier": "conditional",
+      "specularEntry": "ProgressBar | ProgressRing",
+      "use": "No current determinate-progress surface exists. Promote only for a known measurable process; indeterminate Spinner remains core through the Skeleton vs. Spinner entry."
+    },
+    {
+      "id": "three-dots",
+      "name": "The Three Dots (Overflow Menu)",
+      "source": "https://namethatui.com/web/three-dots",
+      "tier": "core",
+      "specularEntry": "OverflowMenu",
+      "use": "Secondary contextual actions use a labeled ellipsis menu; do not confuse it with navigation or truncation."
+    },
+    {
+      "id": "toast",
+      "name": "Toast (Snackbar)",
+      "source": "https://namethatui.com/web/toast",
+      "tier": "core",
+      "specularEntry": "ToastRegion | Toast",
+      "use": "Only transient nonessential outcomes; pause dismissal while hovered or focused and never replace persistent recovery guidance."
+    },
+    {
+      "id": "dialog-drawer-sheet",
+      "name": "Modal Dialog vs. Drawer vs. Sheet",
+      "source": "https://namethatui.com/web/dialog-drawer-sheet",
+      "tier": "core",
+      "specularEntry": "Dialog | AlertDialog | Drawer | Sheet",
+      "use": "Select by task depth and placement; every modal variant shares containment, dismissal, inertness, and focus restoration."
+    },
+    {
+      "id": "popover-dropdown-tooltip",
+      "name": "Popover vs. Dropdown Menu vs. Tooltip",
+      "source": "https://namethatui.com/web/popover-dropdown-tooltip",
+      "tier": "core",
+      "specularEntry": "Popover | Menu | Tooltip",
+      "use": "Tooltip labels controls, menu invokes commands, and popover holds richer interactive content; they are not interchangeable."
+    },
+    {
+      "id": "scrim",
+      "name": "Scrim (Backdrop / Overlay)",
+      "source": "https://namethatui.com/web/scrim",
+      "tier": "foundation",
+      "specularEntry": "Scrim",
+      "use": "One shared modal backdrop and layering contract; visual dimming must match actual modality."
+    },
+    {
+      "id": "skeleton-spinner",
+      "name": "Skeleton vs. Spinner",
+      "source": "https://namethatui.com/web/skeleton-spinner",
+      "tier": "core",
+      "specularEntry": "Skeleton | Spinner",
+      "use": "Skeleton reserves a predictable layout; spinner represents bounded indeterminate work. Neither may mask an error or settled empty state."
+    },
+    {
+      "id": "combobox",
+      "name": "Combobox (Autocomplete / Typeahead)",
+      "source": "https://namethatui.com/web/combobox",
+      "tier": "conditional",
+      "specularEntry": "Combobox",
+      "use": "Potential future source, document, or connection search; implement only with a concrete selection model."
+    },
+    {
+      "id": "command-palette",
+      "name": "Command Palette",
+      "source": "https://namethatui.com/web/command-palette",
+      "tier": "conditional",
+      "specularEntry": "CommandPalette",
+      "use": "Potential expert accelerator after core actions and shortcuts stabilize; never the only route to an action."
+    },
+    {
+      "id": "accordion",
+      "name": "Accordion (Disclosure)",
+      "source": "https://namethatui.com/web/accordion",
+      "tier": "core",
+      "specularEntry": "Disclosure | Accordion",
+      "use": "Use native disclosure for optional explanation such as privacy or provenance; frequent primary actions stay visible."
+    },
+    {
+      "id": "tabs",
+      "name": "Tabs",
+      "source": "https://namethatui.com/web/tabs",
+      "tier": "core",
+      "specularEntry": "Tabs",
+      "use": "Only peer views sharing one region; do not use for route navigation, sequential flow, or persistent filters."
+    },
+    {
+      "id": "badge-chip-pill",
+      "name": "Badge vs. Chip vs. Pill vs. Tag",
+      "source": "https://namethatui.com/web/badge-chip-pill",
+      "tier": "core",
+      "specularEntry": "Badge | Chip | Tag",
+      "use": "Choose by behavior; Specular has no generic decorative Pill component. Generated metadata remains provenance-aware."
+    },
+    {
+      "id": "breadcrumbs",
+      "name": "Breadcrumbs",
+      "source": "https://namethatui.com/web/breadcrumbs",
+      "tier": "conditional",
+      "specularEntry": "Breadcrumbs",
+      "use": "No current hierarchy is deep enough; retain only for a future nested information architecture."
+    },
+    {
+      "id": "sticky-fixed",
+      "name": "Sticky vs. Fixed Positioning",
+      "source": "https://namethatui.com/web/sticky-fixed",
+      "tier": "foundation",
+      "specularEntry": "StickyRegion | FixedRegionPolicy",
+      "use": "Prefer sticky within the owning scroll context; fixed surfaces require collision, safe-area, keyboard, and focus checks."
+    },
+    {
+      "id": "focus-ring-web",
+      "name": "Focus Ring (:focus-visible)",
+      "source": "https://namethatui.com/web/focus-ring-web",
+      "tier": "foundation",
+      "specularEntry": "FocusRing",
+      "use": "One visible high-contrast keyboard-focus contract across controls, overlays, and surfaces."
+    },
+    {
+      "id": "empty-state",
+      "name": "Empty State",
+      "source": "https://namethatui.com/web/empty-state",
+      "tier": "core",
+      "specularEntry": "EmptyState",
+      "use": "Differentiate first use, no results, loading, and failure; provide the most useful next author action without blame."
+    },
+    {
+      "id": "hover-card",
+      "name": "Hover Card",
+      "source": "https://namethatui.com/web/hover-card",
+      "tier": "conditional",
+      "specularEntry": "HoverCard",
+      "use": "Potential source/provenance preview only if an equivalent focus and touch path exists."
+    },
+    {
+      "id": "switch-checkbox-radio",
+      "name": "Switch vs. Checkbox vs. Radio",
+      "source": "https://namethatui.com/web/switch-checkbox-radio",
+      "tier": "core",
+      "specularEntry": "Switch | Checkbox | RadioGroup",
+      "use": "Switch applies immediately, checkbox represents independent or deferred selection, and radio chooses exactly one option."
+    },
+    {
+      "id": "toggle-group",
+      "name": "Toggle Group (Segmented Control)",
+      "source": "https://namethatui.com/web/toggle-group",
+      "tier": "core",
+      "specularEntry": "ToggleGroup",
+      "use": "Compact persistent selection among a small peer set, such as a Connections scope; not a route navigator or action row."
+    }
+  ]
+}

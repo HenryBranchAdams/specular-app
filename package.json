@@ -38,6 +38,7 @@
     "lighthouse": "npm run build && lhci autorun",
     "verify:production": "npm run build && npm run build:server && node scripts/verify-production.mjs",
     "verify:pwa": "npm run build && node scripts/verify-pwa-build.mjs",
+    "validate:ui-inventory": "node scripts/validate-component-library-inventory.mjs",
     "evidence:validate": "node scripts/write-release-evidence.mjs --output artifacts/release-evidence/validate.json --lane validate --suites typecheck,lint,coverage,eval,build,integration,pwa-verification --evidence-levels unit,worker-d1",
     "evidence:browser": "node scripts/write-release-evidence.mjs --output artifacts/release-evidence/browser.json --lane browser-and-lighthouse --suites mocked-playwright,integrated-playwright,lighthouse --evidence-levels synthetic-ui,integrated-browser,pwa-chromium,webkit-simulation",
     "chatgpt:server": "npm run build:server && node --env-file-if-exists=.env.local dist-server/index.js",
