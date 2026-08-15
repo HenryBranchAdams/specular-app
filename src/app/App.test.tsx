@@ -1,14 +1,15 @@
-import { cleanup, render, screen, within } from '@testing-library/react';
+import { act, cleanup, render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { createInitialWorkspace } from '../thinking/model';
 import type { DictationCaptureHandlers, DictationController } from '../dictation/capture';
 import type { DictationService } from '../dictation/client';
 import type { Reflector } from '../thinking/reflect-client';
+import type { Organizer } from '../thinking/organize-client';
 import type { SharePublisher } from '../thinking/share-client';
 import { App } from './App';
 
-afterEach(cleanup);
+afterEach(() => { cleanup(); vi.useRealTimers(); });
 
 function reflection(mirror = 'You are separating attention from certainty.') {
   return {
@@ -36,6 +37,8 @@ function setup(options: {
   sharePublisher?: SharePublisher;
   dictationController?: DictationController;
   dictationService?: DictationService;
+  organizer?: Organizer;
+  initialState?: ReturnType<typeof createInitialWorkspace>;
 } = {}) {
   const reflector = options.reflector ?? { reflect: vi.fn(() => Promise.resolve(reflection())) };
   const sharePublisher = options.sharePublisher ?? {
@@ -43,8 +46,9 @@ function setup(options: {
   };
   render(
     <App
-      initialState={createInitialWorkspace(1_800_000_000_000)}
+      initialState={options.initialState ?? createInitialWorkspace(1_800_000_000_000)}
       reflector={reflector}
+      {...(options.organizer === undefined ? {} : { organizer: options.organizer })}
       sharePublisher={sharePublisher}
       {...(options.dictationController === undefined ? {} : { dictationController: options.dictationController })}
       {...(options.dictationService === undefined ? {} : { dictationService: options.dictationService })}
@@ -54,6 +58,29 @@ function setup(options: {
 }
 
 describe('Specular thinking workspace', () => {
+  it('quietly generates organizational metadata after consent and enough writing', async () => {
+    vi.useFakeTimers();
+    const initial = createInitialWorkspace(1_800_000_000_000);
+    const content = Array.from({ length: 50 }, (_, index) => `word${String(index)}`).join(' ');
+    const firstDocument = initial.documents[0];
+    const firstBlock = initial.blocks[0];
+    if (firstDocument === undefined || firstBlock === undefined) throw new Error('Expected an initial workspace.');
+    initial.settings.automaticOrganization = 'enabled';
+    initial.documents[0] = { ...firstDocument, updatedAt: 1_800_000_000_100 };
+    initial.blocks[0] = { ...firstBlock, content, updatedAt: 1_800_000_000_100 };
+    const organize = vi.fn(() => Promise.resolve({
+      title: 'Attention without certainty',
+      kinds: [{ id: firstBlock.id, kind: 'hypothesis' as const }],
+    }));
+    setup({ initialState: initial, organizer: { organize } });
+
+    await act(async () => { await vi.advanceTimersByTimeAsync(2_000); });
+
+    expect(organize).toHaveBeenCalledOnce();
+    expect(screen.getByRole('textbox', { name: 'Document title' })).toHaveValue('Attention without certainty');
+    expect(screen.getByText(/Suggested title/u)).toBeVisible();
+  });
+
   it('reviews dictated text in the focused block before one canonical Keep', async () => {
     const user = userEvent.setup();
     const controller = new FakeDictationController();
@@ -224,6 +251,8 @@ describe('Specular thinking workspace', () => {
     expect(block).toHaveAttribute('placeholder', 'Begin with the part you can almost say, but not quite.');
     expect(screen.getByText('Nothing enters your document unless you write it.')).toBeVisible();
     expect(screen.queryByRole('log')).not.toBeInTheDocument();
+    expect(screen.queryByRole('combobox', { name: 'Block kind' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('combobox', { name: 'Document status' })).not.toBeInTheDocument();
   });
 
   it('deletes an accidentally created blank block', async () => {
@@ -286,7 +315,7 @@ describe('Specular thinking workspace', () => {
     setup({ reflector: { reflect } });
     await user.type(screen.getByRole('textbox', { name: 'Thought writing block' }), 'Attention is not the same as certainty.');
     await user.click(screen.getByRole('button', { name: 'Reflect' }));
-    await user.click(await screen.findByText('Not quite?'));
+    expect(await screen.findByText('Clarify this reading')).toBeVisible();
     await user.type(screen.getByRole('textbox', { name: "Correct Specular's understanding" }), 'I mean it is a reason to keep looking.');
     await user.click(screen.getByRole('button', { name: 'Respond' }));
 
@@ -295,6 +324,22 @@ describe('Specular thinking workspace', () => {
       move: 'calibrate',
       calibration: 'I mean it is a reason to keep looking.',
     }));
+  });
+
+  it('dictates into the ephemeral calibration field before Respond', async () => {
+    const user = userEvent.setup();
+    const controller = new FakeDictationController();
+    const clean = vi.fn(() => Promise.resolve('A clearer correction.'));
+    setup({ dictationController: controller, dictationService: { transcribe: vi.fn(), clean } });
+    await user.type(screen.getByRole('textbox', { name: 'Thought writing block' }), 'Attention is not the same as certainty.');
+    await user.click(screen.getByRole('button', { name: 'Reflect' }));
+    await user.click(await screen.findByRole('button', { name: 'Start calibration dictation' }));
+    controller.handlers?.onTranscript('Um, a clearer correction.');
+    await user.click(screen.getByRole('button', { name: 'Finish calibration dictation' }));
+
+    expect(screen.getByRole('textbox', { name: "Correct Specular's understanding" })).toHaveValue('A clearer correction.');
+    expect(screen.queryByRole('textbox', { name: 'Dictation draft' })).not.toBeInTheDocument();
+    expect(screen.getByRole('textbox', { name: 'Thought writing block' })).toHaveValue('Attention is not the same as certainty.');
   });
 
   it('shows authored blocks in the document-scoped connections view', async () => {
@@ -306,6 +351,9 @@ describe('Specular thinking workspace', () => {
     const graph = screen.getByRole('region', { name: 'Connections' });
     expect(within(graph).getByText('A recurring thought becomes visible through writing.')).toBeVisible();
     expect(within(graph).getByRole('combobox', { name: 'Filter connections by kind' })).toHaveValue('all');
+    const correction = within(graph).getByRole('combobox', { name: /Correct kind for/u });
+    await user.selectOptions(correction, 'question');
+    expect(correction).toHaveValue('question');
   });
 
   it('creates a user-authored snapshot and publishes only selected canonical blocks', async () => {
@@ -325,6 +373,29 @@ describe('Specular thinking workspace', () => {
       blocks: [expect.objectContaining({ content: 'Attention can justify another look without becoming proof.' })],
     }));
     expect(await within(editor).findByRole('button', { name: 'Copy link' })).toBeVisible();
+  });
+
+  it('requires explicit confirmation before a generated title enters a snapshot artifact', async () => {
+    const user = userEvent.setup();
+    const initial = createInitialWorkspace(1_800_000_000_000);
+    const document = initial.documents[0];
+    const block = initial.blocks[0];
+    if (document === undefined || block === undefined) throw new Error('Expected an initial workspace.');
+    initial.documents[0] = { ...document, title: 'Suggested title', titleSource: 'generated' };
+    initial.blocks[0] = { ...block, content: 'Authored material remains the substance of the snapshot.' };
+    setup({ initialState: initial });
+
+    await user.click(screen.getByRole('button', { name: 'Create snapshot' }));
+    const editor = screen.getByRole('dialog', { name: 'Snapshot editor' });
+    expect(within(editor).getByRole('button', { name: 'Publish page' })).toBeDisabled();
+    expect(within(editor).getByText(/suggested by Specular/u)).toBeVisible();
+    await user.click(within(editor).getByRole('button', { name: 'Use this title' }));
+    expect(within(editor).getByRole('button', { name: 'Publish page' })).toBeEnabled();
+    const title = within(editor).getByRole('textbox', { name: 'Snapshot title' });
+    await user.clear(title);
+    expect(within(editor).getByRole('button', { name: 'Publish page' })).toBeDisabled();
+    await user.type(title, 'A title I chose');
+    expect(within(editor).getByRole('button', { name: 'Publish page' })).toBeEnabled();
   });
 
   it('keeps context breadth and dormancy timing under user control', async () => {

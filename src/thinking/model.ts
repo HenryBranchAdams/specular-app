@@ -8,6 +8,8 @@ export const thoughtKindSchema = z.enum([
   'reference',
 ]);
 export const thoughtStatusSchema = z.enum(['active', 'resting', 'closed']);
+export const metadataSourceSchema = z.enum(['empty', 'generated', 'author']);
+export const kindSourceSchema = z.enum(['default', 'generated', 'author']);
 export const relationshipSchema = z.enum([
   'branches_from',
   'develops',
@@ -74,28 +76,39 @@ export const sourceReferenceSchema = z.object({
   accessedAt: z.number().int().nonnegative(),
 }).strict();
 
-export const thoughtBlockSchema = z.object({
+export const thoughtBlockSchema = z.preprocess((value) => {
+  if (typeof value !== 'object' || value === null || 'kindSource' in value) return value;
+  const block = value as Record<string, unknown>;
+  return { ...block, kindSource: block.kind === 'thought' ? 'default' : 'author' };
+}, z.object({
   id: z.string().min(1).max(128),
   documentId: z.string().min(1).max(128),
   parentId: z.string().min(1).max(128).nullable(),
   originPrompt: z.string().trim().max(400).nullable().default(null),
   content: z.string().max(40_000),
   kind: thoughtKindSchema,
+  kindSource: kindSourceSchema,
   status: thoughtStatusSchema,
   createdAt: z.number().int().nonnegative(),
   updatedAt: z.number().int().nonnegative(),
   versions: z.array(blockVersionSchema).max(500),
   references: z.array(sourceReferenceSchema).max(50),
-}).strict();
+}).strict());
 
-export const thoughtDocumentSchema = z.object({
+export const thoughtDocumentSchema = z.preprocess((value) => {
+  if (typeof value !== 'object' || value === null || 'titleSource' in value) return value;
+  const document = value as Record<string, unknown>;
+  const title = typeof document.title === 'string' ? document.title.trim() : '';
+  return { ...document, titleSource: title.length > 0 ? 'author' : 'empty' };
+}, z.object({
   id: z.string().min(1).max(128),
   title: z.string().max(300),
+  titleSource: metadataSourceSchema,
   status: thoughtStatusSchema,
   blockIds: z.array(z.string().min(1).max(128)).max(5_000),
   createdAt: z.number().int().nonnegative(),
   updatedAt: z.number().int().nonnegative(),
-}).strict();
+}).strict());
 
 export const connectionSchema = z.object({
   id: z.string().min(1).max(128),
@@ -140,7 +153,8 @@ export const marginAnnotationSchema = z.object({
 export const thoughtSnapshotSchema = z.object({
   id: z.string().min(1).max(128),
   documentId: z.string().min(1).max(128),
-  title: z.string().trim().min(1).max(300),
+  title: z.string().max(300),
+  titleConfirmed: z.boolean().default(true),
   blockIds: z.array(z.string().min(1).max(128)).min(1).max(5_000),
   createdAt: z.number().int().nonnegative(),
   publishedUrl: z.string().url().max(2_000).nullable(),
@@ -159,6 +173,7 @@ export const workspaceStateSchema = z.object({
     contextScope: contextScopeSchema,
     dormancyDays: z.number().int().min(1).max(365),
     dictationCleanup: z.enum(['faithful', 'verbatim']).default('faithful'),
+    automaticOrganization: z.enum(['undecided', 'enabled', 'disabled']).default('undecided'),
   }).strict(),
 }).strict();
 
@@ -192,6 +207,7 @@ export function createInitialWorkspace(now = Date.now()): WorkspaceState {
     documents: [{
       id: documentId,
       title: '',
+      titleSource: 'empty',
       status: 'active',
       blockIds: [blockId],
       createdAt: now,
@@ -204,6 +220,7 @@ export function createInitialWorkspace(now = Date.now()): WorkspaceState {
       originPrompt: null,
       content: '',
       kind: 'thought',
+      kindSource: 'default',
       status: 'active',
       createdAt: now,
       updatedAt: now,
@@ -217,6 +234,7 @@ export function createInitialWorkspace(now = Date.now()): WorkspaceState {
       contextScope: 'document',
       dormancyDays: 14,
       dictationCleanup: 'faithful',
+      automaticOrganization: 'undecided',
     },
   });
 }

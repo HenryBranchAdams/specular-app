@@ -11,12 +11,14 @@ import {
   LoaderCircle,
   Mic,
   Network,
+  Paperclip,
   Pause,
   Play,
   Plus,
   Printer,
   Share2,
   Square,
+  Trash2,
   X,
 } from 'lucide-react';
 import {
@@ -47,6 +49,7 @@ import {
   type ThoughtSnapshot,
   type WorkspaceState,
 } from '../thinking/model';
+import { HttpOrganizer, type Organizer } from '../thinking/organize-client';
 import { createWorkspaceStore, type WorkspaceStore } from '../thinking/persistence';
 import {
   HttpReflector,
@@ -63,6 +66,7 @@ import {
 export interface AppProps {
   initialState?: WorkspaceState;
   reflector?: Reflector;
+  organizer?: Organizer;
   sharePublisher?: SharePublisher;
   storeFactory?: () => Promise<WorkspaceStore>;
   dependencies?: unknown;
@@ -115,6 +119,11 @@ function documentBlocks(state: WorkspaceState, document: ThoughtDocument): Thoug
     const block = byId.get(id);
     return block === undefined ? [] : [block];
   });
+}
+
+function wordCount(value: string): number {
+  const trimmed = value.trim();
+  return trimmed.length === 0 ? 0 : trimmed.split(/\s+/u).length;
 }
 
 function contextBlocksFor(
@@ -193,7 +202,7 @@ function PublishedPage({ slug }: { slug: string }) {
       <h1>{snapshot.title}</h1>
       <p className="published-date">Captured {new Date(snapshot.createdAt).toLocaleDateString()}</p>
       <article className="published-body">
-        {snapshot.blocks.map((block) => block.kind === 'reference'
+        {snapshot.blocks.map((block) => block.references.length > 0
           ? <blockquote key={block.id}>{block.content}</blockquote>
           : <p key={block.id}>{block.content}</p>)}
       </article>
@@ -215,6 +224,32 @@ function PublishedPage({ slug }: { slug: string }) {
   );
 }
 
+function DocumentTitleEditor({ onChange, value }: { onChange: (value: string) => void; value: string }) {
+  const ref = useRef<HTMLTextAreaElement>(null);
+  useEffect(() => {
+    const element = ref.current;
+    if (element === null) return;
+    const resize = () => {
+      element.style.height = '0px';
+      element.style.height = `${String(Math.max(68, element.scrollHeight + 4))}px`;
+    };
+    resize();
+    const fonts = Reflect.get(document, 'fonts') as FontFaceSet | undefined;
+    if (fonts !== undefined) void fonts.ready.then(resize);
+  }, [value]);
+  return (
+    <textarea
+      aria-label="Document title"
+      className="document-title"
+      onChange={(event) => { onChange(event.target.value); }}
+      placeholder="Untitled thought"
+      ref={ref}
+      rows={1}
+      value={value}
+    />
+  );
+}
+
 function BlockEditor({
   block,
   canDictate,
@@ -222,8 +257,8 @@ function BlockEditor({
   dictationDraft,
   dictationError,
   deletePending,
-  dormancyDays,
   focused,
+  onAttachSource,
   onBlur,
   onChange,
   onDelete,
@@ -238,7 +273,7 @@ function BlockEditor({
   onDictationStart,
   onDictationUseVerbatim,
   onFocus,
-  onKindChange,
+  onRemoveSource,
   onReferenceChange,
   onRestoreVersion,
   onSelection,
@@ -250,8 +285,8 @@ function BlockEditor({
   dictationDraft: DictationDraft | null;
   dictationError: string | null;
   deletePending: boolean;
-  dormancyDays: number;
   focused: boolean;
+  onAttachSource: () => void;
   onBlur: () => void;
   onChange: (content: string) => void;
   onDelete: () => void;
@@ -266,7 +301,7 @@ function BlockEditor({
   onDictationStart: (offset: number) => void;
   onDictationUseVerbatim: () => void;
   onFocus: () => void;
-  onKindChange: (kind: ThoughtKind) => void;
+  onRemoveSource: () => void;
   onReferenceChange: (field: keyof Pick<SourceReference, 'author' | 'excerpt' | 'title' | 'url'>, value: string) => void;
   onRestoreVersion: (index: number) => void;
   onSelection: (text: string) => void;
@@ -277,10 +312,13 @@ function BlockEditor({
     const textarea = textareaRef.current;
     if (textarea === null) return;
     textarea.style.height = '0px';
-    textarea.style.height = `${String(Math.max(112, textarea.scrollHeight))}px`;
+    textarea.style.height = `${String(Math.max(112, textarea.scrollHeight + 8))}px`;
   };
-  useEffect(resize, [block.content]);
-  const status = effectiveStatus(block.updatedAt, block.status, dormancyDays);
+  useEffect(() => {
+    resize();
+    const fonts = Reflect.get(document, 'fonts') as FontFaceSet | undefined;
+    if (fonts !== undefined) void fonts.ready.then(resize);
+  }, [block.content]);
   const readSelection = () => {
     const textarea = textareaRef.current;
     if (textarea === null) return;
@@ -291,23 +329,16 @@ function BlockEditor({
       <div className="thought-card__rail" aria-hidden="true" />
       <div className="thought-card__content">
         <div className="thought-card__meta">
-          <select
-            aria-label="Block kind"
-            onChange={(event) => { onKindChange(event.target.value as ThoughtKind); }}
-            value={block.kind}
-          >
-            {Object.entries(KIND_LABELS).map(([value, label]) => (
-              <option key={value} value={value}>{label}</option>
-            ))}
-          </select>
-          <span>{status}</span>
           {block.parentId === null ? null : <span className="thought-card__linked"><Link2 size={12} /> linked</span>}
+          {block.references.length > 0 ? null : (
+            <button aria-label="Attach source" className="source-trigger" onClick={onAttachSource} title="Attach source" type="button"><Paperclip size={14} /></button>
+          )}
           {deletePending ? (
             <span aria-label="Confirm block deletion" className="delete-confirmation" role="group">
               <button aria-label="Confirm delete block" className="delete-block delete-block--confirm" onClick={onDeleteConfirm} type="button">Delete?</button>
               <button aria-label="Cancel block deletion" className="delete-block" onClick={onDeleteCancel} type="button">Cancel</button>
             </span>
-          ) : <button aria-label="Delete block" className="delete-block" onClick={onDelete} type="button">Delete</button>}
+          ) : <button aria-label="Delete block" className="delete-block delete-block--icon" onClick={onDelete} title="Delete block" type="button"><Trash2 size={14} /></button>}
           {focused && !dictationActive && canDictate && !deletePending ? (
             <button
               aria-label="Start dictation"
@@ -383,8 +414,9 @@ function BlockEditor({
             </details>
           </section>
         )}
-        {block.kind !== 'reference' ? null : (
+        {block.references.length === 0 ? null : (
           <div className="reference-fields">
+            <button aria-label="Remove source" className="reference-fields__remove" onClick={onRemoveSource} title="Remove source" type="button"><X size={14} /></button>
             <input aria-label="Reference title" onChange={(event) => { onReferenceChange('title', event.target.value); }} placeholder="Source title" value={block.references[0]?.title ?? ''} />
             <input aria-label="Reference author" onChange={(event) => { onReferenceChange('author', event.target.value); }} placeholder="Author (optional)" value={block.references[0]?.author ?? ''} />
             <input aria-label="Reference URL" onChange={(event) => { onReferenceChange('url', event.target.value); }} placeholder="https://…" type="url" value={block.references[0]?.url ?? ''} />
@@ -413,10 +445,16 @@ function BlockEditor({
 function ReflectionMargin({
   annotation,
   busy,
+  calibration,
+  calibrationDictationError,
+  calibrationDictationStatus,
   contextScope,
   error,
   focusBlock,
   onCalibrate,
+  onCalibrationChange,
+  onCalibrationDictationFinish,
+  onCalibrationDictationStart,
   onContextScope,
   onDismiss,
   onFollow,
@@ -426,10 +464,16 @@ function ReflectionMargin({
 }: {
   annotation: MarginAnnotation | null;
   busy: boolean;
+  calibration: string;
+  calibrationDictationError: string | null;
+  calibrationDictationStatus: 'idle' | 'requesting' | 'recording' | 'processing' | 'interrupted';
   contextScope: ContextScope;
   error: string | null;
   focusBlock: ThoughtBlock | null;
   onCalibrate: (text: string) => void;
+  onCalibrationChange: (text: string) => void;
+  onCalibrationDictationFinish: () => void;
+  onCalibrationDictationStart: (offset: number) => void;
   onContextScope: (scope: ContextScope) => void;
   onDismiss: () => void;
   onFollow: (direction: ReflectionDirection) => void;
@@ -437,12 +481,11 @@ function ReflectionMargin({
   onSave: () => void;
   selection: string;
 }) {
-  const [calibration, setCalibration] = useState('');
+  const calibrationRef = useRef<HTMLTextAreaElement>(null);
   const canReflect = focusBlock !== null && focusBlock.content.trim().length > 0;
   return (
     <aside aria-label="Reflection margin" className="reflection-margin">
       <div className="reflection-margin__heading">
-        <span>Margin</span>
         <select
           aria-label="Context scope"
           onChange={(event) => { onContextScope(event.target.value as ContextScope); }}
@@ -482,11 +525,9 @@ function ReflectionMargin({
             <button aria-label="Dismiss reflection" onClick={onDismiss} type="button"><X size={15} /></button>
           </div>
           <p className="reflection-card__mirror">{annotation.mirror}</p>
-          <p className="reflection-card__label">Possible directions</p>
           <div className="direction-list">
             {annotation.directions.map((direction) => (
               <button key={`${direction.label}:${direction.prompt}`} onClick={() => { onFollow(direction); }} type="button">
-                <span>{direction.label}</span>
                 {direction.prompt}
               </button>
             ))}
@@ -501,8 +542,9 @@ function ReflectionMargin({
               ))}
             </div>
           )}
-          <details className="calibration">
-            <summary>Not quite?</summary>
+          <section aria-labelledby="calibration-label" className="calibration">
+            <label id="calibration-label" htmlFor="calibration-text">Clarify this reading</label>
+            <small>Say what Specular missed, then return to the document to make the thought itself clear.</small>
             {annotation.calibration.map((turn, index) => (
               <p className={`calibration__${turn.role}`} key={`${String(turn.createdAt)}:${String(index)}`}>{turn.content}</p>
             ))}
@@ -510,17 +552,37 @@ function ReflectionMargin({
               event.preventDefault();
               if (calibration.trim().length === 0 || busy) return;
               onCalibrate(calibration.trim());
-              setCalibration('');
+              onCalibrationChange('');
             }}>
-              <textarea
+              <div className="calibration-field">
+                <textarea
                 aria-label="Correct Specular's understanding"
-                onChange={(event) => { setCalibration(event.target.value); }}
+                id="calibration-text"
+                onChange={(event) => { onCalibrationChange(event.target.value); }}
                 placeholder="Say what it missed. Then return to the document to make it clear."
+                readOnly={calibrationDictationStatus === 'requesting' || calibrationDictationStatus === 'recording' || calibrationDictationStatus === 'processing'}
+                ref={calibrationRef}
                 value={calibration}
-              />
-              <button disabled={busy || calibration.trim().length === 0} type="submit">Respond</button>
+                />
+                <button
+                  aria-label={calibrationDictationStatus === 'recording' ? 'Finish calibration dictation' : 'Start calibration dictation'}
+                  className="calibration-mic"
+                  disabled={busy || calibrationDictationStatus === 'requesting' || calibrationDictationStatus === 'processing'}
+                  onClick={() => {
+                    if (calibrationDictationStatus === 'recording') onCalibrationDictationFinish();
+                    else onCalibrationDictationStart(calibrationRef.current?.selectionStart ?? calibration.length);
+                  }}
+                  title={calibrationDictationStatus === 'recording' ? 'Finish dictation' : 'Dictate a correction'}
+                  type="button"
+                >{calibrationDictationStatus === 'recording' ? <Square size={13} /> : <Mic size={14} />}</button>
+              </div>
+              {calibrationDictationStatus === 'requesting' ? <p className="calibration-status" role="status">Waiting for microphone permission…</p> : null}
+              {calibrationDictationStatus === 'recording' ? <p className="calibration-status" role="status">Recording · keep Specular open</p> : null}
+              {calibrationDictationStatus === 'processing' ? <p className="calibration-status" role="status">Preparing transcript…</p> : null}
+              {calibrationDictationError === null ? null : <p className="inline-error" role="alert">{calibrationDictationError}</p>}
+              <button disabled={busy || calibration.trim().length === 0 || calibrationDictationStatus === 'requesting' || calibrationDictationStatus === 'recording' || calibrationDictationStatus === 'processing'} type="submit">Respond</button>
             </form>
-          </details>
+          </section>
           <div className="reflection-card__actions">
             <button onClick={onSave} type="button">Save for later</button>
             <span>{annotation.referencedBlockIds.length} source block{annotation.referencedBlockIds.length === 1 ? '' : 's'}</span>
@@ -537,11 +599,13 @@ function ConnectionsView({
   documentId,
   dormancyDays,
   onOpenBlock,
+  onKindChange,
 }: {
   blocks: ThoughtBlock[];
   documentId: string;
   dormancyDays: number;
   onOpenBlock: (block: ThoughtBlock) => void;
+  onKindChange: (blockId: string, kind: ThoughtKind) => void;
 }) {
   const [kind, setKind] = useState<ThoughtKind | 'all'>('all');
   const [scope, setScope] = useState<'document' | 'workspace'>('document');
@@ -576,17 +640,23 @@ function ConnectionsView({
       ) : (
         <div className="thought-graph">
           {visible.map((block, index) => (
-            <button
+            <article
               className={`graph-node graph-node--${block.kind}`}
               key={block.id}
-              onClick={() => { onOpenBlock(block); }}
               style={{ '--node-order': index } as React.CSSProperties}
-              type="button"
             >
-              <span>{KIND_LABELS[block.kind]} · {effectiveStatus(block.updatedAt, block.status, dormancyDays)}</span>
-              <strong>{block.content.slice(0, 180)}{block.content.length > 180 ? '…' : ''}</strong>
-              <small>{block.content.trim().split(/\s+/u).length} words</small>
-            </button>
+              <button className="graph-node__open" onClick={() => { onOpenBlock(block); }} type="button">
+                <span>{effectiveStatus(block.updatedAt, block.status, dormancyDays)}</span>
+                <strong>{block.content.slice(0, 180)}{block.content.length > 180 ? '…' : ''}</strong>
+                <small>{block.content.trim().split(/\s+/u).length} words</small>
+              </button>
+              <label className="graph-node__kind">
+                <span className="sr-only">Correct kind for this block</span>
+                <select aria-label={`Correct kind for ${block.content.slice(0, 40)}`} onChange={(event) => { onKindChange(block.id, event.target.value as ThoughtKind); }} value={block.kind}>
+                  {Object.entries(KIND_LABELS).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
+                </select>
+              </label>
+            </article>
           ))}
         </div>
       )}
@@ -600,6 +670,8 @@ function SnapshotEditor({
   onPrint,
   onPublish,
   onToggleBlock,
+  onTitleChange,
+  onTitleConfirm,
   publishing,
   snapshot,
   state,
@@ -609,6 +681,8 @@ function SnapshotEditor({
   onPrint: () => void;
   onPublish: () => void;
   onToggleBlock: (blockId: string) => void;
+  onTitleChange: (title: string) => void;
+  onTitleConfirm: () => void;
   publishing: boolean;
   snapshot: ThoughtSnapshot;
   state: WorkspaceState;
@@ -630,6 +704,16 @@ function SnapshotEditor({
         </header>
         <div className="snapshot-layout">
           <aside>
+            <label className="snapshot-title-field">
+              <span>Snapshot title</span>
+              <input onChange={(event) => { onTitleChange(event.target.value); }} value={snapshot.title} />
+            </label>
+            {snapshot.titleConfirmed ? null : (
+              <div className="snapshot-title-confirmation">
+                <p>This title was suggested by Specular. Edit it or confirm it before sharing.</p>
+                <button onClick={onTitleConfirm} type="button">Use this title</button>
+              </div>
+            )}
             <h2>Included writing</h2>
             {allBlocks.map((block) => (
               <label key={block.id}>
@@ -642,15 +726,15 @@ function SnapshotEditor({
           <article className="snapshot-preview">
             <p className="published-kicker">A Specular reflection</p>
             <h1>{payload.title}</h1>
-            {payload.blocks.map((block) => block.kind === 'reference'
+            {payload.blocks.map((block) => block.references.length > 0
               ? <blockquote key={block.id}>{block.content}</blockquote>
               : <p key={block.id}>{block.content}</p>)}
           </article>
         </div>
         <footer>
-          <button onClick={() => { downloadMarkdown(payload); }} type="button"><Download size={15} />Markdown</button>
-          <button onClick={onPrint} type="button"><Printer size={15} />Print / PDF</button>
-          <button className="primary-action" disabled={publishing || payload.blocks.length === 0} onClick={onPublish} type="button">
+          <button disabled={!snapshot.titleConfirmed || snapshot.title.trim().length === 0} onClick={() => { downloadMarkdown(payload); }} type="button"><Download size={15} />Markdown</button>
+          <button disabled={!snapshot.titleConfirmed || snapshot.title.trim().length === 0} onClick={onPrint} type="button"><Printer size={15} />Print / PDF</button>
+          <button className="primary-action" disabled={publishing || payload.blocks.length === 0 || !snapshot.titleConfirmed || snapshot.title.trim().length === 0} onClick={onPublish} type="button">
             {publishing ? <LoaderCircle className="spin" size={15} /> : <Share2 size={15} />}
             Publish page
           </button>
@@ -670,6 +754,7 @@ export function App({
   dictationController,
   dictationService,
   initialState,
+  organizer = new HttpOrganizer(),
   reflector = new HttpReflector(),
   sharePublisher = new HttpSharePublisher(),
   storeFactory = createWorkspaceStore,
@@ -695,11 +780,22 @@ export function App({
   const [dictationError, setDictationError] = useState<string | null>(null);
   const [storageError, setStorageError] = useState<string | null>(null);
   const [pendingDeleteBlockId, setPendingDeleteBlockId] = useState<string | null>(null);
+  const [organizationBusy, setOrganizationBusy] = useState(false);
+  const [calibration, setCalibration] = useState('');
+  const [calibrationDictationStatus, setCalibrationDictationStatus] = useState<'idle' | 'requesting' | 'recording' | 'processing' | 'interrupted'>('idle');
+  const [calibrationDictationError, setCalibrationDictationError] = useState<string | null>(null);
   const storeRef = useRef<WorkspaceStore | null>(null);
+  const organizerRef = useRef<Organizer>(organizer);
   const dictationServiceRef = useRef<DictationService>(dictationService ?? new HttpDictationService());
   const dictationControllerRef = useRef<DictationController>(dictationController ?? new BrowserDictationController(dictationServiceRef.current));
   const dictationDraftRef = useRef<DictationDraft | null>(state.dictationDraft);
+  const calibrationRef = useRef(calibration);
+  const calibrationSessionRef = useRef<{ prefix: string; suffix: string; verbatim: string } | null>(null);
+  const organizationInFlightRef = useRef(false);
+  const lastOrganizationAttemptRef = useRef<string | null>(null);
   dictationDraftRef.current = state.dictationDraft;
+  calibrationRef.current = calibration;
+  organizerRef.current = organizer;
 
   useEffect(() => {
     if (initialState !== undefined) return;
@@ -749,6 +845,55 @@ export function App({
   )) ?? null;
   const currentSnapshot = state.snapshots.find((snapshot) => snapshot.id === snapshotId) ?? null;
   const isBlank = blocks.every((block) => block.content.trim().length === 0);
+  const authoredWordCount = blocks.reduce((total, block) => total + wordCount(block.content), 0);
+  const calibrationDictationActive = calibrationDictationStatus !== 'idle' && calibrationDictationStatus !== 'interrupted';
+
+  useEffect(() => {
+    if (!initialized || state.settings.automaticOrganization !== 'enabled' || organizationInFlightRef.current) return;
+    const eligibleBlocks = blocks.filter((block) => block.kindSource === 'default' && wordCount(block.content) >= 8);
+    const titleEligible = currentDocument.titleSource === 'empty' && currentDocument.title.trim().length === 0 && authoredWordCount >= 50;
+    if (!titleEligible && eligibleBlocks.length === 0) return;
+    const inputBlocks = blocks.filter((block) => block.content.trim().length > 0);
+    if (inputBlocks.length === 0) return;
+    const fingerprint = `${currentDocument.id}:${String(currentDocument.updatedAt)}:${inputBlocks.map((block) => `${block.id}:${String(block.updatedAt)}:${block.kindSource}`).join('|')}`;
+    if (lastOrganizationAttemptRef.current === fingerprint) return;
+    const timeout = window.setTimeout(() => {
+      lastOrganizationAttemptRef.current = fingerprint;
+      organizationInFlightRef.current = true;
+      setOrganizationBusy(true);
+      const requestedDocumentUpdatedAt = currentDocument.updatedAt;
+      const requestedBlockVersions = new Map(inputBlocks.map((block) => [block.id, block.updatedAt]));
+      void organizerRef.current.organize({
+        documentId: currentDocument.id,
+        blocks: inputBlocks.map((block) => ({ id: block.id, content: block.content })),
+      }).then((result) => {
+        setState((current) => ({
+          ...current,
+          documents: current.documents.map((document) => {
+            if (document.id !== currentDocument.id) return document;
+            if (!titleEligible || document.updatedAt !== requestedDocumentUpdatedAt || document.titleSource !== 'empty' || document.title.trim().length > 0) return document;
+            return { ...document, title: result.title, titleSource: 'generated' };
+          }),
+          blocks: current.blocks.map((block) => {
+            const generated = result.kinds.find((item) => item.id === block.id);
+            if (generated === undefined || block.kindSource !== 'default' || block.updatedAt !== requestedBlockVersions.get(block.id)) return block;
+            return { ...block, kind: generated.kind, kindSource: 'generated' };
+          }),
+        }));
+      }).catch(() => undefined).finally(() => {
+        organizationInFlightRef.current = false;
+        setOrganizationBusy(false);
+      });
+    }, 2_000);
+    return () => { window.clearTimeout(timeout); };
+  }, [authoredWordCount, blocks, currentDocument, initialized, state.settings.automaticOrganization]);
+
+  useEffect(() => {
+    setCalibration('');
+    calibrationSessionRef.current = null;
+    setCalibrationDictationStatus('idle');
+    setCalibrationDictationError(null);
+  }, [currentAnnotation?.id]);
 
   const setDictationDraft = (update: DictationDraft | null | ((draft: DictationDraft | null) => DictationDraft | null)) => {
     const next = typeof update === 'function' ? update(dictationDraftRef.current) : update;
@@ -794,6 +939,79 @@ export function App({
       });
     },
   });
+
+  const calibrationCaptureHandlers = (): DictationCaptureHandlers => ({
+    onStarted: () => {
+      setCalibrationDictationStatus('recording');
+      setCalibrationDictationError(null);
+    },
+    onTranscript: (transcript) => {
+      const addition = transcript.trim();
+      const session = calibrationSessionRef.current;
+      if (addition.length === 0 || session === null) return;
+      const join = session.verbatim.trim().length === 0 ? '' : ' ';
+      session.verbatim = `${session.verbatim}${join}${addition}`.slice(0, 2_000);
+      const value = `${session.prefix}${session.verbatim}${session.suffix}`.slice(0, 2_000);
+      calibrationRef.current = value;
+      setCalibration(value);
+    },
+    onInterrupted: () => {
+      setCalibrationDictationStatus('interrupted');
+      setCalibrationDictationError('Dictation was interrupted. The transcribed correction remains in the field.');
+    },
+    onError: (message) => {
+      setCalibrationDictationStatus('interrupted');
+      setCalibrationDictationError(message);
+    },
+  });
+
+  const startCalibrationDictation = async (insertionOffset: number) => {
+    if (dictationDraftRef.current !== null || calibrationDictationActive) return;
+    const current = calibrationRef.current;
+    const offset = Math.min(insertionOffset, current.length);
+    calibrationSessionRef.current = { prefix: current.slice(0, offset), suffix: current.slice(offset), verbatim: '' };
+    setCalibrationDictationStatus('requesting');
+    setCalibrationDictationError(null);
+    try {
+      await dictationControllerRef.current.start(calibrationCaptureHandlers());
+    } catch (error) {
+      calibrationCaptureHandlers().onError(error instanceof Error ? error.message : 'Microphone access failed.');
+    }
+  };
+
+  const finishCalibrationDictation = async () => {
+    setCalibrationDictationStatus('processing');
+    setCalibrationDictationError(null);
+    try {
+      await dictationControllerRef.current.finish();
+      const session = calibrationSessionRef.current;
+      if (session === null || session.verbatim.trim().length === 0) {
+        setCalibrationDictationStatus('interrupted');
+        setCalibrationDictationError('No speech was transcribed. Try dictating again.');
+        return;
+      }
+      let dictated = session.verbatim;
+      if (state.settings.dictationCleanup === 'faithful') {
+        try { dictated = await dictationServiceRef.current.clean(session.verbatim); }
+        catch { /* Keep the safe verbatim text in the field. */ }
+      }
+      const value = `${session.prefix}${dictated}${session.suffix}`.slice(0, 2_000);
+      calibrationRef.current = value;
+      setCalibration(value);
+      calibrationSessionRef.current = null;
+      setCalibrationDictationStatus('idle');
+    } catch (error) {
+      setCalibrationDictationStatus('interrupted');
+      setCalibrationDictationError(error instanceof Error ? error.message : 'Calibration dictation was interrupted.');
+    }
+  };
+
+  const cancelCalibrationDictation = () => {
+    if (calibrationDictationActive) dictationControllerRef.current.cancel();
+    calibrationSessionRef.current = null;
+    setCalibrationDictationStatus('idle');
+    setCalibrationDictationError(null);
+  };
 
   const startDictation = async (blockId: string, insertionOffset: number) => {
     if (dictationDraftRef.current !== null) {
@@ -971,6 +1189,7 @@ export function App({
         originPrompt,
         content: '',
         kind: 'thought',
+        kindSource: 'default',
         status: 'active',
         createdAt: now,
         updatedAt: now,
@@ -1014,6 +1233,7 @@ export function App({
           originPrompt: null,
           content: '',
           kind: 'thought' as const,
+          kindSource: 'default' as const,
           status: 'active' as const,
           createdAt: now,
           updatedAt: now,
@@ -1087,8 +1307,8 @@ export function App({
     setState((current) => ({
       ...current,
       activeDocumentId: documentId,
-      documents: [...current.documents, { id: documentId, title: '', status: 'active', blockIds: [blockId], createdAt: now, updatedAt: now }],
-      blocks: [...current.blocks, { id: blockId, documentId, parentId: null, originPrompt: null, content: '', kind: 'thought', status: 'active', createdAt: now, updatedAt: now, versions: [], references: [] }],
+      documents: [...current.documents, { id: documentId, title: '', titleSource: 'empty', status: 'active', blockIds: [blockId], createdAt: now, updatedAt: now }],
+      blocks: [...current.blocks, { id: blockId, documentId, parentId: null, originPrompt: null, content: '', kind: 'thought', kindSource: 'default', status: 'active', createdAt: now, updatedAt: now, versions: [], references: [] }],
     }));
     setSelectedBlockId(blockId);
     setLibraryOpen(false);
@@ -1167,6 +1387,7 @@ export function App({
       id: newId('snapshot'),
       documentId: currentDocument.id,
       title: currentDocument.title.trim().length > 0 ? currentDocument.title : 'Untitled reflection',
+      titleConfirmed: currentDocument.titleSource !== 'generated',
       blockIds,
       createdAt: now,
       publishedUrl: null,
@@ -1203,13 +1424,13 @@ export function App({
       <header className="workspace-header">
         <button className="brand" onClick={() => { setView('document'); }} type="button">Specular</button>
         <div className="header-actions">
-          <button disabled={blocks.every((block) => block.content.trim().length === 0)} onClick={createSnapshot} type="button"><FileText size={15} />Create snapshot</button>
-          <button aria-expanded={libraryOpen} disabled={state.dictationDraft !== null} onClick={() => { setLibraryOpen((open) => !open); }} type="button"><Library size={15} />Library</button>
+          <button disabled={blocks.every((block) => block.content.trim().length === 0) || calibrationDictationActive} onClick={createSnapshot} type="button"><FileText size={15} />Create snapshot</button>
+          <button aria-expanded={libraryOpen} disabled={state.dictationDraft !== null || calibrationDictationActive} onClick={() => { setLibraryOpen((open) => !open); }} type="button"><Library size={15} />Library</button>
         </div>
       </header>
       <nav aria-label="Workspace views" className="workspace-nav">
         <button aria-current={view === 'document' ? 'page' : undefined} onClick={() => { setView('document'); }} type="button"><BookOpen size={15} />Document</button>
-        <button aria-current={view === 'connections' ? 'page' : undefined} disabled={state.dictationDraft !== null} onClick={() => { setView('connections'); }} type="button"><Network size={15} />Connections</button>
+        <button aria-current={view === 'connections' ? 'page' : undefined} disabled={state.dictationDraft !== null || calibrationDictationActive} onClick={() => { setView('connections'); }} type="button"><Network size={15} />Connections</button>
       </nav>
 
       {libraryOpen ? (
@@ -1234,6 +1455,7 @@ export function App({
           <footer>
             <label><span>Becomes dormant after</span><select aria-label="Dormancy period" onChange={(event) => { setState((current) => ({ ...current, settings: { ...current.settings, dormancyDays: Number(event.target.value) } })); }} value={state.settings.dormancyDays}><option value={7}>7 days</option><option value={14}>14 days</option><option value={30}>30 days</option><option value={90}>90 days</option></select></label>
             <label><span>Dictation transcript</span><select aria-label="Dictation cleanup" onChange={(event) => { setState((current) => ({ ...current, settings: { ...current.settings, dictationCleanup: event.target.value as 'faithful' | 'verbatim' } })); }} value={state.settings.dictationCleanup}><option value="faithful">Faithful cleanup</option><option value="verbatim">Verbatim</option></select></label>
+            <label><span>Automatic organization</span><select aria-label="Automatic organization" onChange={(event) => { setState((current) => ({ ...current, settings: { ...current.settings, automaticOrganization: event.target.value as 'enabled' | 'disabled' } })); }} value={state.settings.automaticOrganization === 'undecided' ? 'disabled' : state.settings.automaticOrganization}><option value="enabled">On</option><option value="disabled">Off</option></select></label>
           </footer>
         </aside>
       ) : null}
@@ -1244,16 +1466,13 @@ export function App({
           documentId={currentDocument.id}
           dormancyDays={state.settings.dormancyDays}
           onOpenBlock={(block) => { setSelectedBlockId(block.id); setView('document'); window.setTimeout(() => { globalThis.document.querySelector<HTMLTextAreaElement>(`[data-block-id="${block.id}"] textarea`)?.focus(); }, 0); }}
+          onKindChange={(blockId, kind) => { updateBlock(blockId, (block) => ({ ...block, kind, kindSource: 'author', updatedAt: Date.now() })); }}
         />
       ) : (
         <section className="workspace-grid">
           <article aria-label="Thinking document" className="thinking-document">
             {storageError === null ? null : <p className="workspace-storage-error" role="alert">{storageError}</p>}
-            <div className="document-status">
-              <span>{effectiveStatus(currentDocument.updatedAt, currentDocument.status, state.settings.dormancyDays)}</span>
-              <select aria-label="Document status" onChange={(event) => { updateDocument({ status: event.target.value as ThoughtDocument['status'] }); }} value={currentDocument.status}>
-                <option value="active">Active</option><option value="resting">Resting</option><option value="closed">Closed</option>
-              </select>
+            <div className="document-tools">
               {isBlank ? (
                 <div className="starter-help">
                   <button
@@ -1286,27 +1505,31 @@ export function App({
                 </div>
               ) : null}
             </div>
-            <input
-              aria-label="Document title"
-              className="document-title"
-              onChange={(event) => { updateDocument({ title: event.target.value }); }}
-              placeholder="Untitled thought"
-              value={currentDocument.title}
-            />
+            {state.settings.automaticOrganization === 'undecided' && authoredWordCount >= 50 ? (
+              <section aria-label="Automatic organization consent" className="organization-consent">
+                <p><strong>Let Specular quietly name and tag this writing?</strong> This sends the current document to hosted inference after you pause. It never adds prose to your document.</p>
+                <div>
+                  <button onClick={() => { setState((current) => ({ ...current, settings: { ...current.settings, automaticOrganization: 'enabled' } })); }} type="button">Enable</button>
+                  <button onClick={() => { setState((current) => ({ ...current, settings: { ...current.settings, automaticOrganization: 'disabled' } })); }} type="button">Not now</button>
+                </div>
+              </section>
+            ) : null}
+            <DocumentTitleEditor onChange={(title) => { updateDocument({ title, titleSource: 'author' }); }} value={currentDocument.title} />
+            {currentDocument.titleSource === 'generated' ? <p className="generated-title-note" role="status">Suggested title · edit to make it yours{organizationBusy ? ' · organizing' : ''}</p> : null}
             <div className="block-stack">
               {blocks.map((block) => (
                 <BlockEditor
                   block={block}
-                  canDictate={storageError === null}
+                  canDictate={storageError === null && !calibrationDictationActive}
                   deletePending={pendingDeleteBlockId === block.id}
                   dictationActive={state.dictationDraft !== null}
                   dictationDraft={state.dictationDraft?.blockId === block.id ? state.dictationDraft : null}
                   dictationError={state.dictationDraft?.blockId === block.id ? dictationError : null}
-                  dormancyDays={state.settings.dormancyDays}
                   focused={selectedBlock?.id === block.id}
                   key={block.id}
                   onBlur={() => { window.setTimeout(() => { commitVersion(block.id); }, 0); }}
                   onChange={(content) => { updateBlock(block.id, (current) => ({ ...current, content, status: 'active', updatedAt: Date.now() })); }}
+                  onAttachSource={() => { updateBlock(block.id, (current) => ({ ...current, references: [{ id: newId('reference'), title: '', author: '', url: '', excerpt: '', accessedAt: Date.now() }], updatedAt: Date.now() })); }}
                   onDelete={() => { requestDeleteBlock(block.id); }}
                   onDeleteCancel={() => { setPendingDeleteBlockId(null); }}
                   onDeleteConfirm={() => { deleteBlock(block.id); }}
@@ -1324,7 +1547,7 @@ export function App({
                   onDictationStart={(offset) => { void startDictation(block.id, offset); }}
                   onDictationUseVerbatim={() => { setDictationDraft((draft) => draft === null ? null : { ...draft, content: draft.verbatim, cleanupMode: 'verbatim', updatedAt: Date.now() }); }}
                   onFocus={() => { setSelectedBlockId(block.id); setSelection(''); }}
-                  onKindChange={(kind) => { updateBlock(block.id, (current) => ({ ...current, kind, updatedAt: Date.now() })); }}
+                  onRemoveSource={() => { updateBlock(block.id, (current) => ({ ...current, references: [], updatedAt: Date.now() })); }}
                   onReferenceChange={(field, value) => { updateBlock(block.id, (current) => {
                     const existing = current.references[0] ?? {
                       id: newId('reference'),
@@ -1349,18 +1572,24 @@ export function App({
                 />
               ))}
             </div>
-            <button className="add-block" onClick={() => { addBlock(); }} type="button"><Plus size={15} />New block</button>
+            <button aria-label="New block" className="add-block" onClick={() => { addBlock(); }} title="New block" type="button"><Plus size={17} /></button>
           </article>
 
           <ReflectionMargin
             annotation={currentAnnotation}
             busy={reflectionBusy}
+            calibration={calibration}
+            calibrationDictationError={calibrationDictationError}
+            calibrationDictationStatus={calibrationDictationStatus}
             contextScope={state.settings.contextScope}
             error={reflectionError}
             focusBlock={selectedBlock}
             onCalibrate={(text) => { if (currentAnnotation !== null) void runReflection(currentAnnotation.move, { annotation: currentAnnotation, text }); }}
+            onCalibrationChange={(text) => { calibrationRef.current = text; setCalibration(text); }}
+            onCalibrationDictationFinish={() => { void finishCalibrationDictation(); }}
+            onCalibrationDictationStart={(offset) => { void startCalibrationDictation(offset); }}
             onContextScope={(contextScope) => { setState((current) => ({ ...current, settings: { ...current.settings, contextScope } })); }}
-            onDismiss={() => { if (currentAnnotation !== null) setState((current) => ({ ...current, annotations: current.annotations.map((annotation) => annotation.id === currentAnnotation.id ? { ...annotation, status: 'dismissed' } : annotation) })); }}
+            onDismiss={() => { cancelCalibrationDictation(); if (currentAnnotation !== null) setState((current) => ({ ...current, annotations: current.annotations.map((annotation) => annotation.id === currentAnnotation.id ? { ...annotation, status: 'dismissed' } : annotation) })); }}
             onFollow={(direction) => {
               if (currentAnnotation !== null) {
                 setState((current) => ({ ...current, annotations: current.annotations.map((annotation) => annotation.id === currentAnnotation.id ? { ...annotation, status: 'followed', updatedAt: Date.now() } : annotation) }));
@@ -1381,6 +1610,8 @@ export function App({
           onPrint={() => { window.print(); }}
           onPublish={() => { void publishSnapshot(); }}
           onToggleBlock={(blockId) => { setState((current) => ({ ...current, snapshots: current.snapshots.map((snapshot) => snapshot.id === currentSnapshot.id ? { ...snapshot, blockIds: snapshot.blockIds.includes(blockId) ? snapshot.blockIds.filter((id) => id !== blockId) : [...snapshot.blockIds, blockId] } : snapshot) })); }}
+          onTitleChange={(title) => { setState((current) => ({ ...current, snapshots: current.snapshots.map((snapshot) => snapshot.id === currentSnapshot.id ? { ...snapshot, title, titleConfirmed: title.trim().length > 0 } : snapshot) })); }}
+          onTitleConfirm={() => { setState((current) => ({ ...current, snapshots: current.snapshots.map((snapshot) => snapshot.id === currentSnapshot.id && snapshot.title.trim().length > 0 ? { ...snapshot, titleConfirmed: true } : snapshot) })); }}
           publishing={publishing}
           snapshot={currentSnapshot}
           state={state}

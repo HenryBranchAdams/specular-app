@@ -59,7 +59,7 @@ test('writing, reflection, branching, connections, snapshot, and local recovery 
 
 test('source metadata remains distinct from authored prose and exports with a snapshot', async ({ page }) => {
   await page.getByRole('textbox', { name: 'Document title' }).fill('A source and my response');
-  await page.getByRole('combobox', { name: 'Block kind' }).selectOption('reference');
+  await page.getByRole('button', { name: 'Attach source' }).click();
   await writeThought(page, 'The source gives attention a role that is weaker than proof but stronger than indifference.');
   await page.getByRole('textbox', { name: 'Reference title' }).fill('Example source');
   await page.getByRole('textbox', { name: 'Reference author' }).fill('A. Writer');

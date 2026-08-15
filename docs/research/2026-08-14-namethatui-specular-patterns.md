@@ -1,0 +1,33 @@
+# NameThatUI patterns for the Specular refinement batch
+
+Source reviewed: [NameThatUI web catalog](https://namethatui.com/?platform=web), 2026-08-14.
+
+This note uses NameThatUI as a vocabulary and interaction reference, not as a visual design system. “Direct observation” below describes guidance stated by the source. “Specular inference” is our application of that guidance.
+
+## Recommended mappings
+
+| Specular need | Named pattern | Direct observation | Specular inference |
+|---|---|---|---|
+| Quiet New block action | Icon button with **Tooltip** | A tooltip is a brief, non-interactive label shown on hover or keyboard focus; its trigger should reference it with `aria-describedby`. Interactive content belongs in a popover, not a tooltip. [Source](https://namethatui.com/web/popover-dropdown-tooltip) | Keep the plus icon as a real button with an accessible name. Show “New block” on hover/focus; do not put choices or instructions in the tooltip. Preserve a comfortably tappable target and a visible keyboard focus ring. |
+| Persistent “Not quite?” correction | **Form Field**, not Disclosure | A form field has a persistent label, placeholder, helper text, and linked validation message. A placeholder is never a substitute for a label. [Source](https://namethatui.com/web/form-field) An accordion hides content behind an explicit disclosure trigger. [Source](https://namethatui.com/web/accordion) | Because correction is a primary response path, leave its textarea expanded. Use a quiet visible label such as “Clarify” or “Correct this reading”; keep “Say what it missed…” as placeholder/helper copy. Do not make users infer that prose is clickable. |
+| Side/margin delineation | Decorative **CSS border** or semantic **Separator** | A visual-only line is a CSS border and should not be announced. `role="separator"` is for a structural boundary between regions. [Source](https://namethatui.com/web/divider) | Remove the word “Margin.” Keep the `<aside>` landmark and accessible name, then use whitespace plus a quiet border to delineate it. The border itself should be decorative because the aside already supplies the semantics. |
+| Secondary explanations and privacy copy | **Disclosure** | Native `<details>`/`<summary>` supplies in-place disclosure semantics and keyboard behavior; the full row should be the trigger and the indicator should visibly change. [Source](https://namethatui.com/web/accordion) | Reserve disclosure for genuinely optional material such as voice privacy or provenance details. Do not use it for correction, core writing, or another frequent action. |
+| Auto-generated title/tag state | Non-interactive **Tag** plus **status** feedback | A tag denotes category metadata; a chip is interactive/editable/removable. The component’s job, not its capsule shape, determines the name. [Source](https://namethatui.com/web/badge-chip-pill) A toast is transient, non-modal outcome feedback announced through a status region. [Source](https://namethatui.com/web/toast) | Keep inferred block tags out of the writing surface. If exposed in Connections, render read-only inference as tags and correction controls as chips. Mark a generated title with subtle adjacent provenance, not an “active” pill. Announce completed background naming unobtrusively, but never rely on a disappearing toast as the only provenance record. |
+| Inline dictation in writing and calibration | Adjacent icon button + editable **Form Field** | Icon-only controls still need accessible labels and visible focus. Form helper/error messages should be linked with `aria-describedby`; validation state should not rely on color alone. [Sources](https://namethatui.com/web/focus-ring-web), [Form Field](https://namethatui.com/web/form-field) | Put the microphone beside the exact field it fills. Preserve the insertion caret and selection; dictation inserts at that caret. Recording/interruption state belongs beside that field, and the resulting transcript remains editable before Keep or Respond. |
+| Low-noise async and interruption feedback | **Toast** for transient success; **Inline Alert** for persistent problems | Toasts confirm nonessential outcomes without interrupting work. Inline alerts stay in the content flow until resolved or dismissed; advisory dynamic updates use `role="status"`, while urgent interruption alone warrants `role="alert"`. [Sources](https://namethatui.com/web/toast), [Inline Alert](https://namethatui.com/web/alert-callout-banner) | Autosave or metadata completion may use a quiet status announcement. Interrupted dictation, failed transcription, or a recoverable draft must remain inline beside the affected field until the user resumes, cancels, or resolves it. |
+
+## Cross-cutting acceptance guidance
+
+- Every icon-only action retains an accessible name, keyboard activation, a high-contrast `:focus-visible` ring, and a mobile-sized hit target. NameThatUI explicitly warns against removing the default outline without a visible replacement. [Source](https://namethatui.com/web/focus-ring-web)
+- Visual quietness must not erase semantic structure. Remove labels such as “MARGIN,” “ACTIVE,” and “POSSIBLE DIRECTIONS” from presentation while preserving the document, aside, field labels, and button names needed by assistive technology.
+- Use progressive disclosure only for optional explanation. Frequent actions stay visible; otherwise the interface recreates the “Not quite?” discoverability failure.
+- Do not use pills decoratively. Inferred categories are tags; user-correctable categories are chips; background state changes are status messages. [Source](https://namethatui.com/web/badge-chip-pill)
+- Keep model-generated metadata visually subordinate and provenance-aware. This is a Specular product inference, not a NameThatUI prescription: generated titles and tags must not appear indistinguishable from canonical user-authored writing.
+
+## Implications for the approved issues
+
+1. The New block control should be specified as an icon button with tooltip, accessible name, focus ring, and adequate hit area.
+2. The calibration correction editor should remain expanded; its microphone is an adjacent, field-scoped action rather than a hidden secondary command.
+3. The reflection margin should use layout and a decorative border while retaining its semantic `<aside>` identity.
+4. Automated metadata needs three distinct presentations: a quiet persistent provenance marker, tags/chips in Connections, and optional transient status feedback.
+5. Dictation interruption must remain an inline field-level state; successful background work may use a non-blocking status announcement.

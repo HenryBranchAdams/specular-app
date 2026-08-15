@@ -11,7 +11,7 @@ function safeFilename(title: string): string {
 export function snapshotToMarkdown(snapshot: PublishedSnapshot): string {
   const lines = [`# ${snapshot.title}`, ''];
   for (const block of snapshot.blocks) {
-    if (block.kind === 'reference') {
+    if (block.references.length > 0) {
       lines.push(`> ${block.content.replace(/\n/gu, '\n> ')}`, '');
     } else {
       lines.push(block.content, '');

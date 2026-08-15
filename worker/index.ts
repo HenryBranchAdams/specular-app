@@ -2,6 +2,7 @@ import { z } from 'zod';
 import {
   contextScopeSchema,
   reflectionMoveSchema,
+  thoughtKindSchema,
 } from '../src/thinking/model';
 import { reflectionResponseSchema } from '../src/thinking/reflect-client';
 
@@ -75,6 +76,22 @@ const cleanupResponseSchema = z.object({
 }).strict();
 
 const transcriptionProviderSchema = z.object({ text: z.string().trim().max(40_000) }).passthrough();
+
+const organizationRequestSchema = z.object({
+  documentId: z.string().min(1).max(128),
+  blocks: z.array(z.object({
+    id: z.string().min(1).max(128),
+    content: z.string().trim().min(1).max(40_000),
+  }).strict()).min(1).max(200),
+}).strict();
+
+const organizationResponseSchema = z.object({
+  title: z.string().trim().min(1).max(80),
+  kinds: z.array(z.object({
+    id: z.string().min(1).max(128),
+    kind: thoughtKindSchema,
+  }).strict()).max(200),
+}).strict();
 
 const responseJsonSchema = {
   type: 'object',
@@ -188,6 +205,7 @@ function reflectionInstructions(move: string): string {
     'Then offer two to four sparse possible directions. Point to an unresolved edge without supplying an answer, thesis, or polished formulation the user could lazily adopt.',
     'Prefer precise prompts such as naming a distinction, locating an assumption, following an implication, or testing a tension. Avoid generic questions and productivity language.',
     'Be relentless toward ambiguity and respectful toward the thinker. Use plain language. Keep every direction concise.',
+    'Never use an em dash character. Use a period, comma, colon, semicolon, or parentheses instead.',
     'Only cite block IDs that materially informed the response.',
     move === 'perspective' || move === 'check_premise'
       ? 'Outside material was explicitly requested. Use web research when useful and include every relied-on source in sources with a valid URL and a short paraphrased relevance note.'
@@ -197,6 +215,22 @@ function reflectionInstructions(move: string): string {
       : `Requested move: ${move}.`,
     'Return only the strict structured object.',
   ].join('\n');
+}
+
+function withoutEmDashes(value: string): string {
+  return value.replaceAll(/\s*—\s*/gu, ': ');
+}
+
+function sanitizeReflection(value: z.infer<typeof reflectionResponseSchema>): z.infer<typeof reflectionResponseSchema> {
+  return {
+    ...value,
+    mirror: withoutEmDashes(value.mirror),
+    directions: value.directions.map((direction) => ({
+      ...direction,
+      label: withoutEmDashes(direction.label),
+      prompt: withoutEmDashes(direction.prompt),
+    })),
+  };
 }
 
 async function handleReflection(request: Request, env: Env): Promise<Response> {
@@ -251,7 +285,69 @@ async function handleReflection(request: Request, env: Env): Promise<Response> {
     return json({ error: 'invalid_output' }, 502);
   }
   try {
-    return json(reflectionResponseSchema.parse(JSON.parse(output) as unknown));
+    return json(sanitizeReflection(reflectionResponseSchema.parse(JSON.parse(output) as unknown)));
+  } catch {
+    return json({ error: 'invalid_output' }, 502);
+  }
+}
+
+const organizationJsonSchema = {
+  type: 'object',
+  additionalProperties: false,
+  required: ['title', 'kinds'],
+  properties: {
+    title: { type: 'string', minLength: 1, maxLength: 80 },
+    kinds: {
+      type: 'array',
+      maxItems: 200,
+      items: {
+        type: 'object',
+        additionalProperties: false,
+        required: ['id', 'kind'],
+        properties: {
+          id: { type: 'string', minLength: 1, maxLength: 128 },
+          kind: { type: 'string', enum: ['thought', 'question', 'definition', 'hypothesis', 'reference'] },
+        },
+      },
+    },
+  },
+} as const;
+
+async function handleOrganization(request: Request, env: Env): Promise<Response> {
+  const apiKey = env.OPENAI_API_KEY?.trim();
+  if (apiKey === undefined || apiKey.length === 0) return json({ error: 'provider_unavailable' }, 503);
+  let input: z.infer<typeof organizationRequestSchema>;
+  try { input = organizationRequestSchema.parse(await boundedJson(request, 512 * 1024)); }
+  catch { return json({ error: 'invalid_request' }, 400); }
+  const configuredModel = env.OPENAI_MODEL?.trim();
+  const providerResponse = await fetch('https://api.openai.com/v1/responses', {
+    method: 'POST',
+    headers: { authorization: `Bearer ${apiKey}`, 'content-type': 'application/json' },
+    body: JSON.stringify({
+      model: configuredModel === undefined || configuredModel.length === 0 ? 'gpt-5.5' : configuredModel,
+      instructions: [
+        'Organize a human-authored thinking document without rewriting or evaluating it.',
+        'Return a concise descriptive title of at most eight words and one kind for every supplied block.',
+        'Use question only for a genuine question, definition only when the block defines a term, hypothesis for a testable or provisional claim, and reference only when the block primarily discusses an outside source. Otherwise use thought.',
+        'Never use an em dash character. Do not add claims, interpretation, praise, or prose for the author.',
+        'Return only the strict structured object.',
+      ].join('\n'),
+      input: JSON.stringify(input),
+      text: { format: { type: 'json_schema', name: 'specular_organization', strict: true, schema: organizationJsonSchema } },
+      max_output_tokens: 1_200,
+      store: false,
+    }),
+  });
+  if (!providerResponse.ok) return json({ error: 'provider_unavailable' }, 503);
+  const output = responseText(await providerResponse.json());
+  if (output === null) return json({ error: 'invalid_output' }, 502);
+  try {
+    const parsed = organizationResponseSchema.parse(JSON.parse(output) as unknown);
+    const knownIds = new Set(input.blocks.map((block) => block.id));
+    return json({
+      title: withoutEmDashes(parsed.title),
+      kinds: parsed.kinds.filter((item) => knownIds.has(item.id)),
+    });
   } catch {
     return json({ error: 'invalid_output' }, 502);
   }
@@ -407,6 +503,9 @@ const worker = {
     if (url.pathname === '/healthz') return json({ ok: true });
     if (url.pathname === '/api/reflect' && request.method === 'POST') {
       try { return await handleReflection(request, env); } catch { return json({ error: 'provider_unavailable' }, 503); }
+    }
+    if (url.pathname === '/api/organize' && request.method === 'POST') {
+      try { return await handleOrganization(request, env); } catch { return json({ error: 'provider_unavailable' }, 503); }
     }
     if (url.pathname === '/api/dictation/transcribe' && request.method === 'POST') {
       try { return await handleTranscription(request, env); } catch { return json({ error: 'provider_unavailable' }, 503); }

@@ -115,7 +115,7 @@ a:focus-visible {
   grid-template-columns: 1fr 1fr;
   min-height: 4.25rem;
   align-items: center;
-  padding: 0 2rem;
+  padding: 0 max(1.5rem, calc((100vw - 83rem) / 2));
   border-bottom: 1px solid var(--line);
   background: rgb(250 248 242 / 94%);
   backdrop-filter: blur(16px);
@@ -199,16 +199,12 @@ a:focus-visible {
   line-height: 1.5;
 }
 
-.document-status {
+.document-tools {
   position: relative;
   display: flex;
   align-items: center;
   gap: 0.6rem;
   margin-bottom: 1.25rem;
-  color: var(--quiet);
-  font-size: 0.71rem;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
 }
 
 .starter-help {
@@ -238,30 +234,36 @@ a:focus-visible {
   background: var(--paper-deep);
 }
 
-.document-status > span::before {
-  display: inline-block;
-  width: 0.38rem;
-  height: 0.38rem;
-  margin-right: 0.45rem;
-  border-radius: 50%;
-  background: var(--moss);
-  content: "";
-  vertical-align: 0.08rem;
+.organization-consent {
+  display: grid;
+  gap: 0.7rem;
+  max-width: 34rem;
+  padding: 0.85rem 1rem;
+  margin: 0 0 2rem;
+  border-left: 2px solid var(--moss);
+  color: var(--ink-soft);
+  background: rgb(250 248 242 / 62%);
+  font-size: 0.75rem;
+  line-height: 1.5;
 }
 
-.document-status select,
-.thought-card__meta select {
-  padding: 0;
-  border: 0;
-  color: inherit;
+.organization-consent p { margin: 0; }
+.organization-consent div { display: flex; gap: 0.5rem; }
+.organization-consent button {
+  min-height: 2.5rem;
+  padding: 0 0.75rem;
+  border: 1px solid var(--line);
+  border-radius: 0.25rem;
+  color: var(--ink-soft);
   background: transparent;
-  text-transform: inherit;
 }
 
 .document-title {
   display: block;
   width: 100%;
   padding: 0;
+  overflow: hidden;
+  resize: none;
   margin: 0 0 clamp(2.7rem, 6vh, 4.8rem);
   border: 0;
   outline: 0;
@@ -272,6 +274,12 @@ a:focus-visible {
   font-weight: 400;
   line-height: 0.99;
   letter-spacing: -0.055em;
+}
+
+.generated-title-note {
+  margin: calc(-1 * clamp(2.25rem, 5vh, 4rem)) 0 clamp(2.25rem, 5vh, 4rem);
+  color: var(--quiet);
+  font-size: 0.68rem;
 }
 
 .document-title::placeholder,
@@ -363,6 +371,22 @@ a:focus-visible {
   text-transform: uppercase;
 }
 
+.source-trigger,
+.reference-fields__remove {
+  display: inline-grid;
+  width: 2.75rem;
+  height: 2.75rem;
+  place-items: center;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  color: var(--quiet);
+  background: transparent;
+}
+
+.source-trigger:hover,
+.reference-fields__remove:hover { color: var(--ink); background: var(--paper-deep); }
+
 .thought-card__linked {
   display: inline-flex;
   align-items: center;
@@ -370,7 +394,7 @@ a:focus-visible {
 }
 
 .delete-block {
-  min-height: 1.75rem;
+  min-height: 2.75rem;
   margin-left: auto;
   padding: 0 0.25rem;
   border: 0;
@@ -400,10 +424,23 @@ a:focus-visible {
   color: var(--danger);
 }
 
+.delete-block--icon {
+  display: inline-grid;
+  width: 2.75rem;
+  height: 2.75rem;
+  padding: 0;
+  place-items: center;
+  border-radius: 50%;
+}
+
+.delete-block--icon:hover {
+  background: #f4e7e4;
+}
+
 .dictation-trigger {
   display: inline-grid;
-  width: 1.85rem;
-  height: 1.85rem;
+  width: 2.75rem;
+  height: 2.75rem;
   place-items: center;
   padding: 0;
   border: 1px solid var(--line);
@@ -451,8 +488,8 @@ a:focus-visible {
   color: var(--ink);
   background: transparent;
   font-family: Georgia, "Times New Roman", serif;
-  font-size: clamp(1.16rem, 2vw, 1.38rem);
-  line-height: 1.72;
+  font-size: clamp(1rem, 1.15vw, 1.125rem);
+  line-height: 1.65;
   letter-spacing: -0.008em;
 }
 
@@ -588,8 +625,13 @@ a:focus-visible {
   font-size: 0.76rem;
 }
 
-.reference-fields input:nth-child(3),
-.reference-fields input:nth-child(4) {
+.reference-fields__remove {
+  grid-column: 1 / -1;
+  justify-self: end;
+}
+
+.reference-fields input:nth-of-type(3),
+.reference-fields input:nth-of-type(4) {
   grid-column: 1 / -1;
 }
 
@@ -638,10 +680,14 @@ a:focus-visible {
 }
 
 .add-block {
-  display: inline-flex;
+  display: inline-grid;
+  width: 2.75rem;
+  height: 2.75rem;
   align-items: center;
-  gap: 0.4rem;
+  justify-content: center;
+  gap: 0;
   margin: 2rem 0 0 1.85rem;
+  padding: 0;
 }
 
 .reflection-margin {
@@ -649,7 +695,8 @@ a:focus-visible {
   top: 7.75rem;
   align-self: start;
   min-height: 26rem;
-  padding-top: 1rem;
+  padding: 1rem 0 0 1.5rem;
+  border-left: 1px solid var(--line);
 }
 
 .reflection-margin::before {
@@ -669,6 +716,8 @@ a:focus-visible {
   justify-content: space-between;
   gap: 0.75rem;
 }
+
+.reflection-margin__heading { justify-content: flex-end; }
 
 .reflection-margin__heading > span,
 .reflection-card__topline > span,
@@ -857,6 +906,21 @@ a:focus-visible {
   border-bottom: 1px solid var(--line);
 }
 
+.calibration > label {
+  display: block;
+  color: var(--ink-soft);
+  font-size: 0.75rem;
+  font-weight: 580;
+}
+
+.calibration > small {
+  display: block;
+  margin-top: 0.25rem;
+  color: var(--quiet);
+  font-size: 0.68rem;
+  line-height: 1.45;
+}
+
 .calibration p {
   padding-left: 0.65rem;
   margin: 0.35rem 0;
@@ -879,7 +943,7 @@ a:focus-visible {
 .calibration textarea {
   width: 100%;
   min-height: 5.5rem;
-  padding: 0.65rem;
+  padding: 0.65rem 3.25rem 0.65rem 0.65rem;
   resize: vertical;
   border: 1px solid var(--line);
   border-radius: 0.3rem;
@@ -887,6 +951,27 @@ a:focus-visible {
   background: var(--paper-raised);
   font-size: 0.78rem;
   line-height: 1.45;
+}
+
+.calibration-field { position: relative; }
+
+.calibration-mic {
+  position: absolute;
+  right: 0.45rem;
+  bottom: 0.45rem;
+  display: inline-grid;
+  width: 2.75rem;
+  height: 2.75rem;
+  place-items: center;
+  padding: 0 !important;
+  border-radius: 50% !important;
+}
+
+.calibration-status {
+  margin: 0 !important;
+  border: 0 !important;
+  color: var(--quiet) !important;
+  font-size: 0.68rem !important;
 }
 
 .calibration form button,
@@ -1072,8 +1157,8 @@ a:focus-visible {
   grid-column: span 4;
   display: grid;
   min-height: 10rem;
-  align-content: space-between;
-  gap: 1.2rem;
+  align-content: stretch;
+  gap: 0.75rem;
   padding: 1.15rem;
   border: 1px solid var(--line);
   border-top: 3px solid var(--blue);
@@ -1081,6 +1166,39 @@ a:focus-visible {
   color: var(--ink);
   background: rgb(250 248 242 / 62%);
   text-align: left;
+}
+
+.graph-node__open {
+  display: grid;
+  min-height: 7rem;
+  align-content: space-between;
+  gap: 1rem;
+  padding: 0;
+  border: 0;
+  color: inherit;
+  background: transparent;
+  text-align: left;
+}
+
+.graph-node__kind select {
+  max-width: 100%;
+  padding: 0.3rem 0.55rem;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  color: var(--ink-soft);
+  background: var(--paper-raised);
+  font-size: 0.68rem;
+}
+
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
 }
 
 .graph-node:nth-child(4n + 2) { transform: translateY(2.4rem); }
@@ -1196,6 +1314,39 @@ a:focus-visible {
   color: var(--ink-soft);
   font-size: 0.68rem;
   line-height: 1.45;
+}
+
+.snapshot-layout > aside .snapshot-title-field {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 0.35rem;
+  padding-bottom: 1rem;
+}
+
+.snapshot-title-field input {
+  min-height: 2.75rem;
+  padding: 0 0.65rem;
+  border: 1px solid var(--line);
+  border-radius: 0.25rem;
+  color: var(--ink);
+  background: var(--paper-raised);
+  font-family: Georgia, "Times New Roman", serif;
+  font-size: 1rem;
+  text-transform: none;
+}
+
+.snapshot-title-confirmation {
+  padding: 0 0 1rem;
+  border-bottom: 1px solid var(--line);
+}
+
+.snapshot-title-confirmation button {
+  min-height: 2.5rem;
+  padding: 0 0.7rem;
+  border: 1px solid var(--line);
+  border-radius: 0.25rem;
+  color: var(--ink-soft);
+  background: transparent;
 }
 
 .snapshot-preview {
@@ -1345,7 +1496,9 @@ a:focus-visible {
   .reflection-margin {
     position: static;
     margin-top: 2.5rem;
-    padding-bottom: 6rem;
+    padding: 2rem 0 6rem;
+    border-top: 1px solid var(--line);
+    border-left: 0;
   }
 
   .connections-view {

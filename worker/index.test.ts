@@ -57,6 +57,59 @@ describe('Sites worker', () => {
     await expect(reflection.json()).resolves.toEqual({ error: 'provider_unavailable' });
   });
 
+  it('organizes titles and kinds without allowing em dashes through', async () => {
+    const provider = vi.fn<(input: RequestInfo | URL, init?: RequestInit) => Promise<Response>>(() => Promise.resolve(new Response(JSON.stringify({
+      output: [{ content: [{ type: 'output_text', text: JSON.stringify({
+        title: 'Attention—without certainty',
+        kinds: [{ id: 'block:one', kind: 'hypothesis' }],
+      }) }] }],
+    }), { status: 200 })));
+    vi.stubGlobal('fetch', provider);
+
+    const response = await worker.fetch(new Request('https://specular.test/api/organize', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ documentId: 'document:one', blocks: [{ id: 'block:one', content: 'Attention may matter without becoming certainty.' }] }),
+    }), { ...environment(), OPENAI_API_KEY: 'test-key' });
+
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toEqual({
+      title: 'Attention: without certainty',
+      kinds: [{ id: 'block:one', kind: 'hypothesis' }],
+    });
+    const providerBody = provider.mock.calls[0]?.[1]?.body;
+    if (typeof providerBody !== 'string') throw new Error('Expected organization JSON.');
+    expect(JSON.parse(providerBody)).toMatchObject({ store: false });
+  });
+
+  it('repairs em dashes in model reflection prose but not source material', async () => {
+    vi.stubGlobal('fetch', vi.fn(() => Promise.resolve(new Response(JSON.stringify({
+      output: [{ content: [{ type: 'output_text', text: JSON.stringify({
+        mirror: 'Attention—without certainty.',
+        directions: [{ label: 'Test—the edge', prompt: 'What changes—if attention matters?', move: 'challenge' }],
+        referencedBlockIds: ['block:one'],
+        sources: [{ title: 'Source—title', url: 'https://example.com/source', excerpt: 'Quoted—material.' }],
+      }) }] }],
+    }), { status: 200 }))));
+
+    const response = await worker.fetch(new Request('https://specular.test/api/reflect', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        focus: 'Attention matters.',
+        focusBlockId: 'block:one',
+        move: 'perspective',
+        scope: 'document',
+        blocks: [{ id: 'block:one', content: 'Attention matters.', kind: 'thought' }],
+      }),
+    }), { ...environment(), OPENAI_API_KEY: 'test-key' });
+
+    const result = await response.json() as { mirror: string; directions: { label: string; prompt: string }[]; sources: { title: string; excerpt: string }[] };
+    expect(result.mirror).toBe('Attention: without certainty.');
+    expect(result.directions[0]).toMatchObject({ label: 'Test: the edge', prompt: 'What changes: if attention matters?' });
+    expect(result.sources[0]).toMatchObject({ title: 'Source—title', excerpt: 'Quoted—material.' });
+  });
+
   it('proxies a bounded audio checkpoint to the transcription endpoint', async () => {
     const provider = vi.fn<(input: RequestInfo | URL, init?: RequestInit) => Promise<Response>>(() => Promise.resolve(new Response(JSON.stringify({ text: 'A checkpointed thought.' }), { status: 200 })));
     vi.stubGlobal('fetch', provider);
