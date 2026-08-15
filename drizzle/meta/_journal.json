@@ -8,6 +8,27 @@
       "when": 1786730852405,
       "tag": "0000_good_blazing_skull",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "6",
+      "when": 1786762243690,
+      "tag": "0001_legal_frog_thor",
+      "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "6",
+      "when": 1786763458744,
+      "tag": "0002_polite_catseye",
+      "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "6",
+      "when": 1786766097392,
+      "tag": "0003_striped_gunslinger",
+      "breakpoints": true
     }
   ]
 }

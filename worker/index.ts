@@ -5,20 +5,30 @@ import {
   thoughtKindSchema,
 } from '../src/thinking/model';
 import { reflectionResponseSchema } from '../src/thinking/reflect-client';
+import { createInitialWorkspace, workspaceStateSchema } from '../src/thinking/model';
+import {
+  authorAccountFrom,
+  CHATGPT_SIGN_IN_URL,
+  CHATGPT_SIGN_OUT_URL,
+  requireSameOriginMutation,
+} from './chatgpt-auth';
 
 interface D1Result<T = unknown> {
   results?: T[];
   success: boolean;
+  meta?: { changes?: number };
 }
 
 interface D1PreparedStatement {
   bind(...values: unknown[]): D1PreparedStatement;
   first<T = unknown>(): Promise<T | null>;
   run<T = unknown>(): Promise<D1Result<T>>;
+  all<T = unknown>(): Promise<D1Result<T>>;
 }
 
 interface D1DatabaseLike {
   prepare(query: string): D1PreparedStatement;
+  batch<T = unknown>(statements: D1PreparedStatement[]): Promise<D1Result<T>[]>;
 }
 
 interface AssetFetcher {
@@ -31,6 +41,8 @@ interface Env {
   OPENAI_API_KEY?: string;
   OPENAI_MODEL?: string;
   OPENAI_TRANSCRIPTION_MODEL?: string;
+  INFERENCE_DAILY_LIMIT?: string;
+  INFERENCE_GLOBAL_DAILY_LIMIT?: string;
 }
 
 const reflectionRequestSchema = z.object({
@@ -69,6 +81,13 @@ const publishedSnapshotSchema = z.object({
 
 const cleanupRequestSchema = z.object({
   verbatim: z.string().trim().min(1).max(40_000),
+}).strict();
+
+const workspaceSaveSchema = z.object({
+  cacheNamespace: z.string().min(1).max(128),
+  baseRevision: z.number().int().nonnegative(),
+  mutationId: z.string().min(1).max(128).regex(/^[A-Za-z0-9._:-]+$/u),
+  workspace: workspaceStateSchema,
 }).strict();
 
 const cleanupResponseSchema = z.object({
@@ -455,12 +474,150 @@ async function handleCleanup(request: Request, env: Env): Promise<Response> {
 }
 
 let shareSchemaReady: Promise<void> | undefined;
+let workspaceSchemaReady: Promise<void> | undefined;
+let usageSchemaReady: Promise<void> | undefined;
+
+function utcDay(now = Date.now()): string { return new Date(now).toISOString().slice(0, 10); }
+
+async function allowInference(tenantId: string, env: Env): Promise<boolean> {
+  usageSchemaReady ??= env.DB.prepare(`CREATE TABLE IF NOT EXISTS inference_daily_usage (
+    usage_day TEXT PRIMARY KEY NOT NULL,
+    global_count INTEGER NOT NULL,
+    tenant_counts TEXT NOT NULL
+  )`).run().then(() => undefined);
+  await usageSchemaReady;
+  const day = utcDay();
+  const configured = Number(env.INFERENCE_DAILY_LIMIT ?? '500');
+  const limit = Number.isInteger(configured) && configured > 0 ? configured : 500;
+  const configuredGlobal = Number(env.INFERENCE_GLOBAL_DAILY_LIMIT ?? '5000');
+  const globalLimit = Number.isInteger(configuredGlobal) && configuredGlobal > 0 ? configuredGlobal : 5_000;
+  const digest = await globalThis.crypto.subtle.digest('SHA-256', new TextEncoder().encode(tenantId));
+  const tenantKey = [...new Uint8Array(digest)].map((value) => value.toString(16).padStart(2, '0')).join('');
+  const tenantPath = `$.${tenantKey}`;
+  const reserved = await env.DB.prepare(`INSERT INTO inference_daily_usage (usage_day, global_count, tenant_counts)
+    VALUES (?, 1, json_object(?, 1))
+    ON CONFLICT (usage_day) DO UPDATE SET
+      global_count = inference_daily_usage.global_count + 1,
+      tenant_counts = json_set(
+        inference_daily_usage.tenant_counts,
+        ?,
+        COALESCE(json_extract(inference_daily_usage.tenant_counts, ?), 0) + 1
+      )
+    WHERE inference_daily_usage.global_count < ?
+      AND COALESCE(json_extract(inference_daily_usage.tenant_counts, ?), 0) < ?
+    RETURNING global_count`)
+    .bind(day, tenantKey, tenantPath, tenantPath, globalLimit, tenantPath, limit)
+    .first<{ global_count: number }>();
+  return reserved !== null;
+}
+
+function ensureWorkspaceSchema(database: D1DatabaseLike): Promise<void> {
+  workspaceSchemaReady ??= Promise.all([
+    database.prepare(`CREATE TABLE IF NOT EXISTS author_workspaces (
+      tenant_id TEXT PRIMARY KEY NOT NULL,
+      cache_namespace TEXT NOT NULL UNIQUE,
+      revision INTEGER NOT NULL,
+      state TEXT NOT NULL,
+      updated_at INTEGER NOT NULL
+    )`).run(),
+    database.prepare(`CREATE TABLE IF NOT EXISTS workspace_mutations (
+      tenant_id TEXT NOT NULL,
+      mutation_id TEXT NOT NULL,
+      revision INTEGER NOT NULL,
+      created_at INTEGER NOT NULL,
+      PRIMARY KEY (tenant_id, mutation_id)
+    )`).run(),
+  ]).then(() => undefined);
+  return workspaceSchemaReady;
+}
+
+interface WorkspaceRow {
+  cache_namespace: string;
+  revision: number;
+  state: string;
+}
+
+async function workspaceFor(tenantId: string, env: Env): Promise<WorkspaceRow> {
+  await ensureWorkspaceSchema(env.DB);
+  const existing = await env.DB.prepare('SELECT cache_namespace, revision, state FROM author_workspaces WHERE tenant_id = ?')
+    .bind(tenantId).first<WorkspaceRow>();
+  if (existing !== null) return existing;
+  const created: WorkspaceRow = {
+    cache_namespace: `account:${globalThis.crypto.randomUUID()}`,
+    revision: 0,
+    state: JSON.stringify(createInitialWorkspace()),
+  };
+  await env.DB.prepare('INSERT INTO author_workspaces (tenant_id, cache_namespace, revision, state, updated_at) VALUES (?, ?, ?, ?, ?)')
+    .bind(tenantId, created.cache_namespace, created.revision, created.state, Date.now()).run();
+  return await env.DB.prepare('SELECT cache_namespace, revision, state FROM author_workspaces WHERE tenant_id = ?')
+    .bind(tenantId).first<WorkspaceRow>() ?? created;
+}
+
+async function readWorkspace(tenantId: string, env: Env): Promise<Response> {
+  const row = await workspaceFor(tenantId, env);
+  try {
+    return json({
+      cacheNamespace: row.cache_namespace,
+      revision: row.revision,
+      workspace: workspaceStateSchema.parse(JSON.parse(row.state) as unknown),
+    });
+  } catch {
+    return json({ error: 'invalid_workspace' }, 500);
+  }
+}
+
+async function saveWorkspace(request: Request, tenantId: string, env: Env): Promise<Response> {
+  let input: z.infer<typeof workspaceSaveSchema>;
+  try { input = workspaceSaveSchema.parse(await boundedJson(request, 8 * 1024 * 1024)); }
+  catch { return json({ error: 'invalid_workspace' }, 400); }
+
+  const current = await workspaceFor(tenantId, env);
+  if (current.cache_namespace !== input.cacheNamespace) return json({ error: 'stale_workspace_generation' }, 410);
+  const priorMutation = await env.DB.prepare('SELECT revision FROM workspace_mutations WHERE tenant_id = ? AND mutation_id = ?')
+    .bind(tenantId, input.mutationId).first<{ revision: number }>();
+  if (priorMutation !== null) return json({ revision: priorMutation.revision, idempotent: true });
+  if (current.revision !== input.baseRevision) {
+    return json({
+      error: 'revision_conflict',
+      revision: current.revision,
+      workspace: workspaceStateSchema.parse(JSON.parse(current.state) as unknown),
+    }, 409);
+  }
+
+  const revision = current.revision + 1;
+  const state = JSON.stringify(input.workspace);
+  const now = Date.now();
+  const [updated] = await env.DB.batch([
+    env.DB.prepare('UPDATE author_workspaces SET state = ?, revision = ?, updated_at = ? WHERE tenant_id = ? AND revision = ?')
+      .bind(state, revision, now, tenantId, current.revision),
+    env.DB.prepare(`INSERT INTO workspace_mutations (tenant_id, mutation_id, revision, created_at)
+      SELECT ?, ?, ?, ?
+      WHERE EXISTS (
+        SELECT 1 FROM author_workspaces WHERE tenant_id = ? AND revision = ? AND state = ?
+      )`)
+      .bind(tenantId, input.mutationId, revision, now, tenantId, revision, state),
+  ]);
+  if (updated?.meta?.changes !== 1) {
+    const concurrentReceipt = await env.DB.prepare('SELECT revision FROM workspace_mutations WHERE tenant_id = ? AND mutation_id = ?')
+      .bind(tenantId, input.mutationId).first<{ revision: number }>();
+    if (concurrentReceipt !== null) return json({ revision: concurrentReceipt.revision, idempotent: true });
+    const latest = await workspaceFor(tenantId, env);
+    return json({
+      error: 'revision_conflict',
+      revision: latest.revision,
+      workspace: workspaceStateSchema.parse(JSON.parse(latest.state) as unknown),
+    }, 409);
+  }
+  return json({ revision, idempotent: false });
+}
 
 function ensureShareSchema(database: D1DatabaseLike): Promise<void> {
-  shareSchemaReady ??= database.prepare(`CREATE TABLE IF NOT EXISTS published_snapshots (
+  shareSchemaReady ??= database.prepare(`CREATE TABLE IF NOT EXISTS published_snapshots_v2 (
     slug TEXT PRIMARY KEY NOT NULL,
+    owner_id TEXT NOT NULL,
     payload TEXT NOT NULL,
-    created_at INTEGER NOT NULL
+    created_at INTEGER NOT NULL,
+    revoked_at INTEGER
   )`).run().then(() => undefined);
   return shareSchemaReady;
 }
@@ -469,7 +626,7 @@ function randomSlug(): string {
   return globalThis.crypto.randomUUID().replaceAll('-', '').slice(0, 16);
 }
 
-async function createShare(request: Request, env: Env): Promise<Response> {
+async function createShare(request: Request, tenantId: string, env: Env): Promise<Response> {
   let snapshot: z.infer<typeof publishedSnapshotSchema>;
   try {
     snapshot = publishedSnapshotSchema.parse(await boundedJson(request, 512 * 1024));
@@ -478,15 +635,15 @@ async function createShare(request: Request, env: Env): Promise<Response> {
   }
   await ensureShareSchema(env.DB);
   const slug = randomSlug();
-  await env.DB.prepare('INSERT INTO published_snapshots (slug, payload, created_at) VALUES (?, ?, ?)')
-    .bind(slug, JSON.stringify(snapshot), Date.now())
+  await env.DB.prepare('INSERT INTO published_snapshots_v2 (slug, owner_id, payload, created_at, revoked_at) VALUES (?, ?, ?, ?, NULL)')
+    .bind(slug, tenantId, JSON.stringify(snapshot), Date.now())
     .run();
   return json({ slug, url: `/s/${slug}` }, 201);
 }
 
 async function readShare(slug: string, env: Env): Promise<Response> {
   await ensureShareSchema(env.DB);
-  const row = await env.DB.prepare('SELECT payload FROM published_snapshots WHERE slug = ?')
+  const row = await env.DB.prepare('SELECT payload FROM published_snapshots_v2 WHERE slug = ? AND revoked_at IS NULL')
     .bind(slug)
     .first<{ payload: string }>();
   if (row === null) return json({ error: 'not_found' }, 404);
@@ -497,10 +654,113 @@ async function readShare(slug: string, env: Env): Promise<Response> {
   }
 }
 
+async function revokeShare(slug: string, tenantId: string, env: Env): Promise<Response> {
+  await ensureShareSchema(env.DB);
+  const row = await env.DB.prepare('SELECT owner_id FROM published_snapshots_v2 WHERE slug = ? AND revoked_at IS NULL')
+    .bind(slug).first<{ owner_id: string }>();
+  if (row?.owner_id !== tenantId) return json({ error: 'not_found' }, 404);
+  await env.DB.prepare('UPDATE published_snapshots_v2 SET revoked_at = ? WHERE slug = ? AND owner_id = ?')
+    .bind(Date.now(), slug, tenantId).run();
+  return new Response(null, { status: 204, headers: SECURITY_HEADERS });
+}
+
+async function listShares(tenantId: string, env: Env): Promise<Response> {
+  await ensureShareSchema(env.DB);
+  const rows = await env.DB.prepare('SELECT slug, payload, created_at, revoked_at FROM published_snapshots_v2 WHERE owner_id = ? ORDER BY created_at DESC')
+    .bind(tenantId).all<{ slug: string; payload: string; created_at: number; revoked_at: number | null }>();
+  return json({ snapshots: (rows.results ?? []).map((row) => {
+    const snapshot = publishedSnapshotSchema.parse(JSON.parse(row.payload) as unknown);
+    return { slug: row.slug, title: snapshot.title, createdAt: row.created_at, revokedAt: row.revoked_at };
+  }) });
+}
+
+async function downloadArchive(tenantId: string, env: Env): Promise<Response> {
+  const row = await workspaceFor(tenantId, env);
+  await ensureShareSchema(env.DB);
+  const workspace = workspaceStateSchema.parse(JSON.parse(row.state) as unknown);
+  const snapshots = await env.DB.prepare('SELECT slug, payload, created_at, revoked_at FROM published_snapshots_v2 WHERE owner_id = ? ORDER BY created_at ASC')
+    .bind(tenantId).all<{ slug: string; payload: string; created_at: number; revoked_at: number | null }>();
+  const archive = {
+    format: 'specular-archive',
+    version: 1,
+    exportedAt: Date.now(),
+    workspace: { ...workspace, annotations: [] },
+    publishedSnapshots: (snapshots.results ?? []).map((snapshot) => ({
+      slug: snapshot.slug,
+      createdAt: snapshot.created_at,
+      revokedAt: snapshot.revoked_at,
+      snapshot: publishedSnapshotSchema.parse(JSON.parse(snapshot.payload) as unknown),
+    })),
+  };
+  return new Response(JSON.stringify(archive, null, 2), {
+    headers: {
+      'content-type': 'application/json; charset=utf-8',
+      'content-disposition': `attachment; filename="specular-archive-${utcDay()}.json"`,
+      'cache-control': 'no-store',
+      ...SECURITY_HEADERS,
+    },
+  });
+}
+
+async function deleteAccount(tenantId: string, env: Env): Promise<Response> {
+  await Promise.all([ensureWorkspaceSchema(env.DB), ensureShareSchema(env.DB)]);
+  await env.DB.prepare('DELETE FROM published_snapshots_v2 WHERE owner_id = ?').bind(tenantId).run();
+  await env.DB.prepare('DELETE FROM workspace_mutations WHERE tenant_id = ?').bind(tenantId).run();
+  await env.DB.prepare('DELETE FROM author_workspaces WHERE tenant_id = ?').bind(tenantId).run();
+  return new Response(null, { status: 204, headers: SECURITY_HEADERS });
+}
+
 const worker = {
   async fetch(request: Request, env: Env): Promise<Response> {
     const url = new URL(request.url);
     if (url.pathname === '/healthz') return json({ ok: true });
+    if (url.pathname.startsWith('/api/')) {
+      const account = authorAccountFrom(request);
+      if (account === null) {
+        return url.pathname === '/api/session'
+          ? json({ authenticated: false, signInUrl: CHATGPT_SIGN_IN_URL }, 401)
+          : json({ error: 'authentication_required' }, 401);
+      }
+      if (!requireSameOriginMutation(request)) return json({ error: 'invalid_mutation_origin' }, 403);
+      if (url.pathname === '/api/session' && request.method === 'GET') {
+        try {
+          const workspace = await workspaceFor(account.id, env);
+          return json({
+            authenticated: true,
+            email: account.email,
+            cacheNamespace: workspace.cache_namespace,
+            signOutUrl: CHATGPT_SIGN_OUT_URL,
+          });
+        } catch {
+          return json({ error: 'storage_failure' }, 503);
+        }
+      }
+      if (url.pathname === '/api/workspace' && request.method === 'GET') {
+        try { return await readWorkspace(account.id, env); } catch { return json({ error: 'storage_failure' }, 503); }
+      }
+      if (url.pathname === '/api/workspace' && request.method === 'PUT') {
+        try { return await saveWorkspace(request, account.id, env); } catch { return json({ error: 'storage_failure' }, 503); }
+      }
+      if (url.pathname === '/api/archive' && request.method === 'GET') {
+        try { return await downloadArchive(account.id, env); } catch { return json({ error: 'storage_failure' }, 503); }
+      }
+      if (url.pathname === '/api/account' && request.method === 'DELETE') {
+        try { return await deleteAccount(account.id, env); } catch { return json({ error: 'storage_failure' }, 503); }
+      }
+      const inferencePaths = new Set([
+        '/api/reflect',
+        '/api/organize',
+        '/api/dictation/transcribe',
+        '/api/dictation/cleanup',
+      ]);
+      if (request.method === 'POST' && inferencePaths.has(url.pathname)) {
+        try {
+          if (!await allowInference(account.id, env)) return json({ error: 'inference_limit_reached' }, 429);
+        } catch {
+          return json({ error: 'storage_failure' }, 503);
+        }
+      }
+    }
     if (url.pathname === '/api/reflect' && request.method === 'POST') {
       try { return await handleReflection(request, env); } catch { return json({ error: 'provider_unavailable' }, 503); }
     }
@@ -514,11 +774,23 @@ const worker = {
       try { return await handleCleanup(request, env); } catch { return json({ error: 'provider_unavailable' }, 503); }
     }
     if (url.pathname === '/api/shares' && request.method === 'POST') {
-      try { return await createShare(request, env); } catch { return json({ error: 'storage_failure' }, 503); }
+      const account = authorAccountFrom(request);
+      if (account === null) return json({ error: 'authentication_required' }, 401);
+      try { return await createShare(request, account.id, env); } catch { return json({ error: 'storage_failure' }, 503); }
+    }
+    if (url.pathname === '/api/shares' && request.method === 'GET') {
+      const account = authorAccountFrom(request);
+      if (account === null) return json({ error: 'authentication_required' }, 401);
+      try { return await listShares(account.id, env); } catch { return json({ error: 'storage_failure' }, 503); }
     }
     const shareMatch = /^\/api\/shares\/([a-z0-9]{16})$/u.exec(url.pathname);
     if (shareMatch?.[1] !== undefined && request.method === 'GET') {
       try { return await readShare(shareMatch[1], env); } catch { return json({ error: 'storage_failure' }, 503); }
+    }
+    if (shareMatch?.[1] !== undefined && request.method === 'DELETE') {
+      const account = authorAccountFrom(request);
+      if (account === null) return json({ error: 'authentication_required' }, 401);
+      try { return await revokeShare(shareMatch[1], account.id, env); } catch { return json({ error: 'storage_failure' }, 503); }
     }
     const asset = await env.ASSETS.fetch(request);
     if (asset.status !== 404 || !url.pathname.startsWith('/s/')) {

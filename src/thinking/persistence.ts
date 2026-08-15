@@ -12,6 +12,9 @@ const WORKSPACE_KEY = 'thinking-workspace-v1';
 export interface WorkspaceStore {
   load(): Promise<WorkspaceState>;
   save(state: WorkspaceState): Promise<void>;
+  subscribeStatus?(listener: (status: 'synchronized' | 'synchronizing' | 'unsynced' | 'locked') => void): () => void;
+  currentStatus?(): 'synchronized' | 'synchronizing' | 'unsynced' | 'locked';
+  clear?(): Promise<void>;
   close(): void;
 }
 

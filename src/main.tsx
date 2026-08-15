@@ -1,8 +1,18 @@
-import { StrictMode } from 'react';
+import { StrictMode, useCallback } from 'react';
 import { createRoot } from 'react-dom/client';
 import { App } from './app/App';
 import { PwaUpdatePrompt } from './components/PwaUpdatePrompt';
+import { SessionBoundary } from './auth/SessionBoundary';
+import { createSynchronizedWorkspaceStore } from './sync/workspace-sync';
 import './styles.css';
+
+function AuthenticatedWorkspace({ session }: { session: import('./auth/session').AuthenticatedSession }) {
+  const storeFactory = useCallback(
+    () => createSynchronizedWorkspaceStore(session.cacheNamespace),
+    [session.cacheNamespace],
+  );
+  return <App session={session} storeFactory={storeFactory} />;
+}
 
 async function clearStaleDevelopmentPwaState(): Promise<void> {
   const removals: Promise<unknown>[] = [];
@@ -35,7 +45,9 @@ if (rootElement === null) {
 
 createRoot(rootElement).render(
   <StrictMode>
-    <App />
+    <SessionBoundary>
+      {(session) => <AuthenticatedWorkspace key={session.cacheNamespace} session={session} />}
+    </SessionBoundary>
     <PwaUpdatePrompt />
   </StrictMode>,
 );

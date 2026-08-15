@@ -52,7 +52,7 @@ export class HttpReflector implements Reflector {
     };
     const response = await fetch('/api/reflect', {
       method: 'POST',
-      headers: { 'content-type': 'application/json' },
+      headers: { 'content-type': 'application/json', 'x-specular-intent': 'mutate' },
       body: JSON.stringify(request),
     });
     const body = await response.json() as unknown;

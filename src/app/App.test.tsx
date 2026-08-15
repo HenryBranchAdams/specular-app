@@ -9,7 +9,7 @@ import type { Organizer } from '../thinking/organize-client';
 import type { SharePublisher } from '../thinking/share-client';
 import { App } from './App';
 
-afterEach(() => { cleanup(); vi.useRealTimers(); });
+afterEach(() => { cleanup(); vi.useRealTimers(); vi.unstubAllGlobals(); });
 
 function reflection(mirror = 'You are separating attention from certainty.') {
   return {
@@ -408,5 +408,104 @@ describe('Specular thinking workspace', () => {
     expect(screen.getByRole('combobox', { name: 'Dormancy period' })).toHaveValue('30');
     await user.selectOptions(screen.getByRole('combobox', { name: 'Dictation cleanup' }), 'verbatim');
     expect(screen.getByRole('combobox', { name: 'Dictation cleanup' })).toHaveValue('verbatim');
+  });
+
+  it('does not clear an unsynchronized device cache during sign out', async () => {
+    const user = userEvent.setup();
+    const workspace = createInitialWorkspace(1_800_000_000_000);
+    const store = {
+      load: vi.fn(() => Promise.resolve(workspace)),
+      save: vi.fn(() => Promise.resolve()),
+      currentStatus: vi.fn(() => 'unsynced' as const),
+      subscribeStatus: vi.fn((listener: (status: 'unsynced') => void) => { listener('unsynced'); return () => undefined; }),
+      clear: vi.fn(() => Promise.resolve()),
+      close: vi.fn(() => undefined),
+    };
+    render(<App
+      session={{ authenticated: true, email: 'writer@example.com', cacheNamespace: 'account:writer', signOutUrl: '/signout' }}
+      storeFactory={() => Promise.resolve(store)}
+    />);
+
+    await user.click(await screen.findByRole('button', { name: 'Sign out' }));
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('Sign out is paused');
+    expect(store.clear).not.toHaveBeenCalled();
+  });
+
+  it('does not download a stale hosted archive while writing is unsynchronized', async () => {
+    const user = userEvent.setup();
+    const workspace = createInitialWorkspace(1_800_000_000_000);
+    const fetchMock = vi.fn();
+    vi.stubGlobal('fetch', fetchMock);
+    const store = {
+      load: vi.fn(() => Promise.resolve(workspace)),
+      save: vi.fn(() => Promise.resolve()),
+      currentStatus: vi.fn(() => 'unsynced' as const),
+      subscribeStatus: vi.fn((listener: (status: 'unsynced') => void) => { listener('unsynced'); return () => undefined; }),
+      clear: vi.fn(() => Promise.resolve()),
+      close: vi.fn(() => undefined),
+    };
+    render(<App
+      session={{ authenticated: true, email: 'writer@example.com', cacheNamespace: 'account:writer', signOutUrl: '/signout' }}
+      storeFactory={() => Promise.resolve(store)}
+    />);
+    await user.click(await screen.findByRole('button', { name: 'Library' }));
+    await user.click(screen.getByRole('button', { name: 'Download archive' }));
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('hosted archive is paused');
+    expect(fetchMock).not.toHaveBeenCalledWith('/api/archive');
+  });
+
+  it('keeps a synchronized conflict copy visibly identified until the author resolves it', async () => {
+    const user = userEvent.setup();
+    const initial = createInitialWorkspace(1_800_000_000_000);
+    const document = initial.documents[0];
+    if (document === undefined) throw new Error('Expected an initial document.');
+    initial.documents[0] = { ...document, conflictOfDocumentId: 'document:origin', conflictStatus: 'open' };
+    setup({ initialState: initial });
+
+    expect(screen.getByText(/preserved conflict copy/iu)).toBeVisible();
+    await user.click(screen.getByRole('button', { name: 'Mark resolved' }));
+    expect(screen.queryByText(/preserved conflict copy/iu)).not.toBeInTheDocument();
+  });
+
+  it('lists and revokes the current author account hosted snapshots', async () => {
+    const user = userEvent.setup();
+    const workspace = createInitialWorkspace(1_800_000_000_000);
+    const fetchMock = vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
+      if (input === '/api/shares' && init === undefined) {
+        return Promise.resolve(new Response(JSON.stringify({ snapshots: [{
+          slug: 'abcdefghijklmnop',
+          title: 'A hosted thought',
+          createdAt: 1_800_000_000_000,
+          revokedAt: null,
+        }] }), { status: 200 }));
+      }
+      if (input === '/api/shares/abcdefghijklmnop' && init?.method === 'DELETE') {
+        return Promise.resolve(new Response(null, { status: 204 }));
+      }
+      const requestLabel = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url;
+      return Promise.reject(new Error(`Unexpected request: ${requestLabel}`));
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    const store = {
+      load: vi.fn(() => Promise.resolve(workspace)),
+      save: vi.fn(() => Promise.resolve()),
+      currentStatus: vi.fn(() => 'synchronized' as const),
+      subscribeStatus: vi.fn((listener: (status: 'synchronized') => void) => { listener('synchronized'); return () => undefined; }),
+      clear: vi.fn(() => Promise.resolve()),
+      close: vi.fn(() => undefined),
+    };
+    render(<App
+      session={{ authenticated: true, email: 'writer@example.com', cacheNamespace: 'account:writer', signOutUrl: '/signout' }}
+      storeFactory={() => Promise.resolve(store)}
+    />);
+
+    await user.click(await screen.findByRole('button', { name: 'Library' }));
+    expect(await screen.findByText('A hosted thought')).toBeVisible();
+    await user.click(screen.getByRole('button', { name: 'Revoke' }));
+
+    expect(await screen.findByText('Revoked')).toBeVisible();
+    expect(fetchMock).toHaveBeenCalledWith('/api/shares/abcdefghijklmnop', expect.objectContaining({ method: 'DELETE' }));
   });
 });

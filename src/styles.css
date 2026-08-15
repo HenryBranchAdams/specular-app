@@ -100,6 +100,147 @@ a:focus-visible {
   font-size: 1.25rem;
 }
 
+.session-gate {
+  min-height: 100vh;
+  display: grid;
+  grid-template-rows: auto 1fr;
+  padding: 24px clamp(24px, 7vw, 96px);
+  background: var(--paper, #f3f0e8);
+  color: var(--ink, #25231f);
+}
+
+.session-gate__brand {
+  font-family: Georgia, serif;
+  font-size: 1.2rem;
+}
+
+.session-gate > div,
+.session-gate > p {
+  align-self: center;
+  justify-self: center;
+  max-width: 34rem;
+}
+
+.session-gate h1 {
+  font-family: Georgia, serif;
+  font-size: clamp(2.2rem, 6vw, 4.5rem);
+  font-weight: 400;
+  line-height: 0.98;
+}
+
+.session-gate a.primary-action {
+  display: inline-block;
+  margin-top: 1rem;
+  text-decoration: none;
+}
+
+.account-boundary {
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+  padding-left: 0.65rem;
+  border-left: 1px solid var(--line, #d7d1c5);
+  font-size: 0.75rem;
+}
+
+.account-boundary span {
+  max-width: 12rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.account-boundary a {
+  color: inherit;
+}
+
+.account-boundary button {
+  border: 0;
+  padding: 0;
+  background: transparent;
+  color: inherit;
+  text-decoration: underline;
+}
+
+.sync-status {
+  color: var(--muted, #756f66);
+}
+
+.sync-status--unsynced::before {
+  content: '●';
+  margin-right: 0.35rem;
+  color: #9a6a27;
+}
+
+.account-settings {
+  display: grid;
+  gap: 0.55rem;
+  margin-top: 1rem;
+  padding-top: 1rem;
+  border-top: 1px solid var(--line, #d7d1c5);
+}
+
+.account-settings p {
+  margin: 0;
+  color: var(--muted, #756f66);
+  font-size: 0.78rem;
+  line-height: 1.45;
+}
+
+.hosted-snapshot-list {
+  display: grid;
+  gap: 0.45rem;
+  padding: 0.65rem 0;
+}
+
+.hosted-snapshot-list > div {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding-top: 0.45rem;
+  border-top: 1px solid var(--line);
+}
+
+.hosted-snapshot-list span,
+.hosted-snapshot-list > div > span {
+  display: grid;
+  gap: 0.15rem;
+}
+
+.hosted-snapshot-list b {
+  color: var(--ink);
+  font-weight: 500;
+}
+
+.account-error {
+  width: min(100% - 2rem, 72rem);
+  padding: 0.7rem 1rem;
+  margin: 0.75rem auto 0;
+  border: 1px solid color-mix(in srgb, var(--rust) 35%, var(--line));
+  color: var(--rust);
+  background: var(--paper-raised);
+  font-size: 0.78rem;
+}
+
+.danger-action {
+  color: #8b2e24 !important;
+}
+
+.conflict-notice {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 0.75rem 0;
+  margin-bottom: 1rem;
+  border-bottom: 1px solid #b8894b;
+  color: var(--ink-soft);
+  font-size: 0.78rem;
+}
+
+.conflict-notice p { margin: 0; }
+
 .specular-shell {
   min-height: 100dvh;
   background:
@@ -1254,9 +1395,13 @@ a:focus-visible {
 }
 
 .snapshot-panel > footer {
+  position: sticky;
+  z-index: 2;
+  bottom: 0;
   justify-content: flex-end;
   border-top: 1px solid var(--line);
   border-bottom: 0;
+  background: var(--paper-raised);
 }
 
 .snapshot-panel > footer button {
@@ -1545,11 +1690,51 @@ a:focus-visible {
 }
 
 @media (max-width: 520px) {
+  .workspace-header {
+    grid-template-columns: auto minmax(0, 1fr);
+  }
+
+  .header-actions {
+    min-width: 0;
+    justify-content: flex-end;
+  }
+
   .header-actions button {
     width: 2.75rem;
     overflow: hidden;
     padding: 0;
     font-size: 0;
+  }
+
+  .account-boundary {
+    min-width: 0;
+    gap: 0.35rem;
+    padding-left: 0.35rem;
+  }
+
+  .account-boundary > span:not(.sync-status) {
+    display: none;
+  }
+
+  .account-boundary .sync-status {
+    width: 0.75rem;
+    flex: 0 0 0.75rem;
+    overflow: hidden;
+    font-size: 0;
+  }
+
+  .account-boundary .sync-status::before {
+    content: '●';
+    margin: 0;
+    color: var(--quiet);
+    font-size: 0.62rem;
+  }
+
+  .account-boundary button {
+    width: auto;
+    min-width: 0;
+    padding: 0;
+    font-size: 0.7rem;
   }
 
   .document-title {

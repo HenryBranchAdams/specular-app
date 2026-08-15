@@ -104,6 +104,8 @@ export const thoughtDocumentSchema = z.preprocess((value) => {
   id: z.string().min(1).max(128),
   title: z.string().max(300),
   titleSource: metadataSourceSchema,
+  conflictOfDocumentId: z.string().min(1).max(128).nullable().default(null),
+  conflictStatus: z.enum(['open', 'resolved', 'dismissed']).nullable().default(null),
   status: thoughtStatusSchema,
   blockIds: z.array(z.string().min(1).max(128)).max(5_000),
   createdAt: z.number().int().nonnegative(),

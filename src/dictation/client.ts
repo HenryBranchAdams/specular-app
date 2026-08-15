@@ -26,7 +26,11 @@ export class HttpDictationService implements DictationService {
     };
     const extension = extensionByMime[audio.type.split(';', 1)[0]?.toLowerCase() ?? ''] ?? 'webm';
     form.set('audio', audio, `dictation.${extension}`);
-    const response = await this.fetchWithTimeout('/api/dictation/transcribe', { method: 'POST', body: form });
+    const response = await this.fetchWithTimeout('/api/dictation/transcribe', {
+      method: 'POST',
+      headers: { 'x-specular-intent': 'mutate' },
+      body: form,
+    });
     if (!response.ok) throw new Error('Transcription unavailable. Your saved draft is safe.');
     return transcriptResponseSchema.parse(await response.json()).transcript;
   }
@@ -34,7 +38,7 @@ export class HttpDictationService implements DictationService {
   async clean(verbatim: string): Promise<string> {
     const response = await this.fetchWithTimeout('/api/dictation/cleanup', {
       method: 'POST',
-      headers: { 'content-type': 'application/json' },
+      headers: { 'content-type': 'application/json', 'x-specular-intent': 'mutate' },
       body: JSON.stringify({ verbatim }),
     });
     if (!response.ok) throw new Error('Faithful cleanup unavailable. You can keep the verbatim transcript.');

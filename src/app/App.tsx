@@ -32,6 +32,8 @@ import {
   type DictationController,
 } from '../dictation/capture';
 import { HttpDictationService, type DictationService } from '../dictation/client';
+import { clearCachedSession, type AuthenticatedSession } from '../auth/session';
+import { deleteHostedAccount, downloadAccountArchive, downloadDeviceRecovery } from '../account/client';
 import { downloadMarkdown } from '../thinking/export';
 import {
   createInitialWorkspace,
@@ -58,12 +60,17 @@ import {
 } from '../thinking/reflect-client';
 import {
   HttpSharePublisher,
+  listPublishedSnapshots,
   loadPublishedSnapshot,
+  revokeHostedSnapshot,
+  revokePublishedSnapshot,
+  type HostedSnapshotSummary,
   type PublishedSnapshot,
   type SharePublisher,
 } from '../thinking/share-client';
 
 export interface AppProps {
+  session?: AuthenticatedSession;
   initialState?: WorkspaceState;
   reflector?: Reflector;
   organizer?: Organizer;
@@ -669,6 +676,7 @@ function SnapshotEditor({
   onClose,
   onPrint,
   onPublish,
+  onRevoke,
   onToggleBlock,
   onTitleChange,
   onTitleConfirm,
@@ -680,6 +688,7 @@ function SnapshotEditor({
   onClose: () => void;
   onPrint: () => void;
   onPublish: () => void;
+  onRevoke: () => void;
   onToggleBlock: (blockId: string) => void;
   onTitleChange: (title: string) => void;
   onTitleConfirm: () => void;
@@ -739,9 +748,12 @@ function SnapshotEditor({
             Publish page
           </button>
           {snapshot.publishedUrl === null ? null : (
-            <button onClick={() => { void copyLink(); }} type="button">
-              {copied ? <Check size={15} /> : <Copy size={15} />}{copied ? 'Copied' : 'Copy link'}
-            </button>
+            <>
+              <button onClick={() => { void copyLink(); }} type="button">
+                {copied ? <Check size={15} /> : <Copy size={15} />}{copied ? 'Copied' : 'Copy link'}
+              </button>
+              <button onClick={onRevoke} type="button"><Trash2 size={15} />Revoke link</button>
+            </>
           )}
           {error === null ? null : <p className="inline-error snapshot-error" role="alert">{error}</p>}
         </footer>
@@ -757,6 +769,7 @@ export function App({
   organizer = new HttpOrganizer(),
   reflector = new HttpReflector(),
   sharePublisher = new HttpSharePublisher(),
+  session,
   storeFactory = createWorkspaceStore,
 }: AppProps) {
   const shareMatch = /^\/s\/([a-z0-9-]+)$/u.exec(globalThis.location.pathname);
@@ -777,8 +790,11 @@ export function App({
   const [shareError, setShareError] = useState<string | null>(null);
   const [snapshotId, setSnapshotId] = useState<string | null>(null);
   const [publishing, setPublishing] = useState(false);
+  const [hostedSnapshots, setHostedSnapshots] = useState<HostedSnapshotSummary[]>([]);
   const [dictationError, setDictationError] = useState<string | null>(null);
   const [storageError, setStorageError] = useState<string | null>(null);
+  const [accountError, setAccountError] = useState<string | null>(null);
+  const [synchronizationStatus, setSynchronizationStatus] = useState<'synchronized' | 'synchronizing' | 'unsynced' | 'locked'>('synchronizing');
   const [pendingDeleteBlockId, setPendingDeleteBlockId] = useState<string | null>(null);
   const [organizationBusy, setOrganizationBusy] = useState(false);
   const [calibration, setCalibration] = useState('');
@@ -789,29 +805,35 @@ export function App({
   const dictationServiceRef = useRef<DictationService>(dictationService ?? new HttpDictationService());
   const dictationControllerRef = useRef<DictationController>(dictationController ?? new BrowserDictationController(dictationServiceRef.current));
   const dictationDraftRef = useRef<DictationDraft | null>(state.dictationDraft);
+  const stateRef = useRef(state);
   const calibrationRef = useRef(calibration);
   const calibrationSessionRef = useRef<{ prefix: string; suffix: string; verbatim: string } | null>(null);
   const organizationInFlightRef = useRef(false);
   const lastOrganizationAttemptRef = useRef<string | null>(null);
   dictationDraftRef.current = state.dictationDraft;
+  stateRef.current = state;
   calibrationRef.current = calibration;
   organizerRef.current = organizer;
 
   useEffect(() => {
     if (initialState !== undefined) return;
     let active = true;
+    let unsubscribe: (() => void) | undefined;
     void storeFactory().then(async (store) => {
       if (!active) { store.close(); return; }
       storeRef.current = store;
+      unsubscribe = store.subscribeStatus?.(setSynchronizationStatus);
       const loaded = await store.load();
       setState(loaded);
       setInitialized(true);
     }).catch(() => {
       if (!active) return;
-      setStorageError('This browser could not open local storage. Dictation is unavailable so your speech is never presented as safely checkpointed.');
+      if (storeRef.current?.currentStatus?.() !== 'locked') {
+        setStorageError('This browser could not open the private workspace. Dictation is unavailable so your speech is never presented as safely checkpointed.');
+      }
       setInitialized(true);
     });
-    return () => { active = false; storeRef.current?.close(); storeRef.current = null; };
+    return () => { active = false; unsubscribe?.(); storeRef.current?.close(); storeRef.current = null; };
   }, [initialState, storeFactory]);
 
   useEffect(() => {
@@ -836,6 +858,30 @@ export function App({
     return () => { window.clearTimeout(timeout); };
   }, [initialState, initialized, state]);
 
+  useEffect(() => {
+    if (initialState !== undefined || session === undefined) return;
+    const retrySynchronization = () => {
+      const store = storeRef.current;
+      if (store?.currentStatus?.() !== 'unsynced') return;
+      void store.save(stateRef.current).catch(() => {
+        setAccountError('Specular could not synchronize this device yet. Your recovery copy remains available.');
+      });
+    };
+    globalThis.addEventListener('online', retrySynchronization);
+    return () => { globalThis.removeEventListener('online', retrySynchronization); };
+  }, [initialState, session]);
+
+  useEffect(() => {
+    if (!libraryOpen || session === undefined) return;
+    let active = true;
+    void listPublishedSnapshots().then((snapshots) => {
+      if (active) setHostedSnapshots(snapshots);
+    }).catch((error: unknown) => {
+      if (active) setAccountError(error instanceof Error ? error.message : 'Specular could not load your published links.');
+    });
+    return () => { active = false; };
+  }, [libraryOpen, session]);
+
   const currentDocument = activeDocument(state);
   const blocks = documentBlocks(state, currentDocument);
   const selectedBlock = state.blocks.find((block) => block.id === selectedBlockId) ?? blocks[0] ?? null;
@@ -847,6 +893,77 @@ export function App({
   const isBlank = blocks.every((block) => block.content.trim().length === 0);
   const authoredWordCount = blocks.reduce((total, block) => total + wordCount(block.content), 0);
   const calibrationDictationActive = calibrationDictationStatus !== 'idle' && calibrationDictationStatus !== 'interrupted';
+
+  const signOut = async () => {
+    if (session === undefined) return;
+    setAccountError(null);
+    const store = storeRef.current;
+    try {
+      if (store !== null) {
+        await store.save(state);
+        const status = store.currentStatus?.();
+        if (status !== undefined && status !== 'synchronized') {
+          setAccountError('Sign out is paused because some writing is only on this device. Reconnect until Saved appears, or download this device recovery first.');
+          return;
+        }
+        await store.clear?.();
+      }
+    } catch {
+      setAccountError('Sign out is paused because Specular could not safely save this workspace. Download this device recovery before leaving.');
+      return;
+    }
+    clearCachedSession();
+    globalThis.location.assign(session.signOutUrl);
+  };
+
+  const downloadHostedArchive = async () => {
+    setAccountError(null);
+    const store = storeRef.current;
+    try {
+      if (store !== null) {
+        await store.save(state);
+        const status = store.currentStatus?.();
+        if (status !== undefined && status !== 'synchronized') {
+          setAccountError('The hosted archive is paused until this device synchronizes. Download this device recovery for an immediate local copy.');
+          return;
+        }
+      }
+      await downloadAccountArchive();
+    } catch (error) {
+      setAccountError(error instanceof Error ? error.message : 'Specular could not prepare your archive.');
+    }
+  };
+
+  const revokeHostedLink = async (slug: string) => {
+    setAccountError(null);
+    try {
+      await revokeHostedSnapshot(slug);
+      setHostedSnapshots((snapshots) => snapshots.map((snapshot) => (
+        snapshot.slug === slug ? { ...snapshot, revokedAt: Date.now() } : snapshot
+      )));
+      setState((current) => ({
+        ...current,
+        snapshots: current.snapshots.map((snapshot) => snapshot.publishedUrl?.endsWith(`/s/${slug}`) === true
+          ? { ...snapshot, publishedUrl: null }
+          : snapshot),
+      }));
+    } catch (error) {
+      setAccountError(error instanceof Error ? error.message : 'Specular could not revoke this published link.');
+    }
+  };
+
+  const deleteAccount = async () => {
+    if (session === undefined || !globalThis.confirm('Permanently delete this hosted workspace and revoke every published link? This cannot be undone.')) return;
+    setAccountError(null);
+    try {
+      await deleteHostedAccount();
+      await storeRef.current?.clear?.();
+      clearCachedSession();
+      globalThis.location.assign(session.signOutUrl);
+    } catch (error) {
+      setAccountError(error instanceof Error ? error.message : 'Specular could not delete this account workspace.');
+    }
+  };
 
   useEffect(() => {
     if (!initialized || state.settings.automaticOrganization !== 'enabled' || organizationInFlightRef.current) return;
@@ -1307,7 +1424,7 @@ export function App({
     setState((current) => ({
       ...current,
       activeDocumentId: documentId,
-      documents: [...current.documents, { id: documentId, title: '', titleSource: 'empty', status: 'active', blockIds: [blockId], createdAt: now, updatedAt: now }],
+      documents: [...current.documents, { id: documentId, title: '', titleSource: 'empty', conflictOfDocumentId: null, conflictStatus: null, status: 'active', blockIds: [blockId], createdAt: now, updatedAt: now }],
       blocks: [...current.blocks, { id: blockId, documentId, parentId: null, originPrompt: null, content: '', kind: 'thought', kindSource: 'default', status: 'active', createdAt: now, updatedAt: now, versions: [], references: [] }],
     }));
     setSelectedBlockId(blockId);
@@ -1415,8 +1532,40 @@ export function App({
     }
   };
 
+  const revokeSnapshot = async () => {
+    if (currentSnapshot?.publishedUrl === null || currentSnapshot === null) return;
+    setPublishing(true);
+    setShareError(null);
+    try {
+      await revokePublishedSnapshot(currentSnapshot.publishedUrl);
+      setState((current) => ({
+        ...current,
+        snapshots: current.snapshots.map((snapshot) => snapshot.id === currentSnapshot.id
+          ? { ...snapshot, publishedUrl: null }
+          : snapshot),
+      }));
+    } catch (error) {
+      setShareError(error instanceof Error ? error.message : 'Specular could not revoke this published link.');
+    } finally {
+      setPublishing(false);
+    }
+  };
+
   if (!initialized) {
     return <main className="workspace-loading"><span>Specular</span><LoaderCircle aria-label="Opening private workspace" className="spin" /></main>;
+  }
+
+  if (synchronizationStatus === 'locked' && session !== undefined) {
+    return (
+      <main className="session-gate">
+        <span className="session-gate__brand">Specular</span>
+        <div>
+          <h1>Workspace locked</h1>
+          <p>Your ChatGPT session changed or expired. Cached writing remains hidden for this account until you sign in again.</p>
+          <a className="primary-action" href="/signin-with-chatgpt?return_to=%2F">Sign in again</a>
+        </div>
+      </main>
+    );
   }
 
   return (
@@ -1426,8 +1575,16 @@ export function App({
         <div className="header-actions">
           <button disabled={blocks.every((block) => block.content.trim().length === 0) || calibrationDictationActive} onClick={createSnapshot} type="button"><FileText size={15} />Create snapshot</button>
           <button aria-expanded={libraryOpen} disabled={state.dictationDraft !== null || calibrationDictationActive} onClick={() => { setLibraryOpen((open) => !open); }} type="button"><Library size={15} />Library</button>
+          {session === undefined ? null : (
+            <div className="account-boundary">
+              <span className={`sync-status sync-status--${synchronizationStatus}`}>{synchronizationStatus === 'synchronized' ? 'Saved' : synchronizationStatus === 'synchronizing' ? 'Saving' : synchronizationStatus === 'unsynced' ? 'Saved on this device' : 'Locked'}</span>
+              <span title={session.email}>{session.email}</span>
+              <button onClick={() => { void signOut(); }} type="button">Sign out</button>
+            </div>
+          )}
         </div>
       </header>
+      {accountError === null ? null : <p className="account-error" role="alert">{accountError}</p>}
       <nav aria-label="Workspace views" className="workspace-nav">
         <button aria-current={view === 'document' ? 'page' : undefined} onClick={() => { setView('document'); }} type="button"><BookOpen size={15} />Document</button>
         <button aria-current={view === 'connections' ? 'page' : undefined} disabled={state.dictationDraft !== null || calibrationDictationActive} onClick={() => { setView('connections'); }} type="button"><Network size={15} />Connections</button>
@@ -1456,6 +1613,25 @@ export function App({
             <label><span>Becomes dormant after</span><select aria-label="Dormancy period" onChange={(event) => { setState((current) => ({ ...current, settings: { ...current.settings, dormancyDays: Number(event.target.value) } })); }} value={state.settings.dormancyDays}><option value={7}>7 days</option><option value={14}>14 days</option><option value={30}>30 days</option><option value={90}>90 days</option></select></label>
             <label><span>Dictation transcript</span><select aria-label="Dictation cleanup" onChange={(event) => { setState((current) => ({ ...current, settings: { ...current.settings, dictationCleanup: event.target.value as 'faithful' | 'verbatim' } })); }} value={state.settings.dictationCleanup}><option value="faithful">Faithful cleanup</option><option value="verbatim">Verbatim</option></select></label>
             <label><span>Automatic organization</span><select aria-label="Automatic organization" onChange={(event) => { setState((current) => ({ ...current, settings: { ...current.settings, automaticOrganization: event.target.value as 'enabled' | 'disabled' } })); }} value={state.settings.automaticOrganization === 'undecided' ? 'disabled' : state.settings.automaticOrganization}><option value="enabled">On</option><option value="disabled">Off</option></select></label>
+            {session === undefined ? null : (
+              <section className="account-settings">
+                <strong>Hosted workspace</strong>
+                <p>Your writing is stored in your private hosted workspace, with an account-scoped cache on this device. Reflection and dictation use hosted inference only when you invoke them.</p>
+                <p>Operational limits use content-free counters. Archives exclude margin responses, calibration, audio, and ChatGPT identity; device recovery also excludes interlocutor annotations.</p>
+                <div className="hosted-snapshot-list">
+                  <strong>Published links</strong>
+                  {hostedSnapshots.length === 0 ? <span>No published links yet.</span> : hostedSnapshots.map((snapshot) => (
+                    <div key={snapshot.slug}>
+                      <span><b>{snapshot.title}</b><small>{snapshot.revokedAt === null ? new Date(snapshot.createdAt).toLocaleDateString() : 'Revoked'}</small></span>
+                      {snapshot.revokedAt === null ? <button onClick={() => { void revokeHostedLink(snapshot.slug); }} type="button">Revoke</button> : null}
+                    </div>
+                  ))}
+                </div>
+                <button onClick={() => { void downloadHostedArchive(); }} type="button">Download archive</button>
+                <button onClick={() => { downloadDeviceRecovery(state); }} type="button">Download this device recovery</button>
+                <button className="danger-action" onClick={() => { void deleteAccount(); }} type="button">Delete account data</button>
+              </section>
+            )}
           </footer>
         </aside>
       ) : null}
@@ -1472,6 +1648,12 @@ export function App({
         <section className="workspace-grid">
           <article aria-label="Thinking document" className="thinking-document">
             {storageError === null ? null : <p className="workspace-storage-error" role="alert">{storageError}</p>}
+            {currentDocument.conflictStatus === 'open' ? (
+              <section className="conflict-notice" role="status">
+                <p>This is a preserved conflict copy. Compare it with the linked hosted version; Specular has not merged or rewritten either.</p>
+                <button onClick={() => { updateDocument({ conflictStatus: 'resolved' }); }} type="button">Mark resolved</button>
+              </section>
+            ) : null}
             <div className="document-tools">
               {isBlank ? (
                 <div className="starter-help">
@@ -1609,6 +1791,7 @@ export function App({
           onClose={() => { setSnapshotId(null); }}
           onPrint={() => { window.print(); }}
           onPublish={() => { void publishSnapshot(); }}
+          onRevoke={() => { void revokeSnapshot(); }}
           onToggleBlock={(blockId) => { setState((current) => ({ ...current, snapshots: current.snapshots.map((snapshot) => snapshot.id === currentSnapshot.id ? { ...snapshot, blockIds: snapshot.blockIds.includes(blockId) ? snapshot.blockIds.filter((id) => id !== blockId) : [...snapshot.blockIds, blockId] } : snapshot) })); }}
           onTitleChange={(title) => { setState((current) => ({ ...current, snapshots: current.snapshots.map((snapshot) => snapshot.id === currentSnapshot.id ? { ...snapshot, title, titleConfirmed: title.trim().length > 0 } : snapshot) })); }}
           onTitleConfirm={() => { setState((current) => ({ ...current, snapshots: current.snapshots.map((snapshot) => snapshot.id === currentSnapshot.id && snapshot.title.trim().length > 0 ? { ...snapshot, titleConfirmed: true } : snapshot) })); }}

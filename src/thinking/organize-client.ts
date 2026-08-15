@@ -32,7 +32,7 @@ export class HttpOrganizer implements Organizer {
   async organize(input: OrganizationRequest): Promise<OrganizationResult> {
     const response = await fetch('/api/organize', {
       method: 'POST',
-      headers: { 'content-type': 'application/json' },
+      headers: { 'content-type': 'application/json', 'x-specular-intent': 'mutate' },
       body: JSON.stringify(input),
     });
     if (!response.ok) throw new Error('Automatic organization is temporarily unavailable.');

@@ -2,7 +2,7 @@
 
 Specular is a private environment for people who use writing to discover what they think. Its primary surface is a nonlinear, block-based document. A selection-aware philosophical interlocutor can reflect the writing back, expose an unresolved edge, or open a linked direction—but it never writes canonical prose for the author.
 
-The hosted release keeps the workspace corpus in the browser. Only the context the author deliberately exposes is sent for inference. Published snapshots are immutable artifacts containing selected user-authored writing, confirmed order, and source metadata; margin responses are excluded.
+The hosted beta requires ChatGPT sign-in and keeps one server-authoritative private workspace per Site-scoped author account. An account-scoped browser cache keeps writing responsive and available through temporary disconnections. Only context needed for an explicitly invoked model-backed action is sent for inference. Published snapshots contain selected user-authored writing, confirmed order, and source metadata; margin responses and ChatGPT identity are excluded.
 
 ## Product invariants
 
@@ -39,17 +39,21 @@ npm run build
 npm run test:e2e
 ```
 
-`npm run build` produces the Sites frontend and Worker entrypoint. The D1 migration in `drizzle/` backs published snapshot pages. Local workspace writing remains in IndexedDB.
+`npm run build` produces the Sites frontend and Worker entrypoint. The D1 migrations in `drizzle/` back authenticated workspaces, content-free inference counters, and author-owned snapshot pages. IndexedDB retains separate offline-capable caches for the author accounts used on that device.
 
 ## Hosted release
 
-The Ready to Use version is packaged and deployed with ChatGPT Sites. Its Worker exposes:
+The Ready to Use production package is designed for deployment with ChatGPT Sites. Its Worker exposes:
 
+- `GET /api/session` for the server-verified ChatGPT account boundary
+- `GET` and `PUT /api/workspace` for revision-checked private workspace synchronization
 - `POST /api/reflect` for explicit margin reflection
 - `POST /api/dictation/transcribe` for bounded audio checkpoints
 - `POST /api/dictation/cleanup` for optional faithful transcript cleanup
 - `POST /api/shares` for immutable snapshot publication
+- `GET /api/shares` and `DELETE /api/shares/:slug` for author-owned link management
 - `GET /api/shares/:slug` for published artifacts
+- `GET /api/archive` and `DELETE /api/account` for tenant-scoped data control
 - `GET /healthz` for deployment health
 
 The repository still contains the earlier native/MCP server as a separately built compatibility surface. It does not define the hosted product interaction.

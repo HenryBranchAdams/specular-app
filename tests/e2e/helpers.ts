@@ -1,4 +1,5 @@
 import { expect, type Page } from '@playwright/test';
+import { createInitialWorkspace, type WorkspaceState } from '../../src/thinking/model';
 
 export interface ThinkingMockController {
   delayReflection(): void;
@@ -19,6 +20,27 @@ export async function installThinkingMocks(page: Page): Promise<ThinkingMockCont
   let delayed = false;
   let release: (() => void) | undefined;
   let pending = Promise.resolve();
+  let workspace: WorkspaceState = createInitialWorkspace(1_800_000_000_000);
+  let revision = 0;
+
+  await page.route('**/api/session', async (route) => {
+    await route.fulfill({ contentType: 'application/json', status: 200, body: JSON.stringify({
+      authenticated: true,
+      email: 'browser@example.com',
+      cacheNamespace: 'account:browser',
+      signOutUrl: '/signout-with-chatgpt?return_to=%2F',
+    }) });
+  });
+  await page.route('**/api/workspace', async (route) => {
+    if (route.request().method() === 'PUT') {
+      const body = route.request().postDataJSON() as { workspace: WorkspaceState };
+      workspace = body.workspace;
+      revision += 1;
+      await route.fulfill({ contentType: 'application/json', status: 200, body: JSON.stringify({ revision }) });
+      return;
+    }
+    await route.fulfill({ contentType: 'application/json', status: 200, body: JSON.stringify({ revision, workspace }) });
+  });
 
   await page.route('**/api/reflect', async (route) => {
     if (delayed) {
