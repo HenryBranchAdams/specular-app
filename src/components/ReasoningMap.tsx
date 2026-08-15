@@ -25,7 +25,7 @@ export function ReasoningMap({ understanding }: ReasoningMapProps) {
   }
 
   return (
-    <aside aria-label="Structured understanding" className="reasoning-map">
+    <aside aria-label="Structured understanding" className="reasoning-map" data-ui-part="reasoning-map">
       <details>
         <summary>
           <span>Reasoning map</span>

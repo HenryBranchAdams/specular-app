@@ -395,7 +395,7 @@ function BlockEditor({
           value={block.content}
         />
         {dictationDraft === null ? null : (
-          <section aria-label="Dictation review" className={`dictation-draft dictation-draft--${dictationDraft.status}`}>
+          <section aria-label="Dictation review" className={`dictation-draft dictation-draft--${dictationDraft.status}`} data-ui-part="dictation-review">
             <div className="dictation-draft__status" aria-live="polite">
               <span className="dictation-dot" aria-hidden="true" />
               {dictationDraft.status === 'recording' ? 'Recording · keep Specular open'
@@ -1884,7 +1884,7 @@ export function App({
               ) : null}
             </div>
             {state.settings.automaticOrganization === 'undecided' && authoredWordCount >= 50 ? (
-              <section aria-label="Automatic organization consent" className="organization-consent">
+              <section aria-label="Automatic organization consent" className="organization-consent" data-ui-part="organization-consent">
                 <p><strong>Let Specular quietly name and tag this writing?</strong> This sends the current document to hosted inference after you pause. It never adds prose to your document.</p>
                 <div>
                   <button onClick={() => { setState((current) => ({ ...current, settings: { ...current.settings, automaticOrganization: 'enabled' } })); }} type="button">Enable</button>

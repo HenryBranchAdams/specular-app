@@ -38,6 +38,64 @@
     "route:hosted-snapshot": "tests/e2e/ui-surfaces.spec.ts",
     "route:hosted-snapshot-extreme": "tests/e2e/ui-surfaces.spec.ts"
   },
+  "surfaceParts": [
+    {
+      "id": "capsule-library",
+      "productionEntry": "src/components/CapsuleLibrary.tsx",
+      "ownerSurfaceIds": ["library-drawer"],
+      "coverage": "inactive",
+      "reason": "Retained tested legacy library component that is not reachable from the current hosted product entry."
+    },
+    {
+      "id": "confirm-delete-dialog",
+      "productionEntry": "src/components/ConfirmDeleteDialog.tsx",
+      "ownerSurfaceIds": ["library-drawer", "snapshot-editor"],
+      "coverage": "owned-part",
+      "reason": "Shared destructive-confirmation pattern owned and exercised by its invoking product surfaces."
+    },
+    {
+      "id": "dictation-review",
+      "productionEntry": "src/app/App.tsx",
+      "ownerSurfaceIds": ["document-authoring"],
+      "coverage": "owned-part",
+      "reason": "Provisional dictation review remains inside the canonical authoring surface until the author keeps it."
+    },
+    {
+      "id": "organization-consent",
+      "productionEntry": "src/app/App.tsx",
+      "ownerSurfaceIds": ["document-authoring"],
+      "coverage": "owned-part",
+      "reason": "Contextual consent belongs to the canonical document workflow rather than creating a peer product surface."
+    },
+    {
+      "id": "reasoning-map",
+      "productionEntry": "src/components/ReasoningMap.tsx",
+      "ownerSurfaceIds": ["document-authoring"],
+      "coverage": "inactive",
+      "reason": "Retained tested component that is not reachable from the current hosted product entry."
+    },
+    {
+      "id": "storage-recovery",
+      "productionEntry": "src/components/StorageRecovery.tsx",
+      "ownerSurfaceIds": ["workspace-shell"],
+      "coverage": "inactive",
+      "reason": "Retained tested component that is not reachable from the current hosted product entry."
+    },
+    {
+      "id": "transcript",
+      "productionEntry": "src/components/Transcript.tsx",
+      "ownerSurfaceIds": ["document-authoring"],
+      "coverage": "inactive",
+      "reason": "Retained tested conversation component that is not reachable from the current document-first product entry."
+    },
+    {
+      "id": "transcript-turn",
+      "productionEntry": "src/components/Transcript.tsx",
+      "ownerSurfaceIds": ["document-authoring"],
+      "coverage": "inactive",
+      "reason": "Repeated authored and assistant turn item owned by the inactive transcript component."
+    }
+  ],
   "surfaces": [
     {
       "id": "session-boundary",

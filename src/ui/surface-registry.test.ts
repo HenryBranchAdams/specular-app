@@ -32,6 +32,15 @@ describe('production UI surface ownership', () => {
     }
   });
 
+  it('classifies reusable and inactive surface-like roots as governed parts', () => {
+    for (const part of surfaceManifest.surfaceParts) {
+      const source = readFileSync(join(process.cwd(), part.productionEntry), 'utf8');
+      expect(source).toContain(`data-ui-part="${part.id}"`);
+      expect(part.ownerSurfaceIds.every((id) => surfaceRegistry.surfaces.some((surface) => surface.id === id))).toBe(true);
+      expect(part.reason.length).toBeGreaterThan(0);
+    }
+  });
+
   it('keeps the MCP widget explicit and outside active hosted-product coverage', () => {
     expect(surfaceManifest.legacyCompatibility).toEqual(expect.arrayContaining([
       expect.objectContaining({

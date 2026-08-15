@@ -47,3 +47,7 @@ Buttons, icon buttons, fields, textareas, and surfaces share the semantic token 
 ## Prospective style ratchet
 
 `npm run lint:styles` runs Stylelint correctness rules and verifies `docs/design/ui-style-ratchet.json`. Existing global-stylesheet debt may decrease but cannot increase by category, and a same-count substitution cannot introduce a raw visual value outside the owner-reviewed allowlist. Any new CSS file must be registered with zero raw visual values or an owner-reviewed, dated exception. `node scripts/validate-ui-style-ratchet.mjs --print-baseline` prints a proposed policy after an intentional owner-approved change; it never writes or accepts the baseline. The ratchet is intentionally bounded; it does not require mass formatting or prevent an approved token or baseline change.
+
+## Prospective surface discovery
+
+`npm run ui:manifest:check` discovers production TSX roots that use `main` or `dialog`, a dialog role, or a labeled `aside`, `article`, or `section`. Each discoverable root must carry exactly one registered `data-ui-surface` or `data-ui-part` marker. Full product surfaces map reciprocally to the runtime registry; reusable or intentionally inactive parts map to an owner surface and a written reason in the manifest. This keeps a new top-level visible region from silently bypassing the review harness while allowing small internal components to remain lightweight.

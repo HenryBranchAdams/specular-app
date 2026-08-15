@@ -116,7 +116,7 @@ export function SessionBoundary({
     );
   }
   if (session === null) {
-    return <main className="workspace-loading"><span>Specular</span><LoaderCircle aria-label="Verifying ChatGPT session" className="spin" /></main>;
+    return <main className="workspace-loading" data-ui-surface="session-boundary"><span>Specular</span><LoaderCircle aria-label="Verifying ChatGPT session" className="spin" /></main>;
   }
   if (!session.authenticated) {
     return (

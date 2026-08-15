@@ -71,6 +71,7 @@ export function Transcript({ onRetry, pendingUserTurn, retrying = false, turns }
       aria-live="polite"
       aria-relevant="additions text"
       className="transcript transcript--scrollable"
+      data-ui-part="transcript"
       role="log"
       tabIndex={0}
     >
@@ -84,6 +85,7 @@ export function Transcript({ onRetry, pendingUserTurn, retrying = false, turns }
             aria-current={current ? 'true' : undefined}
             aria-label={current ? 'Current Specular question' : undefined}
             className={`turn ${roleClass(turn.role)}${current ? ' turn--current' : ''}${latestUser ? ' turn--latest-user' : ''}`}
+            data-ui-part="transcript-turn"
             data-testid={turn.role === 'specular' ? 'specular-turn' : undefined}
             key={turn.id}
           >

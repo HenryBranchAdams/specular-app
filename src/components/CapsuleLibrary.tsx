@@ -332,6 +332,7 @@ export function CapsuleLibrary({
     <dialog
       aria-labelledby="capsule-library-title"
       className="capsule-library"
+      data-ui-part="capsule-library"
       open
       ref={modalRef}
     >

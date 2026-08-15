@@ -42,7 +42,7 @@ export function StorageRecovery({
   };
 
   return (
-    <main className="storage-recovery">
+    <main className="storage-recovery" data-ui-part="storage-recovery">
       <section aria-labelledby="storage-recovery-title" className="storage-recovery__surface">
         <h1 id="storage-recovery-title">Your local data needs attention</h1>
         <p>

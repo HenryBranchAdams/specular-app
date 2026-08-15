@@ -71,6 +71,7 @@ export function ConfirmDeleteDialog({
       aria-describedby={warningId}
       aria-labelledby={titleId}
       className="confirm-delete"
+      data-ui-part="confirm-delete-dialog"
       open
       ref={modalRef}
       role="alertdialog"
