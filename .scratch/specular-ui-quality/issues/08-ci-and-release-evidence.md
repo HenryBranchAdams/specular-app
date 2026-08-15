@@ -1,6 +1,7 @@
 # 08 — Lock UI quality into CI and release evidence
 
-Status: needs-triage
+Status: ready-for-agent
+Blocked by: 07
 
 ## Outcome
 

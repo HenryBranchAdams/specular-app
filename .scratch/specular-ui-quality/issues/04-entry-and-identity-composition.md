@@ -1,6 +1,7 @@
 # 04 — Refactor entry and identity compositions
 
-Status: needs-triage
+Status: ready-for-agent
+Blocked by: 02
 
 ## Outcome
 

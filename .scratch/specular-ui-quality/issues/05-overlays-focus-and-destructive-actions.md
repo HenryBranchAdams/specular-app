@@ -1,6 +1,7 @@
 # 05 — Unify overlays, focus, and destructive actions
 
-Status: needs-triage
+Status: ready-for-agent
+Blocked by: 02
 
 ## Outcome
 

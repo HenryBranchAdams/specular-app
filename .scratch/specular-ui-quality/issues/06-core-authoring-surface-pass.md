@@ -1,6 +1,7 @@
 # 06 — Apply the quality system to the core authoring journey
 
-Status: needs-triage
+Status: ready-for-agent
+Blocked by: 03, 04, 05
 
 ## Outcome
 

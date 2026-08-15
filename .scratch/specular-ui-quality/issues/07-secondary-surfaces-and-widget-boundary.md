@@ -1,6 +1,7 @@
 # 07 — Qualify secondary hosted surfaces and record the widget boundary
 
-Status: needs-triage
+Status: ready-for-agent
+Blocked by: 06
 
 ## Outcome
 

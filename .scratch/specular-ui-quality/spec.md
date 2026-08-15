@@ -31,10 +31,15 @@ Refactor low-quality or inconsistent frontend surfaces across the entire active 
 11. Implement the program ticket-by-ticket on one long-lived UI-rework branch with reviewable commits and visual checkpoints, then present one coherent final PR to `main`.
 12. Define the active release surface as the hosted workspace, PWA states, authentication boundaries, Library, Connections, snapshots, and hosted snapshots. Treat the separately built MCP widget as a legacy compatibility surface outside this rework; any retention, adaptation, or removal is separate future work.
 13. Permit minor enhancements when they are local, low-risk, and make an existing task clearer or more dependable. Major product capabilities, data-model changes, and new workflow concepts require separate future work.
+14. Use MagicPath as an exploratory and supplemental resource for difficult compositions, alternatives, and checkpoint reviews. Once implemented, production components, Storybook stories, and owner-approved visual baselines are the operational source of truth; routine two-way synchronization is not required.
+15. A minor enhancement may ship in this program only when it improves an existing task, is local and reversible, needs no schema, permission, or API change, fits inside the current ticket's tests, and introduces no new workflow concept.
+16. Hold three lightweight visual checkpoints: after issues 01–05; after issue 06; and after issues 07–09. Each checkpoint presents concise before/after evidence for owner feedback rather than requiring approval for every component.
+17. Do not leave an active hosted state silently unfinished. Any accepted exception names the exact state, rationale, owner, creation and expiry dates, tracking issue, and removal condition.
+18. Live cutover requires green required CI, complete synthetic visual evidence, critical WebKit mobile/PWA checks, supplemental iPhone Simulator receipts, final owner preview approval, and an identified rollback revision. Owner greenlight is the sole publication trigger.
 
 ## Delivery order
 
-Issues are blocker-ordered implementation units inside one entire-product release scope and one long-lived rework branch. Each issue ends in a reviewable commit and appropriate visual checkpoint. Issue 01 establishes enforceable surface ownership. Issues 02–05 prove the foundations on the highest-risk defects. Issues 06–08 cover the remaining active hosted product and lock the system. Issue 09 adds non-blocking simulator receipts. A final coherent PR targets `main` only after the internal sequence passes.
+Issues are blocker-ordered implementation units inside one entire-product release scope and one long-lived rework branch. Each issue ends in a reviewable commit. Checkpoint 1 follows issues 01–05, checkpoint 2 follows issue 06, and checkpoint 3 follows issues 07–09. Issue 01 establishes enforceable surface ownership. Issues 02–05 prove the foundations on the highest-risk defects. Issue 06 covers the core authoring product. Issues 07–08 cover secondary hosted surfaces and lock the system. Issue 09 adds non-blocking simulator receipts. A final coherent PR targets `main` only after the internal sequence passes.
 
 No issue authorizes deployment. Live publication or release qualification requires separate explicit authority.
 
@@ -48,6 +53,8 @@ No issue authorizes deployment. Live publication or release qualification requir
 - New raw visual values and unregistered visible surfaces cannot silently bypass CI.
 - Baseline changes are understandable and owner-approved without unnecessary ceremony.
 - Simulator evidence is supplemental and clearly distinguished from physical-device evidence.
+- Every active hosted state has owner-reviewed evidence or an explicitly accepted, owned, and expiring exception.
+- The final preview identifies its exact candidate revision and rollback revision before publication is proposed.
 
 ## Out of scope
 

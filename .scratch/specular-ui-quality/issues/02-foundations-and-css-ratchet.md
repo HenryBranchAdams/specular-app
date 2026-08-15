@@ -1,6 +1,7 @@
 # 02 — Establish visual foundations and the CSS ratchet
 
-Status: needs-triage
+Status: ready-for-agent
+Blocked by: 01
 
 ## Outcome
 

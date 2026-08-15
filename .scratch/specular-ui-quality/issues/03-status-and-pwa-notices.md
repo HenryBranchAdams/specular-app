@@ -1,6 +1,7 @@
 # 03 — Separate status semantics and repair PWA notices
 
-Status: needs-triage
+Status: ready-for-agent
+Blocked by: 02
 
 ## Outcome
 

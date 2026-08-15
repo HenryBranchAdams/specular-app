@@ -1,6 +1,7 @@
 # 01 — Establish the UI surface registry and state harness
 
-Status: needs-triage
+Status: ready-for-agent
+Blocked by: none
 
 ## Outcome
 
