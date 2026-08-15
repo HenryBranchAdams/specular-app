@@ -24,6 +24,7 @@ jobs:
       - run: npm run typecheck
       - run: npm run validate:ui-inventory
       - run: npm run ui:manifest:check
+      - run: npm run ui:exceptions:check
       - run: npm run test:coverage
       - run: npm run eval
       - run: npm run build

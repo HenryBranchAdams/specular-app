@@ -35,6 +35,7 @@ describe('UI quality workflow contract', () => {
     expect(workflow).toContain('- run: npm run lint:styles');
     expect(workflow).toContain('- run: npm run validate:ui-inventory');
     expect(workflow).toContain('- run: npm run ui:manifest:check');
+    expect(workflow).toContain('- run: npm run ui:exceptions:check');
     expect(workflow).toContain('- run: npm run test:ui');
     expect(workflow).toContain('artifacts/ui-quality/');
   });

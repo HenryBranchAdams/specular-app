@@ -1,0 +1,5 @@
+{
+  "$schema": "../../docs/validation/ui-quality-exceptions.schema.json",
+  "schemaVersion": 1,
+  "exceptions": []
+}

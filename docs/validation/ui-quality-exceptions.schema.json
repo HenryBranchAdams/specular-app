@@ -1,0 +1,35 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://specular.local/schemas/ui-quality-exceptions.schema.json",
+  "title": "Specular UI quality exception registry",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["$schema", "schemaVersion", "exceptions"],
+  "properties": {
+    "$schema": { "const": "../../docs/validation/ui-quality-exceptions.schema.json" },
+    "schemaVersion": { "const": 1 },
+    "exceptions": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "owner", "rationale", "affectedStates", "issue", "createdAt", "expiresAt", "removalCondition"],
+        "properties": {
+          "id": { "type": "string", "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$" },
+          "owner": { "type": "string", "minLength": 1 },
+          "rationale": { "type": "string", "minLength": 10 },
+          "affectedStates": {
+            "type": "array",
+            "minItems": 1,
+            "uniqueItems": true,
+            "items": { "type": "string", "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*:[a-z0-9]+(?:-[a-z0-9]+)*$" }
+          },
+          "issue": { "type": "string", "pattern": "^\\.scratch/specular-ui-quality/issues/[a-z0-9-]+\\.md$" },
+          "createdAt": { "type": "string", "format": "date" },
+          "expiresAt": { "type": "string", "format": "date" },
+          "removalCondition": { "type": "string", "minLength": 10 }
+        }
+      }
+    }
+  }
+}
