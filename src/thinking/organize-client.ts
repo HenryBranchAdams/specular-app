@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { protectedFetch } from '../auth/protected-fetch';
 import { thoughtKindSchema, type ThoughtKind } from './model';
 
 const organizationResponseSchema = z.object({
@@ -30,7 +31,7 @@ export interface Organizer {
 
 export class HttpOrganizer implements Organizer {
   async organize(input: OrganizationRequest): Promise<OrganizationResult> {
-    const response = await fetch('/api/organize', {
+    const response = await protectedFetch('/api/organize', {
       method: 'POST',
       headers: { 'content-type': 'application/json', 'x-specular-intent': 'mutate' },
       body: JSON.stringify(input),

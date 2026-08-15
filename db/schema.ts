@@ -19,6 +19,8 @@ export const inferenceDailyUsage = sqliteTable('inference_daily_usage', {
   usageDay: text('usage_day').primaryKey(),
   globalCount: integer('global_count').notNull(),
   tenantCounts: text('tenant_counts').notNull(),
+  lastReservationId: text('last_reservation_id'),
+  lastReservationAccepted: integer('last_reservation_accepted').notNull().default(0),
 });
 
 export const publishedSnapshotsV2 = sqliteTable('published_snapshots_v2', {

@@ -1,10 +1,17 @@
 import { useState } from 'react';
 import { useRegisterSW } from 'virtual:pwa-register/react';
+import { prepareForApplicationReload } from '../pwa/reload-safety';
 
 type PromptKind = 'offline' | 'update' | null;
 
-export function PwaUpdatePrompt() {
+export function PwaUpdatePrompt({
+  prepareForUpdate = prepareForApplicationReload,
+}: {
+  prepareForUpdate?: () => Promise<void>;
+}) {
   const [promptKind, setPromptKind] = useState<PromptKind>(null);
+  const [updateError, setUpdateError] = useState<string | null>(null);
+  const [updating, setUpdating] = useState(false);
   const { updateServiceWorker } = useRegisterSW({
     onNeedRefresh() {
       setPromptKind('update');
@@ -32,16 +39,25 @@ export function PwaUpdatePrompt() {
           ? 'A new version of Specular is ready.'
           : 'Specular is ready to work offline.'}
       </p>
+      {updateError === null ? null : <p className="pwa-prompt__error" role="alert">{updateError}</p>}
       <div className="pwa-prompt__actions">
         {updateAvailable ? (
           <button
             className="pwa-prompt__button pwa-prompt__button--primary touch-target"
+            disabled={updating}
             onClick={() => {
-              void updateServiceWorker(true);
+              setUpdating(true);
+              setUpdateError(null);
+              void prepareForUpdate()
+                .then(() => updateServiceWorker(true))
+                .catch((error: unknown) => {
+                  setUpdateError(error instanceof Error ? error.message : 'Specular could not safely prepare this update.');
+                })
+                .finally(() => { setUpdating(false); });
             }}
             type="button"
           >
-            Update now
+            {updating ? 'Preparing…' : 'Update now'}
           </button>
         ) : null}
         <button

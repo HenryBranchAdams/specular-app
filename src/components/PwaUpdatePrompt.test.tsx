@@ -4,12 +4,14 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import {
   act,
+  cleanup,
   render,
   screen,
 } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import {
   beforeEach,
+  afterEach,
   describe,
   expect,
   it,
@@ -59,6 +61,8 @@ function announceOfflineReady(): void {
 }
 
 describe('PwaUpdatePrompt', () => {
+  afterEach(() => { cleanup(); });
+
   beforeEach(() => {
     pwaHarness.options = undefined;
     pwaHarness.updateServiceWorker.mockClear();
@@ -119,5 +123,32 @@ describe('PwaUpdatePrompt', () => {
 
     expect(screen.queryByRole('status', { name: 'Offline availability' })).not.toBeInTheDocument();
     expect(pwaHarness.updateServiceWorker).not.toHaveBeenCalled();
+  });
+
+  it('does not activate an update until the workspace safety check succeeds', async () => {
+    const user = userEvent.setup();
+    let release: (() => void) | undefined;
+    const prepareForUpdate = vi.fn(() => new Promise<void>((resolve) => { release = resolve; }));
+    render(<PwaUpdatePrompt prepareForUpdate={prepareForUpdate} />);
+    announceNeedRefresh();
+
+    await user.click(screen.getByRole('button', { name: 'Update now' }));
+    expect(screen.getByRole('button', { name: 'Preparing…' })).toBeDisabled();
+    expect(pwaHarness.updateServiceWorker).not.toHaveBeenCalled();
+
+    release?.();
+    await vi.waitFor(() => { expect(pwaHarness.updateServiceWorker).toHaveBeenCalledWith(true); });
+  });
+
+  it('keeps the current version active when workspace preparation fails', async () => {
+    const user = userEvent.setup();
+    render(<PwaUpdatePrompt prepareForUpdate={() => Promise.reject(new Error('Pause dictation before updating.'))} />);
+    announceNeedRefresh();
+
+    await user.click(screen.getByRole('button', { name: 'Update now' }));
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('Pause dictation before updating.');
+    expect(pwaHarness.updateServiceWorker).not.toHaveBeenCalled();
+    expect(screen.getByRole('button', { name: 'Update now' })).toBeEnabled();
   });
 });

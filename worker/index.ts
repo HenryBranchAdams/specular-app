@@ -388,7 +388,9 @@ async function handleTranscription(request: Request, env: Env): Promise<Response
     const allowed = new Set(['audio/webm', 'audio/ogg', 'audio/mpeg', 'audio/mp4', 'audio/wav', 'audio/x-m4a', 'audio/flac']);
     const mime = value.type.split(';', 1)[0]?.toLowerCase() ?? '';
     if (!allowed.has(mime)) return json({ error: 'invalid_audio' }, 400);
-    audio = new Blob([await value.arrayBuffer()], { type: value.type });
+    const audioBytes = await value.arrayBuffer();
+    if (audioBytes.byteLength === 0) return json({ error: 'invalid_audio' }, 400);
+    audio = new Blob([audioBytes], { type: value.type });
   } catch {
     return json({ error: 'invalid_audio' }, 400);
   }
@@ -473,19 +475,9 @@ async function handleCleanup(request: Request, env: Env): Promise<Response> {
   }
 }
 
-let shareSchemaReady: Promise<void> | undefined;
-let workspaceSchemaReady: Promise<void> | undefined;
-let usageSchemaReady: Promise<void> | undefined;
-
 function utcDay(now = Date.now()): string { return new Date(now).toISOString().slice(0, 10); }
 
 async function allowInference(tenantId: string, env: Env): Promise<boolean> {
-  usageSchemaReady ??= env.DB.prepare(`CREATE TABLE IF NOT EXISTS inference_daily_usage (
-    usage_day TEXT PRIMARY KEY NOT NULL,
-    global_count INTEGER NOT NULL,
-    tenant_counts TEXT NOT NULL
-  )`).run().then(() => undefined);
-  await usageSchemaReady;
   const day = utcDay();
   const configured = Number(env.INFERENCE_DAILY_LIMIT ?? '500');
   const limit = Number.isInteger(configured) && configured > 0 ? configured : 500;
@@ -493,42 +485,58 @@ async function allowInference(tenantId: string, env: Env): Promise<boolean> {
   const globalLimit = Number.isInteger(configuredGlobal) && configuredGlobal > 0 ? configuredGlobal : 5_000;
   const digest = await globalThis.crypto.subtle.digest('SHA-256', new TextEncoder().encode(tenantId));
   const tenantKey = [...new Uint8Array(digest)].map((value) => value.toString(16).padStart(2, '0')).join('');
-  const tenantPath = `$.${tenantKey}`;
-  const reserved = await env.DB.prepare(`INSERT INTO inference_daily_usage (usage_day, global_count, tenant_counts)
-    VALUES (?, 1, json_object(?, 1))
-    ON CONFLICT (usage_day) DO UPDATE SET
-      global_count = inference_daily_usage.global_count + 1,
-      tenant_counts = json_set(
-        inference_daily_usage.tenant_counts,
-        ?,
-        COALESCE(json_extract(inference_daily_usage.tenant_counts, ?), 0) + 1
-      )
-    WHERE inference_daily_usage.global_count < ?
-      AND COALESCE(json_extract(inference_daily_usage.tenant_counts, ?), 0) < ?
-    RETURNING global_count`)
-    .bind(day, tenantKey, tenantPath, tenantPath, globalLimit, tenantPath, limit)
-    .first<{ global_count: number }>();
-  return reserved !== null;
-}
-
-function ensureWorkspaceSchema(database: D1DatabaseLike): Promise<void> {
-  workspaceSchemaReady ??= Promise.all([
-    database.prepare(`CREATE TABLE IF NOT EXISTS author_workspaces (
-      tenant_id TEXT PRIMARY KEY NOT NULL,
-      cache_namespace TEXT NOT NULL UNIQUE,
-      revision INTEGER NOT NULL,
-      state TEXT NOT NULL,
-      updated_at INTEGER NOT NULL
-    )`).run(),
-    database.prepare(`CREATE TABLE IF NOT EXISTS workspace_mutations (
-      tenant_id TEXT NOT NULL,
-      mutation_id TEXT NOT NULL,
-      revision INTEGER NOT NULL,
-      created_at INTEGER NOT NULL,
-      PRIMARY KEY (tenant_id, mutation_id)
-    )`).run(),
-  ]).then(() => undefined);
-  return workspaceSchemaReady;
+  const tenantPath = `$."${tenantKey}"`;
+  const reservationId = globalThis.crypto.randomUUID();
+  const current = await env.DB.prepare(`SELECT global_count,
+      COALESCE(json_extract(tenant_counts, ?), 0) AS tenant_count
+    FROM inference_daily_usage WHERE usage_day = ?`)
+    .bind(tenantPath, day)
+    .first<{ global_count: number; tenant_count: number }>();
+  if (current !== null && (current.global_count >= globalLimit || current.tenant_count >= limit)) return false;
+  const updateReservation = () => env.DB.prepare(`UPDATE inference_daily_usage SET
+      global_count = CASE
+        WHEN inference_daily_usage.global_count < ?
+          AND COALESCE(json_extract(inference_daily_usage.tenant_counts, ?), 0) < ?
+        THEN inference_daily_usage.global_count + 1
+        ELSE inference_daily_usage.global_count
+      END,
+      tenant_counts = CASE
+        WHEN inference_daily_usage.global_count < ?
+          AND COALESCE(json_extract(inference_daily_usage.tenant_counts, ?), 0) < ?
+        THEN json_set(
+          inference_daily_usage.tenant_counts,
+          ?,
+          COALESCE(json_extract(inference_daily_usage.tenant_counts, ?), 0) + 1
+        )
+        ELSE inference_daily_usage.tenant_counts
+      END,
+      last_reservation_id = ?,
+      last_reservation_accepted = CASE
+        WHEN inference_daily_usage.global_count < ?
+          AND COALESCE(json_extract(inference_daily_usage.tenant_counts, ?), 0) < ?
+        THEN 1
+        ELSE 0
+      END
+    WHERE usage_day = ?
+    RETURNING last_reservation_id, last_reservation_accepted`)
+    .bind(
+      globalLimit, tenantPath, limit,
+      globalLimit, tenantPath, limit, tenantPath, tenantPath,
+      reservationId, globalLimit, tenantPath, limit, day,
+    )
+    .first<{ last_reservation_id: string | null; last_reservation_accepted: number }>();
+  let reserved = await updateReservation();
+  if (reserved === null) {
+    reserved = await env.DB.prepare(`INSERT INTO inference_daily_usage
+      (usage_day, global_count, tenant_counts, last_reservation_id, last_reservation_accepted)
+      VALUES (?, 1, json_object(?, 1), ?, 1)
+      ON CONFLICT (usage_day) DO NOTHING
+      RETURNING last_reservation_id, last_reservation_accepted`)
+      .bind(day, tenantKey, reservationId)
+      .first<{ last_reservation_id: string | null; last_reservation_accepted: number }>();
+    reserved ??= await updateReservation();
+  }
+  return reserved?.last_reservation_id === reservationId && reserved.last_reservation_accepted === 1;
 }
 
 interface WorkspaceRow {
@@ -538,7 +546,6 @@ interface WorkspaceRow {
 }
 
 async function workspaceFor(tenantId: string, env: Env): Promise<WorkspaceRow> {
-  await ensureWorkspaceSchema(env.DB);
   const existing = await env.DB.prepare('SELECT cache_namespace, revision, state FROM author_workspaces WHERE tenant_id = ?')
     .bind(tenantId).first<WorkspaceRow>();
   if (existing !== null) return existing;
@@ -611,17 +618,6 @@ async function saveWorkspace(request: Request, tenantId: string, env: Env): Prom
   return json({ revision, idempotent: false });
 }
 
-function ensureShareSchema(database: D1DatabaseLike): Promise<void> {
-  shareSchemaReady ??= database.prepare(`CREATE TABLE IF NOT EXISTS published_snapshots_v2 (
-    slug TEXT PRIMARY KEY NOT NULL,
-    owner_id TEXT NOT NULL,
-    payload TEXT NOT NULL,
-    created_at INTEGER NOT NULL,
-    revoked_at INTEGER
-  )`).run().then(() => undefined);
-  return shareSchemaReady;
-}
-
 function randomSlug(): string {
   return globalThis.crypto.randomUUID().replaceAll('-', '').slice(0, 16);
 }
@@ -633,7 +629,6 @@ async function createShare(request: Request, tenantId: string, env: Env): Promis
   } catch {
     return json({ error: 'invalid_snapshot' }, 400);
   }
-  await ensureShareSchema(env.DB);
   const slug = randomSlug();
   await env.DB.prepare('INSERT INTO published_snapshots_v2 (slug, owner_id, payload, created_at, revoked_at) VALUES (?, ?, ?, ?, NULL)')
     .bind(slug, tenantId, JSON.stringify(snapshot), Date.now())
@@ -642,7 +637,6 @@ async function createShare(request: Request, tenantId: string, env: Env): Promis
 }
 
 async function readShare(slug: string, env: Env): Promise<Response> {
-  await ensureShareSchema(env.DB);
   const row = await env.DB.prepare('SELECT payload FROM published_snapshots_v2 WHERE slug = ? AND revoked_at IS NULL')
     .bind(slug)
     .first<{ payload: string }>();
@@ -655,7 +649,6 @@ async function readShare(slug: string, env: Env): Promise<Response> {
 }
 
 async function revokeShare(slug: string, tenantId: string, env: Env): Promise<Response> {
-  await ensureShareSchema(env.DB);
   const row = await env.DB.prepare('SELECT owner_id FROM published_snapshots_v2 WHERE slug = ? AND revoked_at IS NULL')
     .bind(slug).first<{ owner_id: string }>();
   if (row?.owner_id !== tenantId) return json({ error: 'not_found' }, 404);
@@ -665,7 +658,6 @@ async function revokeShare(slug: string, tenantId: string, env: Env): Promise<Re
 }
 
 async function listShares(tenantId: string, env: Env): Promise<Response> {
-  await ensureShareSchema(env.DB);
   const rows = await env.DB.prepare('SELECT slug, payload, created_at, revoked_at FROM published_snapshots_v2 WHERE owner_id = ? ORDER BY created_at DESC')
     .bind(tenantId).all<{ slug: string; payload: string; created_at: number; revoked_at: number | null }>();
   return json({ snapshots: (rows.results ?? []).map((row) => {
@@ -676,7 +668,6 @@ async function listShares(tenantId: string, env: Env): Promise<Response> {
 
 async function downloadArchive(tenantId: string, env: Env): Promise<Response> {
   const row = await workspaceFor(tenantId, env);
-  await ensureShareSchema(env.DB);
   const workspace = workspaceStateSchema.parse(JSON.parse(row.state) as unknown);
   const snapshots = await env.DB.prepare('SELECT slug, payload, created_at, revoked_at FROM published_snapshots_v2 WHERE owner_id = ? ORDER BY created_at ASC')
     .bind(tenantId).all<{ slug: string; payload: string; created_at: number; revoked_at: number | null }>();
@@ -703,7 +694,6 @@ async function downloadArchive(tenantId: string, env: Env): Promise<Response> {
 }
 
 async function deleteAccount(tenantId: string, env: Env): Promise<Response> {
-  await Promise.all([ensureWorkspaceSchema(env.DB), ensureShareSchema(env.DB)]);
   await env.DB.prepare('DELETE FROM published_snapshots_v2 WHERE owner_id = ?').bind(tenantId).run();
   await env.DB.prepare('DELETE FROM workspace_mutations WHERE tenant_id = ?').bind(tenantId).run();
   await env.DB.prepare('DELETE FROM author_workspaces WHERE tenant_id = ?').bind(tenantId).run();

@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { protectedFetch } from '../auth/protected-fetch';
 import {
   contextScopeSchema,
   reflectionMoveSchema,
@@ -50,7 +51,7 @@ export class HttpReflector implements Reflector {
       scope: contextScopeSchema.parse(input.scope),
       move: reflectionMoveSchema.parse(input.move),
     };
-    const response = await fetch('/api/reflect', {
+    const response = await protectedFetch('/api/reflect', {
       method: 'POST',
       headers: { 'content-type': 'application/json', 'x-specular-intent': 'mutate' },
       body: JSON.stringify(request),

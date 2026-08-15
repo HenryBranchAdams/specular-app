@@ -6,6 +6,8 @@ class MemoryDatabase {
   readonly workspaces = new Map<string, { cache_namespace: string; revision: number; state: string }>();
   readonly mutations = new Map<string, number>();
   readonly usage = new Map<string, number>();
+  readonly usageReservations = new Map<string, string>();
+  readonly usageDays = new Set<string>();
   failNextWorkspaceUpdate = false;
   failNextMutationInsert = false;
   raceWithIdenticalWorkspaceUpdate = false;
@@ -61,16 +63,38 @@ class MemoryDatabase {
           const revision = this.mutations.get(`${String(tenantId)}:${String(mutationId)}`);
           return Promise.resolve((revision === undefined ? null : { revision }) as T | null);
         }
-        if (query.startsWith('INSERT INTO inference_daily_usage')) {
-          const [day, tenantKey, , , globalMaximum, , tenantMaximum] = readValues();
+        if (query.startsWith('SELECT global_count')) {
+          const [tenantPath, day] = readValues();
+          if (!this.usageDays.has(String(day))) return Promise.resolve(null);
+          return Promise.resolve({
+            global_count: this.usage.get(`__global__:${String(day)}`) ?? 0,
+            tenant_count: this.usage.get(`${String(tenantPath)}:${String(day)}`) ?? 0,
+          } as T);
+        }
+        if (query.startsWith('UPDATE inference_daily_usage SET')) {
+          const [globalMaximum, tenantPath, tenantMaximum, , , , , , reservationId, , , , day] = readValues();
+          if (!this.usageDays.has(String(day))) return Promise.resolve(null);
           const globalKey = `__global__:${String(day)}`;
-          const accountKey = `${String(tenantKey)}:${String(day)}`;
+          const accountKey = `${String(tenantPath)}:${String(day)}`;
+          const reservationKey = `__reservation__:${String(day)}`;
           const globalCount = this.usage.get(globalKey) ?? 0;
           const tenantCount = this.usage.get(accountKey) ?? 0;
-          if (globalCount >= Number(globalMaximum) || tenantCount >= Number(tenantMaximum)) return Promise.resolve(null);
-          this.usage.set(globalKey, globalCount + 1);
-          this.usage.set(accountKey, tenantCount + 1);
-          return Promise.resolve({ global_count: globalCount + 1 } as T);
+          const accepted = globalCount < Number(globalMaximum) && tenantCount < Number(tenantMaximum);
+          if (accepted) {
+            this.usage.set(globalKey, globalCount + 1);
+            this.usage.set(accountKey, tenantCount + 1);
+          }
+          this.usageReservations.set(reservationKey, String(reservationId));
+          return Promise.resolve({ last_reservation_id: String(reservationId), last_reservation_accepted: accepted ? 1 : 0 } as T);
+        }
+        if (query.startsWith('INSERT INTO inference_daily_usage')) {
+          const [day, tenantKey, reservationId] = readValues();
+          if (this.usageDays.has(String(day))) return Promise.resolve(null);
+          this.usageDays.add(String(day));
+          this.usage.set(`__global__:${String(day)}`, 1);
+          this.usage.set(`$."${String(tenantKey)}":${String(day)}`, 1);
+          this.usageReservations.set(`__reservation__:${String(day)}`, String(reservationId));
+          return Promise.resolve({ last_reservation_id: String(reservationId), last_reservation_accepted: 1 } as T);
         }
         return Promise.resolve(null);
       },
@@ -447,11 +471,16 @@ describe('Sites worker', () => {
     expect(result.sources[0]).toMatchObject({ title: 'Source—title', excerpt: 'Quoted—material.' });
   });
 
-  it('proxies a bounded audio checkpoint to the transcription endpoint', async () => {
+  it.each([
+    ['audio/webm', 'webm'],
+    ['audio/wav', 'wav'],
+    ['audio/mpeg', 'mp3'],
+    ['audio/x-m4a', 'm4a'],
+  ] as const)('proxies a bounded synthetic %s checkpoint with the expected provider filename', async (mime, extension) => {
     const provider = vi.fn<(input: RequestInfo | URL, init?: RequestInit) => Promise<Response>>(() => Promise.resolve(new Response(JSON.stringify({ text: 'A checkpointed thought.' }), { status: 200 })));
     vi.stubGlobal('fetch', provider);
     const form = new FormData();
-    form.set('audio', new Blob(['audio'], { type: 'audio/webm' }), 'checkpoint.webm');
+    form.set('audio', new Blob(['synthetic-audio-fixture'], { type: mime }), `fixture.${extension}`);
 
     const response = await worker.fetch(protectedRequest('/api/dictation/transcribe', {
       method: 'POST',
@@ -464,7 +493,54 @@ describe('Sites worker', () => {
     const providerForm = provider.mock.calls[0]?.[1]?.body as FormData;
     expect(providerForm.get('model')).toBe('gpt-4o-mini-transcribe');
     expect(providerForm.get('language')).toBe('en');
-    expect(providerForm.get('file')).toBeInstanceOf(Blob);
+    const providerFile = providerForm.get('file');
+    expect(providerFile).toBeInstanceOf(Blob);
+    expect((providerFile as File).name).toBe(`checkpoint.${extension}`);
+  });
+
+  it.each([
+    ['unsupported', new Blob(['synthetic'], { type: 'application/octet-stream' })],
+  ])('rejects %s synthetic audio before provider work', async (_case, audio) => {
+    const provider = vi.fn();
+    vi.stubGlobal('fetch', provider);
+    const form = new FormData();
+    form.set('audio', audio, 'fixture.bin');
+
+    const response = await worker.fetch(protectedRequest('/api/dictation/transcribe', {
+      method: 'POST',
+      body: form,
+    }), { ...environment(), OPENAI_API_KEY: 'test-key' });
+
+    expect(response.status).toBe(400);
+    await expect(response.json()).resolves.toEqual({ error: 'invalid_audio' });
+    expect(provider).not.toHaveBeenCalled();
+  });
+
+  it('rejects a missing audio checkpoint before provider work', async () => {
+    const provider = vi.fn();
+    vi.stubGlobal('fetch', provider);
+    const response = await worker.fetch(protectedRequest('/api/dictation/transcribe', {
+      method: 'POST',
+      body: new FormData(),
+    }), { ...environment(), OPENAI_API_KEY: 'test-key' });
+
+    expect(response.status).toBe(400);
+    await expect(response.json()).resolves.toEqual({ error: 'invalid_audio' });
+    expect(provider).not.toHaveBeenCalled();
+  });
+
+  it('reports a provider failure without inventing an empty transcript', async () => {
+    vi.stubGlobal('fetch', vi.fn(() => Promise.resolve(new Response('unavailable', { status: 500 }))));
+    const form = new FormData();
+    form.set('audio', new Blob(['synthetic'], { type: 'audio/webm' }), 'fixture.webm');
+
+    const response = await worker.fetch(protectedRequest('/api/dictation/transcribe', {
+      method: 'POST',
+      body: form,
+    }), { ...environment(), OPENAI_API_KEY: 'test-key' });
+
+    expect(response.status).toBe(503);
+    await expect(response.json()).resolves.toEqual({ error: 'provider_unavailable' });
   });
 
   it('treats an empty provider transcript as a successful silent checkpoint', async () => {

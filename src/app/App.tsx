@@ -34,6 +34,7 @@ import {
 import { HttpDictationService, type DictationService } from '../dictation/client';
 import { clearCachedSession, type AuthenticatedSession } from '../auth/session';
 import { deleteHostedAccount, downloadAccountArchive, downloadDeviceRecovery } from '../account/client';
+import { registerReloadSafetyCheck } from '../pwa/reload-safety';
 import { downloadMarkdown } from '../thinking/export';
 import {
   createInitialWorkspace,
@@ -81,9 +82,16 @@ export interface AppProps {
   runtime?: unknown;
   dictationController?: DictationController;
   dictationService?: DictationService;
+  navigateToSignOut?: (url: string) => void;
 }
 
 type WorkspaceView = 'document' | 'connections';
+
+function isEmptyInterruptedDictation(draft: DictationDraft | null): boolean {
+  return draft?.status === 'interrupted'
+    && draft.content.trim().length === 0
+    && draft.verbatim.trim().length === 0;
+}
 
 const MOVE_LABELS: Readonly<Record<Exclude<ReflectionMove, 'calibrate'>, string>> = {
   reflect: 'Reflect',
@@ -417,7 +425,7 @@ function BlockEditor({
             <small>This remains a private draft until you choose Keep.</small>
             <details className="dictation-privacy">
               <summary>Voice privacy</summary>
-              <p>Audio is sent in short checkpoints for transcription, then discarded rather than saved in your workspace. Faithful cleanup sends the transcript through a separate text request that may be retained for abuse monitoring for up to 30 days under standard API controls. Choose Verbatim in Library to skip cleanup.</p>
+              <p>Dictation currently expects English. Audio is sent in short checkpoints for transcription, then discarded rather than saved in your workspace. Faithful cleanup sends the transcript through a separate text request that may be retained for abuse monitoring for up to 30 days under standard API controls. Choose Verbatim in Library to skip cleanup.</p>
             </details>
           </section>
         )}
@@ -767,6 +775,7 @@ export function App({
   dictationService,
   initialState,
   organizer = new HttpOrganizer(),
+  navigateToSignOut = (url: string) => { globalThis.location.replace(url); },
   reflector = new HttpReflector(),
   sharePublisher = new HttpSharePublisher(),
   session,
@@ -794,6 +803,7 @@ export function App({
   const [dictationError, setDictationError] = useState<string | null>(null);
   const [storageError, setStorageError] = useState<string | null>(null);
   const [accountError, setAccountError] = useState<string | null>(null);
+  const [deviceRecoveryFingerprint, setDeviceRecoveryFingerprint] = useState<string | null>(null);
   const [synchronizationStatus, setSynchronizationStatus] = useState<'synchronized' | 'synchronizing' | 'unsynced' | 'locked'>('synchronizing');
   const [pendingDeleteBlockId, setPendingDeleteBlockId] = useState<string | null>(null);
   const [organizationBusy, setOrganizationBusy] = useState(false);
@@ -877,6 +887,19 @@ export function App({
     return () => { globalThis.removeEventListener('online', retrySynchronization); };
   }, [initialState, session]);
 
+  useEffect(() => registerReloadSafetyCheck(async () => {
+    const draft = dictationDraftRef.current;
+    if (draft !== null && ['requesting', 'recording', 'processing'].includes(draft.status)) {
+      throw new Error('Pause or finish dictation before updating so no spoken words are lost.');
+    }
+    const store = storeRef.current;
+    if (store === null) return;
+    await store.save(stateRef.current);
+    if (store.currentStatus?.() === 'locked') {
+      throw new Error('Sign in again before updating Specular.');
+    }
+  }), []);
+
   useEffect(() => {
     if (!libraryOpen || session === undefined) return;
     let active = true;
@@ -904,22 +927,35 @@ export function App({
     if (session === undefined) return;
     setAccountError(null);
     const store = storeRef.current;
-    try {
-      if (store !== null) {
+    const hasCurrentRecovery = deviceRecoveryFingerprint === JSON.stringify(state);
+    if (store !== null) {
+      try {
         await store.save(state);
         const status = store.currentStatus?.();
-        if (status !== undefined && status !== 'synchronized') {
+        if (status !== undefined && status !== 'synchronized' && !hasCurrentRecovery) {
           setAccountError('Sign out is paused because some writing is only on this device. Reconnect until Saved appears, or download this device recovery first.');
           return;
         }
-        await store.clear?.();
+      } catch {
+        if (!hasCurrentRecovery) {
+          setAccountError('Sign out is paused because Specular could not safely save this workspace. Download this device recovery before leaving.');
+          return;
+        }
       }
-    } catch {
-      setAccountError('Sign out is paused because Specular could not safely save this workspace. Download this device recovery before leaving.');
-      return;
+      try {
+        await store.clear?.();
+      } catch {
+        setAccountError('Sign out is paused because Specular could not clear this device cache. Try again before leaving.');
+        return;
+      }
     }
     clearCachedSession();
-    globalThis.location.assign(session.signOutUrl);
+    navigateToSignOut(session.signOutUrl);
+  };
+
+  const downloadCurrentDeviceRecovery = () => {
+    downloadDeviceRecovery(state);
+    setDeviceRecoveryFingerprint(JSON.stringify(state));
   };
 
   const downloadHostedArchive = async () => {
@@ -1339,8 +1375,13 @@ export function App({
 
   const deleteBlock = (blockId: string) => {
     if (state.dictationDraft?.blockId === blockId) {
-      globalThis.alert('Keep or cancel the dictation draft before deleting this block.');
-      return;
+      if (!isEmptyInterruptedDictation(state.dictationDraft)) {
+        globalThis.alert('Keep or cancel the dictation draft before deleting this block.');
+        return;
+      }
+      dictationControllerRef.current.cancel();
+      setDictationError(null);
+      setDictationDraft(null);
     }
     const block = state.blocks.find((item) => item.id === blockId);
     if (block === undefined) return;
@@ -1402,7 +1443,7 @@ export function App({
   };
 
   const requestDeleteBlock = (blockId: string) => {
-    if (state.dictationDraft?.blockId === blockId) {
+    if (state.dictationDraft?.blockId === blockId && !isEmptyInterruptedDictation(state.dictationDraft)) {
       globalThis.alert('Keep or cancel the dictation draft before deleting this block.');
       return;
     }
@@ -1634,7 +1675,7 @@ export function App({
                   ))}
                 </div>
                 <button onClick={() => { void downloadHostedArchive(); }} type="button">Download archive</button>
-                <button onClick={() => { downloadDeviceRecovery(state); }} type="button">Download this device recovery</button>
+                <button onClick={downloadCurrentDeviceRecovery} type="button">Download this device recovery</button>
                 <button className="danger-action" onClick={() => { void deleteAccount(); }} type="button">Delete account data</button>
               </section>
             )}

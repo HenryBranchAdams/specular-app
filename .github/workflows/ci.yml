@@ -21,12 +21,32 @@ jobs:
       - run: npm ci
       - run: npm run lint
       - run: npm run typecheck
-      - run: npm run test
+      - run: npm run test:coverage
       - run: npm run eval
       - run: npm run build
       - run: npm run build:server
+      - run: npm run test:integration
+      - run: npm run verify:pwa
       - run: npm run audit
       - run: node scripts/verify-production.mjs
+      - run: npm run evidence:validate
+      - name: Upload compact validation evidence
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: validation-evidence
+          path: artifacts/release-evidence/validate.json
+          retention-days: 7
+      - name: Upload validation diagnostics
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: validation-diagnostics
+          path: |
+            coverage/
+            artifacts/release-evidence/
+          if-no-files-found: ignore
+          retention-days: 30
 
   browser-and-lighthouse:
     runs-on: ubuntu-latest
@@ -40,6 +60,7 @@ jobs:
       - run: npm ci
       - run: npx playwright install --with-deps chromium webkit
       - run: npm run test:e2e
+      - run: npm run test:e2e:integrated
       - name: Lighthouse production gate
         shell: bash
         run: |
@@ -47,6 +68,26 @@ jobs:
           export CHROME_PATH="$(find "$HOME/.cache/ms-playwright" -type f -path '*/chrome-linux*/chrome' | head -n 1)"
           test -n "$CHROME_PATH"
           npx lhci autorun
+      - run: npm run evidence:browser
+      - name: Upload compact browser evidence
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: browser-evidence
+          path: artifacts/release-evidence/browser.json
+          retention-days: 7
+      - name: Upload browser diagnostics
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: browser-diagnostics
+          path: |
+            playwright-report/
+            playwright-report-integrated/
+            test-results/
+            .lighthouseci/
+          if-no-files-found: ignore
+          retention-days: 30
 
   container:
     runs-on: ubuntu-latest

@@ -1,4 +1,5 @@
 import { openDB, type IDBPDatabase } from 'idb';
+import { protectedFetch } from '../auth/protected-fetch';
 import { workspaceStateSchema, type WorkspaceState } from '../thinking/model';
 import { recoverWorkspaceState, type WorkspaceStore } from '../thinking/persistence';
 
@@ -313,7 +314,7 @@ class IndexedDbWorkspaceCache implements WorkspaceCache {
 
 class HttpWorkspaceRemote implements WorkspaceRemote {
   async load(): Promise<{ revision: number; workspace: WorkspaceState }> {
-    const response = await fetch('/api/workspace');
+    const response = await protectedFetch('/api/workspace', undefined, [401, 410]);
     if (!response.ok) throw new Error(response.status === 401 ? 'authentication_lost' : 'workspace_unavailable');
     const body = await response.json() as { revision?: unknown; workspace?: unknown };
     if (!Number.isInteger(body.revision)) throw new Error('invalid_workspace_response');
@@ -321,11 +322,11 @@ class HttpWorkspaceRemote implements WorkspaceRemote {
   }
 
   async save(request: { cacheNamespace: string; baseRevision: number; mutationId: string; workspace: WorkspaceState }) {
-    const response = await fetch('/api/workspace', {
+    const response = await protectedFetch('/api/workspace', {
       method: 'PUT',
       headers: { 'content-type': 'application/json', 'x-specular-intent': 'mutate' },
       body: JSON.stringify(request),
-    });
+    }, [401, 410]);
     const body = await response.json() as { revision?: unknown; workspace?: unknown };
     if (response.status === 409 && Number.isInteger(body.revision)) {
       return { kind: 'conflict' as const, revision: body.revision as number, workspace: workspaceStateSchema.parse(body.workspace) };

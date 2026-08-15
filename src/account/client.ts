@@ -1,4 +1,5 @@
 import type { WorkspaceState } from '../thinking/model';
+import { protectedFetch } from '../auth/protected-fetch';
 
 function downloadJson(filename: string, value: unknown): void {
   const blob = new Blob([JSON.stringify(value, null, 2)], { type: 'application/json' });
@@ -11,7 +12,7 @@ function downloadJson(filename: string, value: unknown): void {
 }
 
 export async function downloadAccountArchive(): Promise<void> {
-  const response = await fetch('/api/archive');
+  const response = await protectedFetch('/api/archive');
   if (!response.ok) throw new Error('Specular could not prepare your archive.');
   const blob = await response.blob();
   const url = URL.createObjectURL(blob);
@@ -32,7 +33,7 @@ export function downloadDeviceRecovery(workspace: WorkspaceState): void {
 }
 
 export async function deleteHostedAccount(): Promise<void> {
-  const response = await fetch('/api/account', {
+  const response = await protectedFetch('/api/account', {
     method: 'DELETE',
     headers: { 'x-specular-intent': 'mutate' },
   });

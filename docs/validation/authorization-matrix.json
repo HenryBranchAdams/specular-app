@@ -1,0 +1,21 @@
+{
+  "version": 1,
+  "identitySource": "oai-authenticated-user-id",
+  "default": "deny",
+  "principals": ["anonymous", "author", "other-signed-in-author"],
+  "rules": [
+    { "method": "GET", "path": "/api/session", "anonymous": 401, "author": 200, "scope": "own-account" },
+    { "method": "GET", "path": "/api/workspace", "anonymous": 401, "author": 200, "scope": "own-account" },
+    { "method": "PUT", "path": "/api/workspace", "anonymous": 401, "author": 200, "scope": "own-cache-namespace-and-revision", "mutationOriginRequired": true },
+    { "method": "GET", "path": "/api/archive", "anonymous": 401, "author": 200, "scope": "own-account" },
+    { "method": "DELETE", "path": "/api/account", "anonymous": 401, "author": 204, "scope": "own-account", "mutationOriginRequired": true },
+    { "method": "GET", "path": "/api/shares", "anonymous": 401, "author": 200, "scope": "owned-snapshots" },
+    { "method": "POST", "path": "/api/shares", "anonymous": 401, "author": 201, "scope": "own-account", "mutationOriginRequired": true },
+    { "method": "GET", "path": "/api/shares/{slug}", "anonymous": 401, "author": 200, "scope": "any-signed-in-capability-holder" },
+    { "method": "DELETE", "path": "/api/shares/{slug}", "anonymous": 401, "author": 204, "other-signed-in-author": 404, "scope": "owner-only", "mutationOriginRequired": true },
+    { "method": "POST", "path": "/api/reflect", "anonymous": 401, "author": "provider-result", "scope": "own-usage-budget", "mutationOriginRequired": true },
+    { "method": "POST", "path": "/api/organize", "anonymous": 401, "author": "provider-result", "scope": "own-usage-budget", "mutationOriginRequired": true },
+    { "method": "POST", "path": "/api/dictation/transcribe", "anonymous": 401, "author": "provider-result", "scope": "own-usage-budget", "mutationOriginRequired": true },
+    { "method": "POST", "path": "/api/dictation/cleanup", "anonymous": 401, "author": "provider-result", "scope": "own-usage-budget", "mutationOriginRequired": true }
+  ]
+}

@@ -1,10 +1,14 @@
-import { useEffect, useState, type ReactNode } from 'react';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { LoaderCircle } from 'lucide-react';
 import {
+  clearCachedSession,
   loadBrowserSession,
   type AuthenticatedSession,
   type BrowserSession,
 } from './session';
+import { subscribeAuthenticationLost } from './authentication-loss';
+
+const SIGN_IN_URL = '/signin-with-chatgpt?return_to=%2F';
 
 export interface SessionBoundaryProps {
   children: (session: AuthenticatedSession) => ReactNode;
@@ -19,18 +23,22 @@ export function SessionBoundary({
 }: SessionBoundaryProps) {
   const [session, setSession] = useState<BrowserSession | null>(null);
   const [failed, setFailed] = useState(false);
+  const verifiedSession = useRef<AuthenticatedSession | null>(null);
 
   useEffect(() => {
     let active = true;
     let verification: Promise<void> | null = null;
     const verify = () => {
       if (verification !== null) return;
+      if (!globalThis.navigator.onLine && verifiedSession.current !== null) return;
       verification = loadSession().then((next) => {
         if (!active) return;
+        verifiedSession.current = next.authenticated ? next : null;
         setFailed(false);
         setSession(next);
       }).catch(() => {
         if (!active) return;
+        verifiedSession.current = null;
         setSession(null);
         setFailed(true);
       }).finally(() => { verification = null; });
@@ -38,15 +46,28 @@ export function SessionBoundary({
     const verifyWhenVisible = () => {
       if (globalThis.document.visibilityState === 'visible') verify();
     };
+    const authenticationLost = () => {
+      clearCachedSession();
+      verifiedSession.current = null;
+      setFailed(false);
+      setSession({ authenticated: false, signInUrl: SIGN_IN_URL });
+      verify();
+    };
     verify();
     const interval = globalThis.setInterval(verify, revalidationIntervalMs);
     globalThis.addEventListener('focus', verify);
+    globalThis.addEventListener('online', verify);
+    globalThis.addEventListener('pageshow', verify);
     globalThis.document.addEventListener('visibilitychange', verifyWhenVisible);
+    const unsubscribeAuthenticationLost = subscribeAuthenticationLost(authenticationLost);
     return () => {
       active = false;
       globalThis.clearInterval(interval);
       globalThis.removeEventListener('focus', verify);
+      globalThis.removeEventListener('online', verify);
+      globalThis.removeEventListener('pageshow', verify);
       globalThis.document.removeEventListener('visibilitychange', verifyWhenVisible);
+      unsubscribeAuthenticationLost();
     };
   }, [loadSession, revalidationIntervalMs]);
 

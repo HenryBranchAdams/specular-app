@@ -1,0 +1,48 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://specular.local/schemas/release-evidence.schema.json",
+  "title": "Specular release evidence manifest",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "commitSha",
+    "generatedAt",
+    "lane",
+    "status",
+    "suites",
+    "evidenceLevels",
+    "dataPolicy",
+    "liveQualification",
+    "deferredDecisionRegister",
+    "excludedPlatforms"
+  ],
+  "properties": {
+    "schemaVersion": { "const": 1 },
+    "commitSha": { "type": "string", "pattern": "^[0-9a-f]{40}$" },
+    "generatedAt": { "type": "string", "format": "date-time" },
+    "lane": { "type": "string", "minLength": 1 },
+    "status": { "const": "passed" },
+    "suites": { "type": "array", "minItems": 1, "items": { "type": "string", "minLength": 1 }, "uniqueItems": true },
+    "evidenceLevels": {
+      "type": "array",
+      "minItems": 1,
+      "uniqueItems": true,
+      "items": {
+        "enum": ["unit", "synthetic-ui", "worker-d1", "integrated-browser", "pwa-chromium", "webkit-simulation", "live-sites", "physical-ios"]
+      }
+    },
+    "dataPolicy": { "const": "synthetic-only-no-author-content" },
+    "liveQualification": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["completed", "checklist"],
+      "properties": {
+        "completed": { "type": "boolean" },
+        "checklist": { "const": "docs/validation/multitenancy-live-checklist.md" }
+      }
+    },
+    "deferredDecisionRegister": { "const": "docs/validation/deferred-test-infrastructure.md" },
+    "excludedPlatforms": { "type": "array", "items": { "type": "string" }, "uniqueItems": true }
+  }
+}

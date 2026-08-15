@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { reportIfAuthenticationLost } from '../auth/protected-fetch';
 
 const transcriptResponseSchema = z.object({ transcript: z.string().max(40_000) }).strict();
 const cleanupResponseSchema = z.object({ cleaned: z.string().max(40_000) }).strict();
@@ -49,7 +50,7 @@ export class HttpDictationService implements DictationService {
     const controller = new AbortController();
     const timeout = globalThis.setTimeout(() => { controller.abort(); }, 45_000);
     try {
-      return await this.fetcher(input, { ...init, signal: controller.signal });
+      return reportIfAuthenticationLost(await this.fetcher(input, { ...init, signal: controller.signal }));
     } catch (error) {
       if (controller.signal.aborted) throw new Error('The dictation request timed out. Your checkpointed text remains in the draft.', { cause: error });
       throw error;

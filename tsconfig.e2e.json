@@ -14,5 +14,5 @@
     "types": ["node", "@playwright/test"],
     "skipLibCheck": true
   },
-  "include": ["playwright.config.ts", "tests/e2e/**/*.ts"]
+  "include": ["playwright.config.ts", "playwright.integrated.config.ts", "vitest.integration.config.ts", "tests/e2e/**/*.ts", "tests/integration-browser/**/*.ts", "tests/integration/**/*.ts"]
 }

@@ -1,4 +1,5 @@
 import type { SourceReference } from './model';
+import { protectedFetch } from '../auth/protected-fetch';
 
 export interface PublishedBlock {
   id: string;
@@ -26,7 +27,7 @@ export interface SharePublisher {
 
 export class HttpSharePublisher implements SharePublisher {
   async publish(snapshot: PublishedSnapshot): Promise<{ url: string }> {
-    const response = await fetch('/api/shares', {
+    const response = await protectedFetch('/api/shares', {
       method: 'POST',
       headers: { 'content-type': 'application/json', 'x-specular-intent': 'mutate' },
       body: JSON.stringify(snapshot),
@@ -40,7 +41,7 @@ export class HttpSharePublisher implements SharePublisher {
 }
 
 export async function loadPublishedSnapshot(slug: string): Promise<PublishedSnapshot> {
-  const response = await fetch(`/api/shares/${encodeURIComponent(slug)}`);
+  const response = await protectedFetch(`/api/shares/${encodeURIComponent(slug)}`);
   const body = await response.json() as unknown;
   if (!response.ok || typeof body !== 'object' || body === null) {
     throw new Error('This snapshot is unavailable.');
@@ -55,7 +56,7 @@ export async function revokePublishedSnapshot(url: string): Promise<void> {
 }
 
 export async function listPublishedSnapshots(): Promise<HostedSnapshotSummary[]> {
-  const response = await fetch('/api/shares');
+  const response = await protectedFetch('/api/shares');
   const body = await response.json() as { snapshots?: unknown };
   if (!response.ok || !Array.isArray(body.snapshots)) throw new Error('Specular could not load your published links.');
   return body.snapshots.flatMap((item) => {
@@ -73,7 +74,7 @@ export async function listPublishedSnapshots(): Promise<HostedSnapshotSummary[]>
 
 export async function revokeHostedSnapshot(slug: string): Promise<void> {
   if (!/^[a-z0-9]{16}$/u.test(slug)) throw new Error('This published link cannot be revoked.');
-  const response = await fetch(`/api/shares/${slug}`, {
+  const response = await protectedFetch(`/api/shares/${slug}`, {
     method: 'DELETE',
     headers: { 'x-specular-intent': 'mutate' },
   });

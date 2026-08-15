@@ -220,6 +220,16 @@ describe('workspace synchronization', () => {
       'North (Conflict copy)',
     ]);
     expect(server.blocks.some((block) => block.content === 'North prose')).toBe(true);
+
+    north.close();
+    south.close();
+    const reopened = new WorkspaceSynchronization('account:one', cache, remote, () => 'reopened-copy');
+    const durable = await reopened.load();
+    expect(durable.documents.map((document) => document.title)).toEqual([
+      'South',
+      'North (Conflict copy)',
+    ]);
+    expect(cache.values.get('account:one')).toMatchObject({ pending: false, revision });
   });
 
   it('keeps reconciling when a conflict-copy retry races with another tab', async () => {

@@ -7,6 +7,7 @@ import type { DictationService } from '../dictation/client';
 import type { Reflector } from '../thinking/reflect-client';
 import type { Organizer } from '../thinking/organize-client';
 import type { SharePublisher } from '../thinking/share-client';
+import { prepareForApplicationReload } from '../pwa/reload-safety';
 import { App } from './App';
 
 afterEach(() => { cleanup(); vi.useRealTimers(); vi.unstubAllGlobals(); });
@@ -99,6 +100,8 @@ describe('Specular thinking workspace', () => {
     expect(await screen.findByRole('textbox', { name: 'Dictation draft' })).toHaveValue('Um, a spoken thought without filler.');
     expect(canonical).toHaveValue('');
     expect(screen.getByRole('button', { name: 'Create snapshot' })).toBeDisabled();
+    await user.click(screen.getByText('Voice privacy'));
+    expect(screen.getByText(/Dictation currently expects English/u)).toBeVisible();
 
     await user.click(screen.getByRole('button', { name: 'Pause dictation' }));
     expect(screen.getByRole('textbox', { name: 'Dictation draft' })).not.toHaveAttribute('readonly');
@@ -109,6 +112,18 @@ describe('Specular thinking workspace', () => {
     await user.click(screen.getByRole('button', { name: 'Keep dictation' }));
     expect(canonical).toHaveValue('A spoken thought without filler.');
     expect(screen.queryByRole('textbox', { name: 'Dictation draft' })).not.toBeInTheDocument();
+  });
+
+  it('blocks application activation while active dictation still has uncheckpointed speech', async () => {
+    const user = userEvent.setup();
+    const controller = new FakeDictationController();
+    setup({ dictationController: controller, dictationService: { transcribe: vi.fn(), clean: vi.fn() } });
+    await user.click(screen.getByRole('button', { name: 'Start dictation' }));
+
+    await expect(prepareForApplicationReload()).rejects.toThrow('Pause or finish dictation before updating');
+
+    expect(controller.cancel).not.toHaveBeenCalled();
+    expect(screen.getByText('Recording · keep Specular open')).toBeVisible();
   });
 
   it('never presents an empty transcription as a reviewable dictation', async () => {
@@ -125,6 +140,26 @@ describe('Specular thinking workspace', () => {
     expect(await screen.findByText('No speech was transcribed. Continue dictating and try again.')).toBeVisible();
     expect(screen.getByRole('button', { name: 'Continue dictating' })).toBeVisible();
     expect(screen.queryByRole('button', { name: 'Keep dictation' })).not.toBeInTheDocument();
+  });
+
+  it('lets the author delete a blank block after an empty dictation result', async () => {
+    const user = userEvent.setup();
+    const controller = new FakeDictationController();
+    const alert = vi.spyOn(globalThis, 'alert').mockImplementation(() => undefined);
+    setup({
+      dictationController: controller,
+      dictationService: { transcribe: vi.fn(), clean: vi.fn() },
+    });
+
+    await user.click(screen.getByRole('button', { name: 'Start dictation' }));
+    await user.click(screen.getByRole('button', { name: 'Finish dictation' }));
+    await screen.findByText('No speech was transcribed. Continue dictating and try again.');
+    await user.click(screen.getByRole('button', { name: 'Delete block' }));
+
+    expect(alert).not.toHaveBeenCalled();
+    expect(controller.cancel).toHaveBeenCalled();
+    expect(screen.queryByRole('textbox', { name: 'Dictation draft' })).not.toBeInTheDocument();
+    expect(screen.getAllByRole('textbox', { name: 'Thought writing block' })).toHaveLength(1);
   });
 
   it('uses a final checkpoint that arrives during Done instead of treating it as empty', async () => {
@@ -430,6 +465,93 @@ describe('Specular thinking workspace', () => {
 
     expect(await screen.findByRole('alert')).toHaveTextContent('Sign out is paused');
     expect(store.clear).not.toHaveBeenCalled();
+  });
+
+  it('lets the author sign out after downloading a current device recovery', async () => {
+    const user = userEvent.setup();
+    const workspace = createInitialWorkspace(1_800_000_000_000);
+    const navigateToSignOut = vi.fn();
+    vi.spyOn(globalThis.URL, 'createObjectURL').mockReturnValue('blob:recovery');
+    vi.spyOn(globalThis.URL, 'revokeObjectURL').mockImplementation(() => undefined);
+    vi.spyOn(globalThis.HTMLAnchorElement.prototype, 'click').mockImplementation(() => undefined);
+    const store = {
+      load: vi.fn(() => Promise.resolve(workspace)),
+      save: vi.fn(() => Promise.resolve(workspace)),
+      currentStatus: vi.fn(() => 'unsynced' as const),
+      subscribeStatus: vi.fn((listener: (status: 'unsynced') => void) => { listener('unsynced'); return () => undefined; }),
+      clear: vi.fn(() => Promise.resolve()),
+      close: vi.fn(() => undefined),
+    };
+    render(<App
+      navigateToSignOut={navigateToSignOut}
+      session={{ authenticated: true, email: 'writer@example.com', cacheNamespace: 'account:writer', signOutUrl: '/signout' }}
+      storeFactory={() => Promise.resolve(store)}
+    />);
+
+    await user.click(await screen.findByRole('button', { name: 'Library' }));
+    await user.click(screen.getByRole('button', { name: 'Download this device recovery' }));
+    await user.click(screen.getByRole('button', { name: 'Sign out' }));
+
+    expect(store.clear).toHaveBeenCalledOnce();
+    expect(navigateToSignOut).toHaveBeenCalledWith('/signout');
+    expect(screen.queryByText(/Sign out is paused/u)).not.toBeInTheDocument();
+  });
+
+  it('pauses sign out when writing changes after the device recovery download', async () => {
+    const user = userEvent.setup();
+    const workspace = createInitialWorkspace(1_800_000_000_000);
+    const navigateToSignOut = vi.fn();
+    vi.spyOn(globalThis.URL, 'createObjectURL').mockReturnValue('blob:recovery');
+    vi.spyOn(globalThis.URL, 'revokeObjectURL').mockImplementation(() => undefined);
+    vi.spyOn(globalThis.HTMLAnchorElement.prototype, 'click').mockImplementation(() => undefined);
+    const store = {
+      load: vi.fn(() => Promise.resolve(workspace)),
+      save: vi.fn((next: typeof workspace) => Promise.resolve(next)),
+      currentStatus: vi.fn(() => 'unsynced' as const),
+      subscribeStatus: vi.fn((listener: (status: 'unsynced') => void) => { listener('unsynced'); return () => undefined; }),
+      clear: vi.fn(() => Promise.resolve()),
+      close: vi.fn(() => undefined),
+    };
+    render(<App
+      navigateToSignOut={navigateToSignOut}
+      session={{ authenticated: true, email: 'writer@example.com', cacheNamespace: 'account:writer', signOutUrl: '/signout' }}
+      storeFactory={() => Promise.resolve(store)}
+    />);
+
+    await user.click(await screen.findByRole('button', { name: 'Library' }));
+    await user.click(screen.getByRole('button', { name: 'Download this device recovery' }));
+    await user.click(screen.getByRole('button', { name: 'Library' }));
+    await user.type(screen.getByRole('textbox', { name: 'Thought writing block' }), 'New writing after recovery.');
+    await user.click(screen.getByRole('button', { name: 'Sign out' }));
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('Sign out is paused');
+    expect(store.clear).not.toHaveBeenCalled();
+    expect(navigateToSignOut).not.toHaveBeenCalled();
+  });
+
+  it('does not leave the workspace when its device cache cannot be cleared', async () => {
+    const user = userEvent.setup();
+    const workspace = createInitialWorkspace(1_800_000_000_000);
+    const navigateToSignOut = vi.fn();
+    const store = {
+      load: vi.fn(() => Promise.resolve(workspace)),
+      save: vi.fn((next: typeof workspace) => Promise.resolve(next)),
+      currentStatus: vi.fn(() => 'synchronized' as const),
+      subscribeStatus: vi.fn((listener: (status: 'synchronized') => void) => { listener('synchronized'); return () => undefined; }),
+      clear: vi.fn(() => Promise.reject(new Error('clear failed'))),
+      close: vi.fn(() => undefined),
+    };
+    render(<App
+      navigateToSignOut={navigateToSignOut}
+      session={{ authenticated: true, email: 'writer@example.com', cacheNamespace: 'account:writer', signOutUrl: '/signout' }}
+      storeFactory={() => Promise.resolve(store)}
+    />);
+
+    await user.click(await screen.findByRole('button', { name: 'Sign out' }));
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('could not clear this device cache');
+    expect(store.clear).toHaveBeenCalledOnce();
+    expect(navigateToSignOut).not.toHaveBeenCalled();
   });
 
   it('does not download a stale hosted archive while writing is unsynchronized', async () => {
