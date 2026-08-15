@@ -35,6 +35,7 @@ import { HttpDictationService, type DictationService } from '../dictation/client
 import { clearCachedSession, type AuthenticatedSession } from '../auth/session';
 import { deleteHostedAccount, downloadAccountArchive, downloadDeviceRecovery } from '../account/client';
 import { registerReloadSafetyCheck } from '../pwa/reload-safety';
+import { releaseServiceWorkersForPlatformAuth } from '../pwa/platform-auth-navigation';
 import { downloadMarkdown } from '../thinking/export';
 import {
   createInitialWorkspace,
@@ -82,7 +83,7 @@ export interface AppProps {
   runtime?: unknown;
   dictationController?: DictationController;
   dictationService?: DictationService;
-  navigateToSignOut?: (url: string) => void;
+  navigateToSignOut?: (url: string) => void | Promise<void>;
 }
 
 type WorkspaceView = 'document' | 'connections';
@@ -950,7 +951,8 @@ export function App({
       }
     }
     clearCachedSession();
-    navigateToSignOut(session.signOutUrl);
+    await releaseServiceWorkersForPlatformAuth();
+    await navigateToSignOut(session.signOutUrl);
   };
 
   const downloadCurrentDeviceRecovery = () => {
@@ -1001,7 +1003,8 @@ export function App({
       await deleteHostedAccount();
       await storeRef.current?.clear?.();
       clearCachedSession();
-      globalThis.location.assign(session.signOutUrl);
+      await releaseServiceWorkersForPlatformAuth();
+      await navigateToSignOut(session.signOutUrl);
     } catch (error) {
       setAccountError(error instanceof Error ? error.message : 'Specular could not delete this account workspace.');
     }
