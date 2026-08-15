@@ -158,7 +158,7 @@ export class WorkspaceSynchronization implements WorkspaceStore {
   private status: SynchronizationStatus = 'synchronizing';
   private readonly listeners = new Set<(status: SynchronizationStatus) => void>();
   private cacheQueue: Promise<void> = Promise.resolve();
-  private syncQueue: Promise<void> = Promise.resolve();
+  private syncQueue: Promise<WorkspaceState | undefined> = Promise.resolve(undefined);
   private saveSequence = 0;
 
   constructor(
@@ -209,8 +209,11 @@ export class WorkspaceSynchronization implements WorkspaceStore {
     }
   }
 
-  async save(state: WorkspaceState): Promise<void> {
+  async save(state: WorkspaceState): Promise<WorkspaceState | undefined> {
     const workspace = workspaceStateSchema.parse(state);
+    if (this.status === 'synchronized' && this.base !== null && same(workspace, this.base)) {
+      return workspace;
+    }
     const mutationId = globalThis.crypto.randomUUID();
     const sequence = ++this.saveSequence;
     const cacheOperation = this.cacheQueue.then(async () => {
@@ -220,42 +223,61 @@ export class WorkspaceSynchronization implements WorkspaceStore {
     this.cacheQueue = cacheOperation.catch(() => undefined);
     const syncOperation = this.syncQueue.then(async () => {
       await cacheOperation;
-      await this.push(workspace, mutationId, sequence);
+      return this.push(workspace, mutationId, sequence);
     });
     this.syncQueue = syncOperation.catch(() => undefined);
     return syncOperation;
   }
 
-  private async push(workspace: WorkspaceState, mutationId: string, sequence: number): Promise<void> {
+  private async push(workspace: WorkspaceState, mutationId: string, sequence: number): Promise<WorkspaceState | undefined> {
+    let candidate = workspace;
+    let candidateBase = structuredClone(this.base ?? workspace);
+    let candidateRevision = this.revision;
+    let candidateMutationId = mutationId;
     try {
-      const result = await this.remote.save({ cacheNamespace: this.namespace, baseRevision: this.revision, mutationId, workspace });
-      if (result.kind === 'saved') {
-        this.revision = result.revision;
-        this.base = structuredClone(workspace);
-        if (sequence === this.saveSequence) {
-          await this.cache.put(this.namespace, { workspace, baseWorkspace: workspace, revision: result.revision, pending: false, mutationId: null });
-          this.setStatus('synchronized');
+      for (let attempt = 0; attempt < 16; attempt += 1) {
+        const result = await this.remote.save({
+          cacheNamespace: this.namespace,
+          baseRevision: candidateRevision,
+          mutationId: candidateMutationId,
+          workspace: candidate,
+        });
+        if (result.kind === 'saved') {
+          this.revision = result.revision;
+          this.base = structuredClone(candidate);
+          if (sequence === this.saveSequence) {
+            await this.cache.put(this.namespace, { workspace: candidate, baseWorkspace: candidate, revision: result.revision, pending: false, mutationId: null });
+            this.setStatus('synchronized');
+            return candidate;
+          }
+          return;
         }
-        return;
-      }
 
-      const reconciled = reconcileWorkspaces(result.workspace, workspace, this.base ?? result.workspace, this.id);
-      const retryId = globalThis.crypto.randomUUID();
-      if (sequence === this.saveSequence) {
-        await this.cache.put(this.namespace, { workspace: reconciled, baseWorkspace: result.workspace, revision: result.revision, pending: true, mutationId: retryId });
+        candidate = reconcileWorkspaces(result.workspace, candidate, candidateBase, this.id);
+        candidateBase = structuredClone(result.workspace);
+        candidateRevision = result.revision;
+        candidateMutationId = globalThis.crypto.randomUUID();
+        this.revision = result.revision;
+        this.base = structuredClone(result.workspace);
+        if (sequence === this.saveSequence) {
+          await this.cache.put(this.namespace, {
+            workspace: candidate,
+            baseWorkspace: result.workspace,
+            revision: result.revision,
+            pending: true,
+            mutationId: candidateMutationId,
+          });
+        }
       }
-      const retried = await this.remote.save({ cacheNamespace: this.namespace, baseRevision: result.revision, mutationId: retryId, workspace: reconciled });
-      if (retried.kind === 'conflict') throw new Error('repeated_conflict');
-      this.revision = retried.revision;
-      this.base = structuredClone(reconciled);
       if (sequence === this.saveSequence) {
-        await this.cache.put(this.namespace, { workspace: reconciled, baseWorkspace: reconciled, revision: retried.revision, pending: false, mutationId: null });
-        this.setStatus('synchronized');
+        this.setStatus('unsynced');
+        return candidate;
       }
     } catch (error) {
       if (sequence === this.saveSequence || authenticationLost(error)) {
         this.setStatus(authenticationLost(error) ? 'locked' : 'unsynced');
       }
+      if (sequence === this.saveSequence) return candidate;
     }
   }
 

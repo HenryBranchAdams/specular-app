@@ -841,7 +841,13 @@ export function App({
     const timeout = window.setTimeout(() => {
       const store = storeRef.current;
       if (store === null) return;
-      void store.save(state).catch(() => {
+      void store.save(state).then((savedState) => {
+        if (savedState === undefined) return;
+        setState((current) => {
+          if (JSON.stringify(current) !== JSON.stringify(state)) return current;
+          return JSON.stringify(current) === JSON.stringify(savedState) ? current : savedState;
+        });
+      }).catch(() => {
         setStorageError('Local saving failed. Dictation has stopped; copy any provisional text before leaving this page.');
         const draft = dictationDraftRef.current;
         if (draft === null || !['requesting', 'recording', 'processing'].includes(draft.status)) return;

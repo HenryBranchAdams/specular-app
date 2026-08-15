@@ -205,7 +205,7 @@ describe('Specular thinking workspace', () => {
     const store = {
       load: vi.fn(() => Promise.resolve(workspace)),
       save: vi.fn((next: typeof workspace) => next.dictationDraft === null
-        ? Promise.resolve()
+        ? Promise.resolve(next)
         : Promise.reject(new Error('quota exceeded'))),
       close: vi.fn(() => undefined),
     };
@@ -415,7 +415,7 @@ describe('Specular thinking workspace', () => {
     const workspace = createInitialWorkspace(1_800_000_000_000);
     const store = {
       load: vi.fn(() => Promise.resolve(workspace)),
-      save: vi.fn(() => Promise.resolve()),
+      save: vi.fn(() => Promise.resolve(workspace)),
       currentStatus: vi.fn(() => 'unsynced' as const),
       subscribeStatus: vi.fn((listener: (status: 'unsynced') => void) => { listener('unsynced'); return () => undefined; }),
       clear: vi.fn(() => Promise.resolve()),
@@ -439,7 +439,7 @@ describe('Specular thinking workspace', () => {
     vi.stubGlobal('fetch', fetchMock);
     const store = {
       load: vi.fn(() => Promise.resolve(workspace)),
-      save: vi.fn(() => Promise.resolve()),
+      save: vi.fn(() => Promise.resolve(workspace)),
       currentStatus: vi.fn(() => 'unsynced' as const),
       subscribeStatus: vi.fn((listener: (status: 'unsynced') => void) => { listener('unsynced'); return () => undefined; }),
       clear: vi.fn(() => Promise.resolve()),
@@ -469,6 +469,50 @@ describe('Specular thinking workspace', () => {
     expect(screen.queryByText(/preserved conflict copy/iu)).not.toBeInTheDocument();
   });
 
+  it('adopts a conflict copy returned by synchronization instead of autosaving stale prose over it', async () => {
+    const user = userEvent.setup();
+    const base = createInitialWorkspace(1_800_000_000_000);
+    const document = base.documents[0];
+    const block = base.blocks[0];
+    if (document === undefined || block === undefined) throw new Error('Expected an initial workspace.');
+    const reconciled = structuredClone(base);
+    reconciled.blocks[0] = { ...block, content: 'South branch' };
+    reconciled.documents.push({
+      ...document,
+      id: 'document:conflict',
+      title: 'Untitled thought (Conflict copy)',
+      titleSource: 'author',
+      conflictOfDocumentId: document.id,
+      conflictStatus: 'open',
+      blockIds: ['block:conflict'],
+    });
+    reconciled.blocks.push({ ...block, id: 'block:conflict', documentId: 'document:conflict', content: 'North branch' });
+    const store = {
+      load: vi.fn(() => Promise.resolve(base)),
+      save: vi.fn((workspace: typeof base) => Promise.resolve(
+        workspace.blocks[0]?.content === 'North branch' ? reconciled : workspace,
+      )),
+      currentStatus: vi.fn(() => 'synchronized' as const),
+      subscribeStatus: vi.fn((listener: (status: 'synchronized') => void) => { listener('synchronized'); return () => undefined; }),
+      close: vi.fn(() => undefined),
+    };
+    render(<App
+      session={{ authenticated: true, email: 'writer@example.com', cacheNamespace: 'account:writer', signOutUrl: '/signout' }}
+      storeFactory={() => Promise.resolve(store)}
+    />);
+    const writing = await screen.findByRole('textbox', { name: 'Thought writing block' });
+
+    await user.type(writing, 'North branch');
+    await vi.waitFor(() => {
+      expect(store.save.mock.calls.some(([workspace]) => (
+        workspace.blocks.some((savedBlock) => savedBlock.content === 'North branch')
+      ))).toBe(true);
+    });
+    await user.click(screen.getByRole('button', { name: 'Library' }));
+
+    expect(await screen.findByRole('button', { name: /Untitled thought \(Conflict copy\)/u })).toBeVisible();
+  });
+
   it('lists and revokes the current author account hosted snapshots', async () => {
     const user = userEvent.setup();
     const workspace = createInitialWorkspace(1_800_000_000_000);
@@ -490,7 +534,7 @@ describe('Specular thinking workspace', () => {
     vi.stubGlobal('fetch', fetchMock);
     const store = {
       load: vi.fn(() => Promise.resolve(workspace)),
-      save: vi.fn(() => Promise.resolve()),
+      save: vi.fn(() => Promise.resolve(workspace)),
       currentStatus: vi.fn(() => 'synchronized' as const),
       subscribeStatus: vi.fn((listener: (status: 'synchronized') => void) => { listener('synchronized'); return () => undefined; }),
       clear: vi.fn(() => Promise.resolve()),

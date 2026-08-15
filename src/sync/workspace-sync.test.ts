@@ -64,6 +64,22 @@ describe('workspace synchronization', () => {
     await expect(new WorkspaceSynchronization('account:two', cache, offline).load()).resolves.toMatchObject({ documents: [expect.objectContaining({ title: 'Two' })] });
   });
 
+  it('does not write an unchanged workspace merely because another tab opened it', async () => {
+    const cache = new MemoryCache();
+    const base = titled('Base');
+    const save = vi.fn<WorkspaceRemote['save']>();
+    const sync = new WorkspaceSynchronization('account:one', cache, {
+      load: () => Promise.resolve({ revision: 4, workspace: base }),
+      save,
+    });
+    const loaded = await sync.load();
+
+    await sync.save(loaded);
+
+    expect(save).not.toHaveBeenCalled();
+    expect(sync.currentStatus()).toBe('synchronized');
+  });
+
   it('preserves concurrent prose as a visibly named conflict copy', async () => {
     const cache = new MemoryCache();
     const base = titled('Base');
@@ -158,6 +174,89 @@ describe('workspace synchronization', () => {
 
     expect(bases).toEqual([0, 1]);
     expect(cache.values.get('account:one')?.workspace.documents[0]?.title).toBe('Second fast edit');
+  });
+
+  it('preserves both branches when two tabs save the same base revision concurrently', async () => {
+    const cache = new MemoryCache();
+    const base = titled('Base');
+    let server = structuredClone(base);
+    let revision = 1;
+    const pending: {
+      request: Parameters<WorkspaceRemote['save']>[0];
+      resolve: (result: Awaited<ReturnType<WorkspaceRemote['save']>>) => void;
+    }[] = [];
+    const remote: WorkspaceRemote = {
+      load: () => Promise.resolve({ revision, workspace: structuredClone(server) }),
+      save: (request) => {
+        if (pending.length >= 2) {
+          if (request.baseRevision !== revision) {
+            return Promise.resolve({ kind: 'conflict' as const, revision, workspace: structuredClone(server) });
+          }
+          server = structuredClone(request.workspace);
+          revision += 1;
+          return Promise.resolve({ kind: 'saved' as const, revision });
+        }
+        return new Promise((resolve) => {
+          pending.push({ request, resolve });
+          if (pending.length !== 2) return;
+          const winner = pending.find((entry) => entry.request.workspace.documents[0]?.title === 'South');
+          const loser = pending.find((entry) => entry !== winner);
+          if (winner === undefined || loser === undefined) throw new Error('fixture');
+          server = structuredClone(winner.request.workspace);
+          revision += 1;
+          winner.resolve({ kind: 'saved', revision });
+          loser.resolve({ kind: 'conflict', revision, workspace: structuredClone(server) });
+        });
+      },
+    };
+    const north = new WorkspaceSynchronization('account:one', cache, remote, () => 'north-copy');
+    const south = new WorkspaceSynchronization('account:one', cache, remote, () => 'south-copy');
+    await Promise.all([north.load(), south.load()]);
+
+    await Promise.all([north.save(retitle(base, 'North')), south.save(retitle(base, 'South'))]);
+
+    expect(server.documents.map((document) => document.title)).toEqual([
+      'South',
+      'North (Conflict copy)',
+    ]);
+    expect(server.blocks.some((block) => block.content === 'North prose')).toBe(true);
+  });
+
+  it('keeps reconciling when a conflict-copy retry races with another tab', async () => {
+    const cache = new MemoryCache();
+    const base = titled('Base');
+    const local = retitle(base, 'North');
+    const firstWinner = retitle(base, 'South');
+    const secondWinner = retitle(base, 'South again');
+    let calls = 0;
+    let server = structuredClone(firstWinner);
+    const remote: WorkspaceRemote = {
+      load: () => Promise.resolve({ revision: 1, workspace: structuredClone(base) }),
+      save: (request) => {
+        calls += 1;
+        if (calls === 1) {
+          server = structuredClone(firstWinner);
+          return Promise.resolve({ kind: 'conflict' as const, revision: 2, workspace: structuredClone(server) });
+        }
+        if (calls === 2) {
+          server = structuredClone(secondWinner);
+          return Promise.resolve({ kind: 'conflict' as const, revision: 3, workspace: structuredClone(server) });
+        }
+        server = structuredClone(request.workspace);
+        return Promise.resolve({ kind: 'saved' as const, revision: 4 });
+      },
+    };
+    const sync = new WorkspaceSynchronization('account:one', cache, remote, () => 'north-copy');
+    await sync.load();
+
+    await sync.save(local);
+
+    expect(calls).toBe(3);
+    expect(sync.currentStatus()).toBe('synchronized');
+    expect(server.documents.map((document) => document.title)).toEqual([
+      'South again',
+      'North (Conflict copy)',
+    ]);
   });
 
   it('reconciles a pending device edit against a newer hosted revision after reconnect', async () => {

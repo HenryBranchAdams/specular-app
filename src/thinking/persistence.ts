@@ -11,7 +11,7 @@ const WORKSPACE_KEY = 'thinking-workspace-v1';
 
 export interface WorkspaceStore {
   load(): Promise<WorkspaceState>;
-  save(state: WorkspaceState): Promise<void>;
+  save(state: WorkspaceState): Promise<WorkspaceState | undefined>;
   subscribeStatus?(listener: (status: 'synchronized' | 'synchronizing' | 'unsynced' | 'locked') => void): () => void;
   currentStatus?(): 'synchronized' | 'synchronizing' | 'unsynced' | 'locked';
   clear?(): Promise<void>;
@@ -44,9 +44,10 @@ class IndexedDbWorkspaceStore implements WorkspaceStore {
     return parsed.success ? recoverWorkspaceState(parsed.data) : createInitialWorkspace();
   }
 
-  async save(state: WorkspaceState): Promise<void> {
+  async save(state: WorkspaceState): Promise<WorkspaceState> {
     const parsed = workspaceStateSchema.parse(state);
     await this.repositories.preferences.put(WORKSPACE_KEY, parsed);
+    return parsed;
   }
 
   close(): void {
