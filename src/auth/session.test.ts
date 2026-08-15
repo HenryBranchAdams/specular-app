@@ -37,4 +37,16 @@ describe('browser session verification', () => {
     await expect(loadBrowserSession()).resolves.toMatchObject({ authenticated: false });
     expect(globalThis.localStorage.getItem('specular-authenticated-session')).toBeNull();
   });
+
+  it('accepts a successful synthetic anonymous session without opening private content', async () => {
+    vi.stubGlobal('fetch', vi.fn(() => Promise.resolve(new Response(JSON.stringify({
+      authenticated: false,
+      signInUrl: '/signin-with-chatgpt?return_to=%2F',
+    }), { status: 200, headers: { 'content-type': 'application/json' } }))));
+
+    await expect(loadBrowserSession()).resolves.toEqual({
+      authenticated: false,
+      signInUrl: '/signin-with-chatgpt?return_to=%2F',
+    });
+  });
 });

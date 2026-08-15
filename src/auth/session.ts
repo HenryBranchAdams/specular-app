@@ -11,6 +11,10 @@ const anonymousSessionSchema = z.object({
   authenticated: z.literal(false),
   signInUrl: z.string().startsWith('/'),
 }).strict();
+const browserSessionSchema = z.discriminatedUnion('authenticated', [
+  authenticatedSessionSchema,
+  anonymousSessionSchema,
+]);
 
 export type AuthenticatedSession = z.infer<typeof authenticatedSessionSchema>;
 export type BrowserSession = AuthenticatedSession | z.infer<typeof anonymousSessionSchema>;
@@ -23,7 +27,7 @@ export async function loadBrowserSession(): Promise<BrowserSession> {
   const body = await response.json() as unknown;
   if (response.ok) {
     clearCachedSession();
-    return authenticatedSessionSchema.parse(body);
+    return browserSessionSchema.parse(body);
   }
   if (response.status === 401) {
     clearCachedSession();

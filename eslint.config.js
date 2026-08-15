@@ -23,6 +23,7 @@ export default tseslint.config(
       'coverage',
       'artifacts',
       'public',
+      'storybook-static',
       'test-results',
     ],
   },

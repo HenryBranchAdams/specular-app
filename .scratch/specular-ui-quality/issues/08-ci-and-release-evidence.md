@@ -3,6 +3,10 @@
 Status: ready-for-agent
 Blocked by: 07
 
+## Progress
+
+- 2026-08-15: repaired the pre-existing Lighthouse runner failure with an explicit hosted-Chromium launch flag and a deterministic, compressed, fail-closed anonymous fixture over the emitted client build. Ticket completion remains blocked by 07 because canonical visual baselines and release evidence depend on the approved final surface.
+
 ## Outcome
 
 Turn the approved UI contract into a lightweight, enforceable quality ratchet.

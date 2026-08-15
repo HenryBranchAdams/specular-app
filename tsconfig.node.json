@@ -11,8 +11,8 @@
     "resolveJsonModule": true,
     "isolatedModules": true,
     "noEmit": true,
-    "types": ["node"],
+    "types": ["node", "vite/client"],
     "skipLibCheck": true
   },
-  "include": ["vite.config.ts", "vite.server.config.ts", "drizzle.config.ts", "db/**/*.ts", "server/**/*.ts", "worker/**/*.ts"]
+  "include": ["vite.config.ts", "vite.server.config.ts", "drizzle.config.ts", ".storybook/**/*.ts", "db/**/*.ts", "server/**/*.ts", "worker/**/*.ts"]
 }

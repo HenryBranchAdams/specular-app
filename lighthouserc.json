@@ -1,10 +1,13 @@
 {
   "ci": {
     "collect": {
-      "staticDistDir": "./dist",
-      "url": ["http://localhost/"],
+      "startServerCommand": "node scripts/lighthouse-server.mjs",
+      "startServerReadyPattern": "Lighthouse fixture ready",
+      "startServerReadyTimeout": 10000,
+      "url": ["http://127.0.0.1:4173/"],
       "numberOfRuns": 1,
       "settings": {
+        "chromeFlags": "--no-sandbox",
         "formFactor": "mobile",
         "screenEmulation": {
           "mobile": true,
