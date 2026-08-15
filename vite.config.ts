@@ -106,6 +106,7 @@ export default defineConfig(({ mode }) => {
       'tests/e2e/**',
       'tests/integration/**',
       'tests/integration-browser/**',
+      'tests/visual/**',
       '**/node_modules/**',
       '**/dist*/**',
     ],

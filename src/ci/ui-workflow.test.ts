@@ -43,4 +43,13 @@ describe('UI quality workflow contract', () => {
     expect(workflow).toContain('tests/visual/__screenshots__/');
     expect(workflow).toContain('artifacts/ui-quality/');
   });
+
+  it('keeps Playwright visual specifications out of the Vitest unit suite', () => {
+    const config = readFileSync(
+      join(process.cwd(), 'vite.config.ts'),
+      'utf8',
+    );
+
+    expect(config).toContain("'tests/visual/**'");
+  });
 });
