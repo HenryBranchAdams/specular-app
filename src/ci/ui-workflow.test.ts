@@ -51,5 +51,7 @@ describe('UI quality workflow contract', () => {
     );
 
     expect(config).toContain("'tests/visual/**'");
+    expect(config).toContain("'src/**/*.stories.ts'");
+    expect(config).toContain("'src/**/*.stories.tsx'");
   });
 });

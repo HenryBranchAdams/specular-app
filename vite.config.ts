@@ -124,7 +124,12 @@ export default defineConfig(({ mode }) => {
         'src/dictation/client.ts',
         'src/account/client.ts',
       ],
-      exclude: ['src/**/*.test.ts', 'src/**/*.test.tsx'],
+      exclude: [
+        'src/**/*.stories.ts',
+        'src/**/*.stories.tsx',
+        'src/**/*.test.ts',
+        'src/**/*.test.tsx',
+      ],
       thresholds: {
         'src/{account,auth,dictation,sync}/**': {
           statements: 84,
