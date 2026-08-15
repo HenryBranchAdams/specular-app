@@ -13,12 +13,13 @@
     "suites",
     "evidenceLevels",
     "dataPolicy",
+    "uiQuality",
     "liveQualification",
     "deferredDecisionRegister",
     "excludedPlatforms"
   ],
   "properties": {
-    "schemaVersion": { "const": 1 },
+    "schemaVersion": { "const": 2 },
     "commitSha": { "type": "string", "pattern": "^[0-9a-f]{40}$" },
     "generatedAt": { "type": "string", "format": "date-time" },
     "lane": { "type": "string", "minLength": 1 },
@@ -33,6 +34,64 @@
       }
     },
     "dataPolicy": { "const": "synthetic-only-no-author-content" },
+    "uiQuality": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["surfaceManifest", "baselineCommit", "baselines", "viewports", "accessibilityPolicy", "exceptions", "reviewerEvidence"],
+      "properties": {
+        "surfaceManifest": { "const": "docs/design/ui-surface-manifest.json" },
+        "baselineCommit": { "type": "string", "pattern": "^[0-9a-f]{40}$" },
+        "baselines": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": { "type": "string", "pattern": "^tests/visual/__screenshots__/[a-z0-9-]+\\.png$" }
+        },
+        "viewports": {
+          "type": "array",
+          "minItems": 2,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["name", "width", "height", "blocking"],
+            "properties": {
+              "name": { "type": "string", "minLength": 1 },
+              "width": { "type": "integer", "minimum": 320 },
+              "height": { "type": "integer", "minimum": 480 },
+              "blocking": { "type": "boolean" }
+            }
+          }
+        },
+        "accessibilityPolicy": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["standard", "tags", "blockingImpacts"],
+          "properties": {
+            "standard": { "const": "WCAG 2.2 AA" },
+            "tags": { "type": "array", "minItems": 1, "uniqueItems": true, "items": { "type": "string" } },
+            "blockingImpacts": { "type": "array", "minItems": 1, "uniqueItems": true, "items": { "enum": ["serious", "critical"] } }
+          }
+        },
+        "exceptions": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["registry", "activeCount"],
+          "properties": {
+            "registry": { "const": ".scratch/specular-ui-quality/exceptions.json" },
+            "activeCount": { "type": "integer", "minimum": 0 }
+          }
+        },
+        "reviewerEvidence": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["status", "reference"],
+          "properties": {
+            "status": { "enum": ["owner-directed", "owner-approved"] },
+            "reference": { "const": "docs/validation/ui-baseline-review.md" }
+          }
+        }
+      }
+    },
     "liveQualification": {
       "type": "object",
       "additionalProperties": false,

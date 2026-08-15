@@ -26,7 +26,7 @@ describe('UI quality workflow contract', () => {
     expect(config).toContain("json: 'artifacts/ui-quality/storybook.json'");
   });
 
-  it('runs style, inventory, manifest, and story gates in hosted CI', () => {
+  it('runs style, inventory, manifest, story, and immutable visual gates in hosted CI', () => {
     const workflow = readFileSync(
       join(process.cwd(), '.github/workflows/ci.yml'),
       'utf8',
@@ -34,9 +34,13 @@ describe('UI quality workflow contract', () => {
 
     expect(workflow).toContain('- run: npm run lint:styles');
     expect(workflow).toContain('- run: npm run validate:ui-inventory');
-    expect(workflow).toContain('- run: npm run ui:manifest:check');
+    expect(workflow).toContain('- run: npm run ui:manifest:report');
     expect(workflow).toContain('- run: npm run ui:exceptions:check');
     expect(workflow).toContain('- run: npm run test:ui');
+    expect(workflow).toContain('run: npm run test:visual');
+    expect(workflow).not.toContain('test:visual:update');
+    expect(workflow).not.toContain('--update-snapshots');
+    expect(workflow).toContain('tests/visual/__screenshots__/');
     expect(workflow).toContain('artifacts/ui-quality/');
   });
 });

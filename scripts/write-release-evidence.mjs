@@ -1,5 +1,5 @@
 import { execFileSync } from 'node:child_process';
-import { mkdir, writeFile } from 'node:fs/promises';
+import { access, mkdir, readFile, writeFile } from 'node:fs/promises';
 import { dirname, resolve } from 'node:path';
 
 const allowedEvidenceLevels = new Set([
@@ -35,9 +35,21 @@ for (const level of evidenceLevels) {
 }
 const commitSha = (process.env.GITHUB_SHA ?? execFileSync('git', ['rev-parse', 'HEAD'], { encoding: 'utf8' })).trim();
 if (!/^[0-9a-f]{40}$/u.test(commitSha)) throw new Error('Release evidence requires an exact Git commit SHA.');
+const baselineCommit = (process.env.UI_BASELINE_COMMIT ?? commitSha).trim();
+if (!/^[0-9a-f]{40}$/u.test(baselineCommit)) throw new Error('UI baseline evidence requires an exact Git commit SHA.');
+const baselineFiles = [
+  'tests/visual/__screenshots__/authoring-desktop.png',
+  'tests/visual/__screenshots__/entry-mobile.png',
+  'tests/visual/__screenshots__/library-mobile.png',
+  'tests/visual/__screenshots__/published-mobile.png',
+  'tests/visual/__screenshots__/snapshot-mobile.png',
+];
+for (const path of baselineFiles) await access(resolve(path));
+const exceptionRegistry = JSON.parse(await readFile(resolve('.scratch/specular-ui-quality/exceptions.json'), 'utf8'));
+if (!Array.isArray(exceptionRegistry.exceptions)) throw new Error('UI exception evidence requires a valid registry.');
 
 const manifest = {
-  schemaVersion: 1,
+  schemaVersion: 2,
   commitSha,
   generatedAt: new Date().toISOString(),
   lane,
@@ -45,6 +57,29 @@ const manifest = {
   suites,
   evidenceLevels,
   dataPolicy: 'synthetic-only-no-author-content',
+  uiQuality: {
+    surfaceManifest: 'docs/design/ui-surface-manifest.json',
+    baselineCommit,
+    baselines: baselineFiles,
+    viewports: [
+      { name: 'chromium-desktop', width: 1440, height: 1000, blocking: true },
+      { name: 'chromium-mobile', width: 390, height: 844, blocking: true },
+      { name: 'webkit-mobile-diagnostic', width: 390, height: 844, blocking: false },
+    ],
+    accessibilityPolicy: {
+      standard: 'WCAG 2.2 AA',
+      tags: ['wcag2a', 'wcag2aa', 'wcag21aa', 'wcag22aa'],
+      blockingImpacts: ['serious', 'critical'],
+    },
+    exceptions: {
+      registry: '.scratch/specular-ui-quality/exceptions.json',
+      activeCount: exceptionRegistry.exceptions.length,
+    },
+    reviewerEvidence: {
+      status: 'owner-directed',
+      reference: 'docs/validation/ui-baseline-review.md',
+    },
+  },
   liveQualification: {
     completed: false,
     checklist: 'docs/validation/multitenancy-live-checklist.md',
