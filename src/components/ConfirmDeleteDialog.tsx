@@ -9,18 +9,22 @@ export interface ConfirmDeleteDialogProps {
   artifactTitle: string;
   confirmLabel: string;
   confirmDisabled?: boolean;
+  description?: string;
   onCancel: () => void;
   onConfirm: () => Promise<void>;
   restoreFocusTo: HTMLElement | null;
+  title?: string;
 }
 
 export function ConfirmDeleteDialog({
   artifactTitle,
   confirmLabel,
   confirmDisabled = false,
+  description = 'This permanently removes this local content. This action cannot be undone.',
   onCancel,
   onConfirm,
   restoreFocusTo,
+  title,
 }: ConfirmDeleteDialogProps) {
   const titleId = useId();
   const warningId = useId();
@@ -54,7 +58,7 @@ export function ConfirmDeleteDialog({
     } catch {
       confirmingRef.current = false;
       setPending(false);
-      setError('The deletion could not be completed. Nothing else was changed.');
+      setError('The action could not be completed. Nothing else was changed.');
     }
   };
 
@@ -68,10 +72,8 @@ export function ConfirmDeleteDialog({
       role="alertdialog"
     >
       <div className="confirm-delete__surface">
-        <h2 id={titleId}>Permanently delete “{artifactTitle}”?</h2>
-        <p id={warningId}>
-          This permanently removes this local content. This action cannot be undone.
-        </p>
+        <h2 id={titleId}>{title ?? `Permanently delete “${artifactTitle}”?`}</h2>
+        <p id={warningId}>{description}</p>
         {error === null ? null : <p role="alert">{error}</p>}
         <div className="confirm-delete__actions">
           <button

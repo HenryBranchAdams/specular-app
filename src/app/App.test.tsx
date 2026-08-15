@@ -261,17 +261,38 @@ describe('Specular thinking workspace', () => {
   it('requires resolving a nonempty draft before deleting its block or dictating elsewhere', async () => {
     const user = userEvent.setup();
     const controller = new FakeDictationController();
-    const alert = vi.spyOn(globalThis, 'alert').mockImplementation(() => undefined);
     setup({ dictationController: controller, dictationService: { transcribe: vi.fn(), clean: vi.fn() } });
     await user.click(screen.getByRole('button', { name: 'Start dictation' }));
     controller.handlers?.onTranscript('Still provisional.');
 
     await user.click(screen.getByRole('button', { name: 'Delete block' }));
-    expect(alert).toHaveBeenCalledWith('Keep or cancel the dictation draft before deleting this block.');
+    expect(screen.getByRole('alert')).toHaveTextContent('Keep or cancel the dictation draft before deleting this block.');
     expect(screen.getByRole('textbox', { name: 'Dictation draft' })).toHaveValue('Still provisional.');
     await user.click(screen.getByRole('button', { name: 'New block' }));
     expect(screen.queryByRole('button', { name: 'Start dictation' })).not.toBeInTheDocument();
-    alert.mockRestore();
+  });
+
+  it('confirms before discarding a nonempty dictation draft and restores focus', async () => {
+    const user = userEvent.setup();
+    const controller = new FakeDictationController();
+    setup({ dictationController: controller, dictationService: { transcribe: vi.fn(), clean: vi.fn() } });
+    await user.click(screen.getByRole('button', { name: 'Start dictation' }));
+    controller.handlers?.onTranscript('Still provisional.');
+
+    const cancelDraft = screen.getByRole('button', { name: 'Cancel' });
+    await user.click(cancelDraft);
+
+    const dialog = screen.getByRole('alertdialog', { name: /Discard dictation draft/u });
+    expect(within(dialog).getByRole('button', { name: 'Cancel' })).toHaveFocus();
+    expect(controller.cancel).not.toHaveBeenCalled();
+    await user.keyboard('{Escape}');
+    expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument();
+    expect(cancelDraft).toHaveFocus();
+
+    await user.click(cancelDraft);
+    await user.click(screen.getByRole('button', { name: 'Discard draft' }));
+    expect(controller.cancel).toHaveBeenCalledOnce();
+    expect(screen.queryByRole('textbox', { name: 'Dictation draft' })).not.toBeInTheDocument();
   });
   it('keeps optional intentions behind a help control and never inserts them as prose', async () => {
     const user = userEvent.setup();
@@ -410,6 +431,23 @@ describe('Specular thinking workspace', () => {
     expect(await within(editor).findByRole('button', { name: 'Copy link' })).toBeVisible();
   });
 
+  it('contains snapshot focus, dismisses with Escape, and restores its trigger', async () => {
+    const user = userEvent.setup();
+    setup();
+    await user.type(screen.getByRole('textbox', { name: 'Thought writing block' }), 'A canonical thought.');
+    const trigger = screen.getByRole('button', { name: 'Create snapshot' });
+    await user.click(trigger);
+
+    const editor = screen.getByRole('dialog', { name: 'Snapshot editor' });
+    expect(within(editor).getByRole('button', { name: 'Close snapshot' })).toHaveFocus();
+    expect(trigger.closest('header')).toHaveAttribute('inert');
+    await user.keyboard('{Escape}');
+
+    expect(screen.queryByRole('dialog', { name: 'Snapshot editor' })).not.toBeInTheDocument();
+    expect(trigger).toHaveFocus();
+    expect(trigger.closest('header')).not.toHaveAttribute('inert');
+  });
+
   it('requires explicit confirmation before a generated title enters a snapshot artifact', async () => {
     const user = userEvent.setup();
     const initial = createInitialWorkspace(1_800_000_000_000);
@@ -443,6 +481,22 @@ describe('Specular thinking workspace', () => {
     expect(screen.getByRole('combobox', { name: 'Dormancy period' })).toHaveValue('30');
     await user.selectOptions(screen.getByRole('combobox', { name: 'Dictation cleanup' }), 'verbatim');
     expect(screen.getByRole('combobox', { name: 'Dictation cleanup' })).toHaveValue('verbatim');
+  });
+
+  it('treats the library as a focus-contained drawer and restores its trigger', async () => {
+    const user = userEvent.setup();
+    setup();
+    const trigger = screen.getByRole('button', { name: 'Library' });
+    await user.click(trigger);
+
+    const drawer = screen.getByRole('dialog', { name: 'Document library' });
+    expect(within(drawer).getByRole('button', { name: 'Close library' })).toHaveFocus();
+    expect(trigger.closest('header')).toHaveAttribute('inert');
+    await user.keyboard('{Escape}');
+
+    expect(screen.queryByRole('dialog', { name: 'Document library' })).not.toBeInTheDocument();
+    expect(trigger).toHaveFocus();
+    expect(trigger.closest('header')).not.toHaveAttribute('inert');
   });
 
   it('does not clear an unsynchronized device cache during sign out', async () => {
@@ -490,6 +544,7 @@ describe('Specular thinking workspace', () => {
 
     await user.click(await screen.findByRole('button', { name: 'Library' }));
     await user.click(screen.getByRole('button', { name: 'Download this device recovery' }));
+    await user.click(screen.getByRole('button', { name: 'Close library' }));
     await user.click(screen.getByRole('button', { name: 'Sign out' }));
 
     expect(store.clear).toHaveBeenCalledOnce();
@@ -520,7 +575,7 @@ describe('Specular thinking workspace', () => {
 
     await user.click(await screen.findByRole('button', { name: 'Library' }));
     await user.click(screen.getByRole('button', { name: 'Download this device recovery' }));
-    await user.click(screen.getByRole('button', { name: 'Library' }));
+    await user.click(screen.getByRole('button', { name: 'Close library' }));
     await user.type(screen.getByRole('textbox', { name: 'Thought writing block' }), 'New writing after recovery.');
     await user.click(screen.getByRole('button', { name: 'Sign out' }));
 
@@ -673,5 +728,50 @@ describe('Specular thinking workspace', () => {
 
     expect(await screen.findByText('Revoked')).toBeVisible();
     expect(fetchMock).toHaveBeenCalledWith('/api/shares/abcdefghijklmnop', expect.objectContaining({ method: 'DELETE' }));
+  });
+
+  it('uses a recoverable alert dialog before deleting hosted account data', async () => {
+    const user = userEvent.setup();
+    const workspace = createInitialWorkspace(1_800_000_000_000);
+    const navigateToSignOut = vi.fn();
+    const fetchMock = vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
+      if (input === '/api/shares' && init === undefined) {
+        return Promise.resolve(new Response(JSON.stringify({ snapshots: [] }), { status: 200 }));
+      }
+      if (input === '/api/account' && init?.method === 'DELETE') {
+        return Promise.resolve(new Response(null, { status: 204 }));
+      }
+      return Promise.reject(new Error('Unexpected request'));
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    const store = {
+      load: vi.fn(() => Promise.resolve(workspace)),
+      save: vi.fn(() => Promise.resolve(workspace)),
+      currentStatus: vi.fn(() => 'synchronized' as const),
+      subscribeStatus: vi.fn((listener: (status: 'synchronized') => void) => { listener('synchronized'); return () => undefined; }),
+      clear: vi.fn(() => Promise.resolve()),
+      close: vi.fn(() => undefined),
+    };
+    render(<App
+      navigateToSignOut={navigateToSignOut}
+      session={{ authenticated: true, email: 'writer@example.com', cacheNamespace: 'account:writer', signOutUrl: '/signout' }}
+      storeFactory={() => Promise.resolve(store)}
+    />);
+
+    await user.click(await screen.findByRole('button', { name: 'Library' }));
+    const trigger = screen.getByRole('button', { name: 'Delete account data' });
+    await user.click(trigger);
+    const dialog = screen.getByRole('alertdialog', { name: 'Delete account data?' });
+    expect(dialog).toHaveTextContent(/revokes every published link/u);
+    expect(within(dialog).getByRole('button', { name: 'Cancel' })).toHaveFocus();
+    expect(fetchMock).not.toHaveBeenCalledWith('/api/account', expect.anything());
+    await user.keyboard('{Escape}');
+    expect(trigger).toHaveFocus();
+
+    await user.click(trigger);
+    await user.click(screen.getByRole('button', { name: 'Delete account data' }));
+    await vi.waitFor(() => { expect(fetchMock).toHaveBeenCalledWith('/api/account', expect.objectContaining({ method: 'DELETE' })); });
+    expect(store.clear).toHaveBeenCalledOnce();
+    expect(navigateToSignOut).toHaveBeenCalledWith('/signout');
   });
 });

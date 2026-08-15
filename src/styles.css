@@ -32,6 +32,7 @@
   --radius-surface: 0.75rem;
   --shadow-popover: 0 0.75rem 2.5rem rgb(34 34 34 / 12%);
   --shadow-dialog: 0 2rem 6rem rgb(34 34 34 / 18%);
+  --overlay-backdrop: rgb(34 34 34 / 42%);
   --motion-fast: 120ms;
   --motion-standard: 180ms;
   --ease-standard: cubic-bezier(0.2, 0, 0, 1);
@@ -1356,14 +1357,22 @@ a:focus-visible {
   font-style: normal !important;
 }
 
+.library-overlay {
+  position: fixed;
+  z-index: var(--z-drawer);
+  inset: 0;
+  background: var(--overlay-backdrop);
+}
+
 .library-drawer {
   position: fixed;
-  z-index: 40;
+  z-index: var(--z-drawer);
   inset: 4.25rem 0 0 auto;
   display: flex;
   width: min(92vw, 26rem);
   flex-direction: column;
   padding: 1.5rem;
+  overflow-y: auto;
   border-left: 1px solid var(--line-strong);
   background: var(--paper-raised);
   box-shadow: -1.25rem 0 3rem rgb(34 34 34 / 8%);
@@ -1373,6 +1382,12 @@ a:focus-visible {
   display: flex;
   align-items: center;
   justify-content: space-between;
+}
+
+.library-drawer header button,
+.snapshot-panel > header button {
+  min-width: var(--touch-target);
+  min-height: var(--touch-target);
 }
 
 .eyebrow,
@@ -1597,12 +1612,12 @@ a:focus-visible {
 
 .snapshot-overlay {
   position: fixed;
-  z-index: 60;
+  z-index: var(--z-dialog);
   inset: 0;
   display: grid;
   place-items: center;
-  padding: 1.25rem;
-  background: rgb(34 34 34 / 42%);
+  padding: var(--space-5);
+  background: var(--overlay-backdrop);
   backdrop-filter: blur(6px);
 }
 
@@ -2118,11 +2133,12 @@ a:focus-visible {
   .pwa-prompt__actions {
     justify-content: flex-start;
   }
+
 }
 
 .confirm-delete {
   position: fixed;
-  z-index: 90;
+  z-index: var(--z-alert-dialog);
   inset: 0;
   display: grid;
   width: 100%;
@@ -2134,7 +2150,7 @@ a:focus-visible {
   margin: 0;
   overflow-y: auto;
   border: 0;
-  background: rgb(34 34 34 / 58%);
+  background: var(--overlay-backdrop);
 }
 
 .confirm-delete__surface {
@@ -2166,7 +2182,7 @@ a:focus-visible {
 
 .confirm-delete__cancel,
 .confirm-delete__confirm {
-  min-height: 2.75rem;
+  min-height: var(--touch-target);
   padding: 0.5rem 0.75rem;
   border: 1px solid var(--line-strong);
   border-radius: 0.35rem;
@@ -2176,4 +2192,10 @@ a:focus-visible {
 
 .confirm-delete__confirm {
   color: var(--danger);
+}
+
+@media (max-width: 520px) {
+  .confirm-delete__actions {
+    grid-template-columns: minmax(0, 1fr);
+  }
 }

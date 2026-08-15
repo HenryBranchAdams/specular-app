@@ -85,3 +85,25 @@ test('workspace scope and dormancy remain explicit user controls', async ({ page
   await expect(connections.getByText('The first document has one thought.')).toBeVisible();
   await expectNoHorizontalOverflow(page);
 });
+
+test('drawer and snapshot remain operable in a narrow-height viewport', async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 500 });
+  await writeThought(page, 'A compact viewport still needs every author action.');
+
+  const libraryTrigger = page.getByRole('button', { name: 'Library' });
+  await libraryTrigger.click();
+  const library = page.getByRole('dialog', { name: 'Document library' });
+  await expect(library.getByRole('button', { name: 'Close library' })).toBeFocused();
+  await expect(library.getByRole('button', { name: 'New document' })).toBeVisible();
+  await page.keyboard.press('Escape');
+  await expect(libraryTrigger).toBeFocused();
+
+  const snapshotTrigger = page.getByRole('button', { name: 'Create snapshot' });
+  await snapshotTrigger.click();
+  const snapshot = page.getByRole('dialog', { name: 'Snapshot editor' });
+  await expect(snapshot.getByRole('button', { name: 'Close snapshot' })).toBeFocused();
+  await expect(snapshot.getByRole('button', { name: 'Publish page' })).toBeAttached();
+  await expectNoHorizontalOverflow(page);
+  await page.keyboard.press('Escape');
+  await expect(snapshotTrigger).toBeFocused();
+});

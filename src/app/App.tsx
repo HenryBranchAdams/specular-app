@@ -36,6 +36,8 @@ import { clearCachedSession, type AuthenticatedSession } from '../auth/session';
 import { PlatformSignInLink } from '../auth/PlatformSignInLink';
 import { SessionGate } from '../auth/SessionBoundary';
 import { deleteHostedAccount, downloadAccountArchive, downloadDeviceRecovery } from '../account/client';
+import { ConfirmDeleteDialog } from '../components/ConfirmDeleteDialog';
+import { useModalFocus } from '../components/use-modal-focus';
 import { registerReloadSafetyCheck } from '../pwa/reload-safety';
 import { releaseServiceWorkersForPlatformAuth } from '../pwa/platform-auth-navigation';
 import { downloadMarkdown } from '../thinking/export';
@@ -692,6 +694,7 @@ function SnapshotEditor({
   onTitleChange,
   onTitleConfirm,
   publishing,
+  restoreFocusTo,
   snapshot,
   state,
 }: {
@@ -704,23 +707,32 @@ function SnapshotEditor({
   onTitleChange: (title: string) => void;
   onTitleConfirm: () => void;
   publishing: boolean;
+  restoreFocusTo: HTMLElement | null;
   snapshot: ThoughtSnapshot;
   state: WorkspaceState;
 }) {
   const payload = snapshotPayload(state, snapshot);
   const allBlocks = documentBlocks(state, activeDocument(state)).filter((block) => block.content.trim().length > 0);
   const [copied, setCopied] = useState(false);
+  const closeRef = useRef<HTMLButtonElement>(null);
+  const overlayRef = useRef<HTMLDivElement>(null);
+  useModalFocus({
+    containerRef: overlayRef,
+    initialFocusRef: closeRef,
+    onEscape: onClose,
+    restoreFocusTo,
+  });
   const copyLink = async () => {
     if (snapshot.publishedUrl === null) return;
     await navigator.clipboard.writeText(snapshot.publishedUrl);
     setCopied(true);
   };
   return (
-    <div aria-label="Snapshot editor" aria-modal="true" className="snapshot-overlay" role="dialog">
+    <div aria-label="Snapshot editor" aria-modal="true" className="snapshot-overlay" ref={overlayRef} role="dialog">
       <section className="snapshot-panel">
         <header>
           <div><p className="eyebrow">Snapshot</p><h1>{snapshot.title}</h1></div>
-          <button aria-label="Close snapshot" onClick={onClose} type="button"><X /></button>
+          <button aria-label="Close snapshot" onClick={onClose} ref={closeRef} type="button"><X /></button>
         </header>
         <div className="snapshot-layout">
           <aside>
@@ -795,6 +807,9 @@ export function App({
   const [selectedBlockId, setSelectedBlockId] = useState<string | null>(null);
   const [selection, setSelection] = useState('');
   const [libraryOpen, setLibraryOpen] = useState(false);
+  const [accountDeleteOpen, setAccountDeleteOpen] = useState(false);
+  const [dictationDiscardOpen, setDictationDiscardOpen] = useState(false);
+  const [dictationDiscardRestoreTo, setDictationDiscardRestoreTo] = useState<HTMLElement | null>(null);
   const [starterOpen, setStarterOpen] = useState(false);
   const [starterPrompt, setStarterPrompt] = useState<string | null>(null);
   const [reflectionBusy, setReflectionBusy] = useState(false);
@@ -813,6 +828,11 @@ export function App({
   const [calibration, setCalibration] = useState('');
   const [calibrationDictationStatus, setCalibrationDictationStatus] = useState<'idle' | 'requesting' | 'recording' | 'processing' | 'interrupted'>('idle');
   const [calibrationDictationError, setCalibrationDictationError] = useState<string | null>(null);
+  const accountDeleteTriggerRef = useRef<HTMLButtonElement>(null);
+  const libraryCloseRef = useRef<HTMLButtonElement>(null);
+  const libraryOverlayRef = useRef<HTMLDivElement>(null);
+  const libraryTriggerRef = useRef<HTMLButtonElement>(null);
+  const snapshotTriggerRef = useRef<HTMLButtonElement>(null);
   const storeRef = useRef<WorkspaceStore | null>(null);
   const organizerRef = useRef<Organizer>(organizer);
   const dictationServiceRef = useRef<DictationService>(dictationService ?? new HttpDictationService());
@@ -827,6 +847,14 @@ export function App({
   stateRef.current = state;
   calibrationRef.current = calibration;
   organizerRef.current = organizer;
+
+  useModalFocus({
+    active: libraryOpen,
+    containerRef: libraryOverlayRef,
+    initialFocusRef: libraryCloseRef,
+    onEscape: () => { setLibraryOpen(false); },
+    restoreFocusTo: libraryTriggerRef.current,
+  });
 
   useEffect(() => {
     if (initialState !== undefined) return;
@@ -999,7 +1027,7 @@ export function App({
   };
 
   const deleteAccount = async () => {
-    if (session === undefined || !globalThis.confirm('Permanently delete this hosted workspace and revoke every published link? This cannot be undone.')) return;
+    if (session === undefined) return;
     setAccountError(null);
     try {
       await deleteHostedAccount();
@@ -1009,6 +1037,7 @@ export function App({
       await navigateToSignOut(session.signOutUrl);
     } catch (error) {
       setAccountError(error instanceof Error ? error.message : 'Specular could not delete this account workspace.');
+      throw error;
     }
   };
 
@@ -1271,12 +1300,20 @@ export function App({
     }
   };
 
-  const cancelDictation = () => {
-    const draft = dictationDraftRef.current;
-    if (draft !== null && draft.content.trim().length > 0 && !globalThis.confirm('Discard this dictation draft? Its provisional text will be removed.')) return;
+  const discardDictation = () => {
     dictationControllerRef.current.cancel();
     setDictationError(null);
     setDictationDraft(null);
+  };
+
+  const cancelDictation = () => {
+    const draft = dictationDraftRef.current;
+    if (draft !== null && draft.content.trim().length > 0) {
+      setDictationDiscardRestoreTo(document.activeElement instanceof HTMLElement ? document.activeElement : null);
+      setDictationDiscardOpen(true);
+      return;
+    }
+    discardDictation();
   };
 
   const keepDictation = () => {
@@ -1381,7 +1418,7 @@ export function App({
   const deleteBlock = (blockId: string) => {
     if (state.dictationDraft?.blockId === blockId) {
       if (!isEmptyInterruptedDictation(state.dictationDraft)) {
-        globalThis.alert('Keep or cancel the dictation draft before deleting this block.');
+        setDictationError('Keep or cancel the dictation draft before deleting this block.');
         return;
       }
       dictationControllerRef.current.cancel();
@@ -1449,7 +1486,7 @@ export function App({
 
   const requestDeleteBlock = (blockId: string) => {
     if (state.dictationDraft?.blockId === blockId && !isEmptyInterruptedDictation(state.dictationDraft)) {
-      globalThis.alert('Keep or cancel the dictation draft before deleting this block.');
+      setDictationError('Keep or cancel the dictation draft before deleting this block.');
       return;
     }
     const block = state.blocks.find((item) => item.id === blockId);
@@ -1622,8 +1659,8 @@ export function App({
       <header className="workspace-header">
         <button className="brand" onClick={() => { setView('document'); }} type="button">Specular</button>
         <div className="header-actions">
-          <button disabled={blocks.every((block) => block.content.trim().length === 0) || calibrationDictationActive} onClick={createSnapshot} type="button"><FileText size={15} />Create snapshot</button>
-          <button aria-expanded={libraryOpen} disabled={state.dictationDraft !== null || calibrationDictationActive} onClick={() => { setLibraryOpen((open) => !open); }} type="button"><Library size={15} />Library</button>
+          <button disabled={blocks.every((block) => block.content.trim().length === 0) || calibrationDictationActive} onClick={createSnapshot} ref={snapshotTriggerRef} type="button"><FileText size={15} />Create snapshot</button>
+          <button aria-expanded={libraryOpen} disabled={state.dictationDraft !== null || calibrationDictationActive} onClick={() => { setLibraryOpen((open) => !open); }} ref={libraryTriggerRef} type="button"><Library size={15} />Library</button>
           {session === undefined ? null : (
             <div className="account-boundary">
               <span className={`sync-status sync-status--${synchronizationStatus}`}>{synchronizationStatus === 'synchronized' ? 'Saved' : synchronizationStatus === 'synchronizing' ? 'Saving' : synchronizationStatus === 'unsynced' ? 'Saved on this device' : 'Locked'}</span>
@@ -1640,8 +1677,9 @@ export function App({
       </nav>
 
       {libraryOpen ? (
-        <aside aria-label="Document library" className="library-drawer">
-          <header><div><p className="eyebrow">Private workspace</p><h2>Library</h2></div><button aria-label="Close library" onClick={() => { setLibraryOpen(false); }} type="button"><X size={18} /></button></header>
+        <div className="library-overlay" ref={libraryOverlayRef}>
+        <aside aria-label="Document library" aria-modal="true" className="library-drawer" role="dialog">
+          <header><div><p className="eyebrow">Private workspace</p><h2>Library</h2></div><button aria-label="Close library" onClick={() => { setLibraryOpen(false); }} ref={libraryCloseRef} type="button"><X size={18} /></button></header>
           <button className="new-document" onClick={createDocument} type="button"><Plus size={16} />New document</button>
           <div className="document-list">
             {[...state.documents].sort((left, right) => right.updatedAt - left.updatedAt).map((item) => (
@@ -1678,11 +1716,12 @@ export function App({
                 </div>
                 <button onClick={() => { void downloadHostedArchive(); }} type="button">Download archive</button>
                 <button onClick={downloadCurrentDeviceRecovery} type="button">Download this device recovery</button>
-                <button className="danger-action" onClick={() => { void deleteAccount(); }} type="button">Delete account data</button>
+                <button className="danger-action" onClick={() => { setAccountDeleteOpen(true); }} ref={accountDeleteTriggerRef} type="button">Delete account data</button>
               </section>
             )}
           </footer>
         </aside>
+        </div>
       ) : null}
 
       {view === 'connections' ? (
@@ -1845,10 +1884,33 @@ export function App({
           onTitleChange={(title) => { setState((current) => ({ ...current, snapshots: current.snapshots.map((snapshot) => snapshot.id === currentSnapshot.id ? { ...snapshot, title, titleConfirmed: title.trim().length > 0 } : snapshot) })); }}
           onTitleConfirm={() => { setState((current) => ({ ...current, snapshots: current.snapshots.map((snapshot) => snapshot.id === currentSnapshot.id && snapshot.title.trim().length > 0 ? { ...snapshot, titleConfirmed: true } : snapshot) })); }}
           publishing={publishing}
+          restoreFocusTo={snapshotTriggerRef.current}
           snapshot={currentSnapshot}
           state={state}
         />
       )}
+      {dictationDiscardOpen ? (
+        <ConfirmDeleteDialog
+          artifactTitle="dictation draft"
+          confirmLabel="Discard draft"
+          description="This removes only the provisional dictation text. Your saved writing remains unchanged."
+          onCancel={() => { setDictationDiscardOpen(false); }}
+          onConfirm={() => { discardDictation(); return Promise.resolve(); }}
+          restoreFocusTo={dictationDiscardRestoreTo}
+          title="Discard dictation draft?"
+        />
+      ) : null}
+      {accountDeleteOpen ? (
+        <ConfirmDeleteDialog
+          artifactTitle="hosted workspace"
+          confirmLabel="Delete account data"
+          description="This permanently deletes the hosted workspace and revokes every published link. This action cannot be undone."
+          onCancel={() => { setAccountDeleteOpen(false); }}
+          onConfirm={deleteAccount}
+          restoreFocusTo={accountDeleteTriggerRef.current}
+          title="Delete account data?"
+        />
+      ) : null}
     </main>
   );
 }

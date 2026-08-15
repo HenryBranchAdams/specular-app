@@ -12,6 +12,9 @@
     "patterns-status--update-failure": "src/components/PwaUpdatePrompt.stories.tsx",
     "patterns-status--offline-ready": "src/components/PwaUpdatePrompt.stories.tsx",
     "patterns-dialog--destructive": "src/components/ConfirmDeleteDialog.stories.tsx",
+    "patterns-dialog--account-deletion": "src/components/ConfirmDeleteDialog.stories.tsx",
+    "patterns-dialog--discard-dictation": "src/components/ConfirmDeleteDialog.stories.tsx",
+    "patterns-dialog--failure-recovery": "src/components/ConfirmDeleteDialog.stories.tsx",
     "entry-session-boundary--signed-out": "src/auth/SessionBoundary.stories.tsx",
     "entry-session-boundary--verification-failed": "src/auth/SessionBoundary.stories.tsx",
     "entry-session-boundary--signing-in": "src/auth/SessionBoundary.stories.tsx"
@@ -98,7 +101,7 @@
       "productionEntry": "src/app/App.tsx",
       "patternIds": ["dialog-drawer-sheet", "switch-checkbox-radio", "empty-state", "three-dots", "focus-ring-web"],
       "requiredStates": ["open", "empty-publications", "loading-publications", "publication-failure", "account-busy", "account-failure"],
-      "storyIds": ["patterns-dialog--destructive"],
+      "storyIds": ["patterns-dialog--destructive", "patterns-dialog--account-deletion", "patterns-dialog--failure-recovery"],
       "routeScenarios": ["route:library"],
       "maturity": "transition",
       "exceptions": []
@@ -109,7 +112,7 @@
       "productionEntry": "src/app/App.tsx",
       "patternIds": ["dialog-drawer-sheet", "form-field", "switch-checkbox-radio", "alert-callout-banner"],
       "requiredStates": ["draft", "suggested-title", "publishing", "published", "failure", "revoke-pending"],
-      "storyIds": ["patterns-dialog--destructive", "primitives-field--states"],
+      "storyIds": ["patterns-dialog--destructive", "patterns-dialog--discard-dictation", "primitives-field--states"],
       "routeScenarios": ["route:snapshot-editor"],
       "maturity": "transition",
       "exceptions": []

@@ -36,6 +36,14 @@ Buttons, icon buttons, fields, textareas, and surfaces share the semantic token 
 - Reflow utilities permit 200% text without horizontal clipping.
 - Motion uses the shared timing tokens and becomes effectively immediate under reduced motion.
 
+## Overlays and destructive actions
+
+- Drawers and dialogs contain keyboard focus, make their background inert, close with Escape when no operation is pending, and restore focus to the control that opened them.
+- Cancel is the initial focus for irreversible or provisional-content actions. While an action is pending, both cancel and confirm remain named but disabled; a failure stays in the dialog for recovery.
+- Alert dialogs are reserved for irreversible workspace deletion and discarding provisional dictation. A local block uses an inline confirmation because the decision remains adjacent to its authored content and does not interrupt the whole workspace.
+- Native browser `alert` and `confirm` are not product interaction patterns. Blocking guidance is presented as an inline, announced status next to the affected draft.
+- The alert-dialog layer stays above application-update notices; all overlay surfaces scroll internally on narrow-height screens.
+
 ## Prospective style ratchet
 
 `npm run lint:styles` runs Stylelint correctness rules and verifies `docs/design/ui-style-ratchet.json`. Existing global-stylesheet debt may decrease but cannot increase by category. Any new CSS file must be registered with zero raw visual values or an owner-reviewed, dated exception. The ratchet is intentionally bounded; it does not require mass formatting or prevent an approved token or baseline change.

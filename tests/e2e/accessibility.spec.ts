@@ -33,7 +33,7 @@ test.describe('authenticated workspace states', () => {
     await writeThought(page, 'Authored writing needs a deliberate deletion boundary.');
     await page.getByRole('button', { name: 'Library', exact: true }).click();
     await expectAccessible(page, 'account archive and recovery library');
-    await page.getByRole('button', { name: 'Library', exact: true }).click();
+    await page.getByRole('button', { name: 'Close library' }).click();
     await page.getByRole('button', { name: 'Delete block' }).click();
     await expect(page.getByRole('button', { name: 'Confirm delete block' })).toBeVisible();
     await expectAccessible(page, 'delete block confirmation');
