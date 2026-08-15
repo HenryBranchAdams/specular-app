@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState, type FocusEvent } from 'react';
 import { useRegisterSW } from 'virtual:pwa-register/react';
 import { prepareForApplicationReload } from '../pwa/reload-safety';
 
@@ -7,6 +7,7 @@ type PromptKind = 'offline' | 'update' | null;
 export interface PwaPromptSurfaceProps {
   kind: Exclude<PromptKind, null>;
   onDismiss: () => void;
+  onPauseChange?: (paused: boolean) => void;
   onUpdate: () => void;
   updateError?: string | null;
   updating?: boolean;
@@ -15,6 +16,7 @@ export interface PwaPromptSurfaceProps {
 export function PwaPromptSurface({
   kind,
   onDismiss,
+  onPauseChange,
   onUpdate,
   updateError = null,
   updating = false,
@@ -24,15 +26,24 @@ export function PwaPromptSurface({
     <div
       aria-label={updateAvailable ? 'Application update' : 'Offline availability'}
       aria-live="polite"
-      className="pwa-prompt"
+      className={`pwa-prompt pwa-prompt--${kind}`}
+      onBlur={(event: FocusEvent<HTMLDivElement>) => {
+        if (!event.currentTarget.contains(event.relatedTarget)) onPauseChange?.(false);
+      }}
+      onFocus={() => { onPauseChange?.(true); }}
+      onMouseEnter={() => { onPauseChange?.(true); }}
+      onMouseLeave={() => { onPauseChange?.(false); }}
       role="status"
     >
-      <p className="pwa-prompt__message">
-        {updateAvailable
-          ? 'A new version of Specular is ready.'
-          : 'Specular is ready to work offline.'}
-      </p>
-      {updateError === null ? null : <p className="pwa-prompt__error" role="alert">{updateError}</p>}
+      <div className="pwa-prompt__content">
+        <strong>{updateAvailable ? 'Update available' : 'Available offline'}</strong>
+        <p className="pwa-prompt__message">
+          {updateAvailable
+            ? 'Specular saves your current work before refreshing.'
+            : 'You can keep writing if your connection drops.'}
+        </p>
+        {updateError === null ? null : <p className="pwa-prompt__error" role="alert">{updateError}</p>}
+      </div>
       <div className="pwa-prompt__actions">
         {updateAvailable ? (
           <button
@@ -54,20 +65,29 @@ export function PwaPromptSurface({
 
 export function PwaUpdatePrompt({
   prepareForUpdate = prepareForApplicationReload,
+  workspaceAvailable = true,
 }: {
   prepareForUpdate?: () => Promise<void>;
+  workspaceAvailable?: boolean;
 }) {
   const [promptKind, setPromptKind] = useState<PromptKind>(null);
   const [updateError, setUpdateError] = useState<string | null>(null);
   const [updating, setUpdating] = useState(false);
+  const [offlinePaused, setOfflinePaused] = useState(false);
   const { updateServiceWorker } = useRegisterSW({
     onNeedRefresh() {
       setPromptKind('update');
     },
     onOfflineReady() {
-      setPromptKind('offline');
+      if (workspaceAvailable) setPromptKind('offline');
     },
   });
+
+  useEffect(() => {
+    if (promptKind !== 'offline' || offlinePaused) return undefined;
+    const timer = globalThis.setTimeout(() => { setPromptKind(null); }, 6_000);
+    return () => { globalThis.clearTimeout(timer); };
+  }, [offlinePaused, promptKind]);
 
   if (promptKind === null) {
     return null;
@@ -77,6 +97,7 @@ export function PwaUpdatePrompt({
     <PwaPromptSurface
       kind={promptKind}
       onDismiss={() => { setPromptKind(null); }}
+      onPauseChange={setOfflinePaused}
       onUpdate={() => {
         setUpdating(true);
         setUpdateError(null);

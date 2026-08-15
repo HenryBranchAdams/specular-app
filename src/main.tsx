@@ -11,7 +11,12 @@ function AuthenticatedWorkspace({ session }: { session: import('./auth/session')
     () => createSynchronizedWorkspaceStore(session.cacheNamespace),
     [session.cacheNamespace],
   );
-  return <App session={session} storeFactory={storeFactory} />;
+  return (
+    <>
+      <App session={session} storeFactory={storeFactory} />
+      <PwaUpdatePrompt workspaceAvailable />
+    </>
+  );
 }
 
 async function clearStaleDevelopmentPwaState(): Promise<void> {
@@ -48,6 +53,5 @@ createRoot(rootElement).render(
     <SessionBoundary>
       {(session) => <AuthenticatedWorkspace key={session.cacheNamespace} session={session} />}
     </SessionBoundary>
-    <PwaUpdatePrompt />
   </StrictMode>,
 );

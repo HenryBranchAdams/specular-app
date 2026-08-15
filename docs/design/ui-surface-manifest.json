@@ -44,7 +44,7 @@
       "requiredStates": ["update-ready", "preparing", "update-failed", "offline-ready", "dismissed"],
       "storyIds": ["patterns-status--update-ready", "patterns-status--preparing", "patterns-status--update-failure", "patterns-status--offline-ready"],
       "routeScenarios": ["route:workspace"],
-      "maturity": "transition",
+      "maturity": "ready",
       "exceptions": []
     },
     {

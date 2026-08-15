@@ -61,7 +61,7 @@ function announceOfflineReady(): void {
 }
 
 describe('PwaUpdatePrompt', () => {
-  afterEach(() => { cleanup(); });
+  afterEach(() => { cleanup(); vi.useRealTimers(); });
 
   beforeEach(() => {
     pwaHarness.options = undefined;
@@ -79,6 +79,8 @@ describe('PwaUpdatePrompt', () => {
   it('uses a compact overlay without reflowing the application shell', () => {
     expect(styles).not.toContain('#root:has(.pwa-prompt)');
     expect(styles).toMatch(/\.pwa-prompt\s*\{[^}]*bottom:/u);
+    expect(styles).toContain('env(safe-area-inset-bottom');
+    expect(styles).toMatch(/\.pwa-prompt__button\s*\{[^}]*white-space:\s*nowrap;/u);
   });
 
   it('offers an accessible update choice without stealing focus', async () => {
@@ -95,7 +97,8 @@ describe('PwaUpdatePrompt', () => {
     announceNeedRefresh();
 
     expect(screen.getByRole('status', { name: 'Application update' })).toBeVisible();
-    expect(screen.getByText('A new version of Specular is ready.')).toBeVisible();
+    expect(screen.getByText('Update available')).toBeVisible();
+    expect(screen.getByText(/saves your current work before refreshing/iu)).toBeVisible();
     expect(screen.getByRole('button', { name: 'Update now' })).toBeVisible();
     expect(screen.getByRole('button', { name: 'Later' })).toBeVisible();
     expect(keepWorking).toHaveFocus();
@@ -117,12 +120,30 @@ describe('PwaUpdatePrompt', () => {
     announceOfflineReady();
 
     expect(screen.getByRole('status', { name: 'Offline availability' })).toBeVisible();
-    expect(screen.getByText('Specular is ready to work offline.')).toBeVisible();
+    expect(screen.getByText('Available offline')).toBeVisible();
 
     await user.click(screen.getByRole('button', { name: 'Dismiss' }));
 
     expect(screen.queryByRole('status', { name: 'Offline availability' })).not.toBeInTheDocument();
     expect(pwaHarness.updateServiceWorker).not.toHaveBeenCalled();
+  });
+
+  it('does not announce offline readiness while the private workspace is unavailable', () => {
+    render(<PwaUpdatePrompt workspaceAvailable={false} />);
+
+    announceOfflineReady();
+
+    expect(screen.queryByRole('status', { name: 'Offline availability' })).not.toBeInTheDocument();
+  });
+
+  it('automatically clears the nonessential offline confirmation', () => {
+    vi.useFakeTimers();
+    render(<PwaUpdatePrompt workspaceAvailable />);
+    announceOfflineReady();
+
+    expect(screen.getByRole('status', { name: 'Offline availability' })).toBeVisible();
+    act(() => { vi.advanceTimersByTime(6_000); });
+    expect(screen.queryByRole('status', { name: 'Offline availability' })).not.toBeInTheDocument();
   });
 
   it('does not activate an update until the workspace safety check succeeds', async () => {
