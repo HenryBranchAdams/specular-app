@@ -33,6 +33,7 @@ import {
 } from '../dictation/capture';
 import { HttpDictationService, type DictationService } from '../dictation/client';
 import { clearCachedSession, type AuthenticatedSession } from '../auth/session';
+import { PlatformSignInLink } from '../auth/PlatformSignInLink';
 import { deleteHostedAccount, downloadAccountArchive, downloadDeviceRecovery } from '../account/client';
 import { registerReloadSafetyCheck } from '../pwa/reload-safety';
 import { releaseServiceWorkersForPlatformAuth } from '../pwa/platform-auth-navigation';
@@ -1612,7 +1613,7 @@ export function App({
         <div>
           <h1>Workspace locked</h1>
           <p>Your ChatGPT session changed or expired. Cached writing remains hidden for this account until you sign in again.</p>
-          <a className="primary-action" href="/signin-with-chatgpt?return_to=%2F">Sign in again</a>
+          <PlatformSignInLink className="primary-action" href="/signin-with-chatgpt?return_to=%2F">Sign in again</PlatformSignInLink>
         </div>
       </main>
     );

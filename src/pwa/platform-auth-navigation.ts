@@ -14,3 +14,7 @@ export async function releaseServiceWorkersForPlatformAuth(): Promise<void> {
     }
   }));
 }
+
+export function navigateToPlatformAuth(url: string): void {
+  globalThis.location.assign(url);
+}

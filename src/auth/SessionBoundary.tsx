@@ -7,6 +7,7 @@ import {
   type BrowserSession,
 } from './session';
 import { subscribeAuthenticationLost } from './authentication-loss';
+import { PlatformSignInLink } from './PlatformSignInLink';
 
 const SIGN_IN_URL = '/signin-with-chatgpt?return_to=%2F';
 
@@ -89,7 +90,7 @@ export function SessionBoundary({
         <div>
           <h1>Your private thinking workspace</h1>
           <p>Sign in before Specular opens or reads a workspace on this device.</p>
-          <a className="primary-action" href={session.signInUrl}>Sign in with ChatGPT</a>
+          <PlatformSignInLink className="primary-action" href={session.signInUrl}>Sign in with ChatGPT</PlatformSignInLink>
         </div>
       </main>
     );

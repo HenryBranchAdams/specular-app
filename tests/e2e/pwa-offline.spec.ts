@@ -6,7 +6,7 @@ self.addEventListener('install', () => { void self.skipWaiting(); });
 self.addEventListener('activate', (event) => { event.waitUntil(self.clients.claim()); });
 self.addEventListener('fetch', (event) => {
   const url = new URL(event.request.url);
-  if (event.request.mode === 'navigate' && url.pathname === '/signout-with-chatgpt') {
+  if (event.request.mode === 'navigate' && ['/signin-with-chatgpt', '/signout-with-chatgpt'].includes(url.pathname)) {
     event.respondWith(new Response('<main>legacy-private-app-shell</main>', {
       headers: { 'content-type': 'text/html' },
       status: 200,
@@ -117,6 +117,43 @@ test('sign out escapes a legacy service worker that captures the ChatGPT auth ro
 
     await expect(page).toHaveURL(/\/signout-with-chatgpt/u);
     await expect(page.locator('body')).toHaveText('host-owned-sign-out');
+  } finally {
+    await context.close();
+  }
+});
+
+test('sign in escapes a legacy service worker and reaches the ChatGPT auth route', async ({ browser }, testInfo) => {
+  test.skip(!['chromium-375', 'webkit-375'].includes(testInfo.project.name));
+  const context = await browser.newContext({ baseURL: 'http://127.0.0.1:4173', serviceWorkers: 'allow', viewport: { width: 375, height: 760 } });
+  const page = await context.newPage();
+  try {
+    await page.route('**/api/session', async (route) => {
+      await route.fulfill({ contentType: 'application/json', status: 401, body: JSON.stringify({
+        authenticated: false,
+        signInUrl: '/signin-with-chatgpt?return_to=%2F',
+      }) });
+    });
+    await context.route('**/legacy-auth-capturing-sw.js', async (route) => {
+      await route.fulfill({ contentType: 'application/javascript', status: 200, body: legacyAuthCapturingWorker });
+    });
+    await context.route('**/signin-with-chatgpt**', async (route) => {
+      await route.fulfill({ contentType: 'text/plain', status: 200, body: 'host-owned-sign-in' });
+    });
+    await page.goto('/');
+    await expect(page.getByRole('link', { name: 'Sign in with ChatGPT' })).toBeVisible();
+
+    await page.evaluate(async () => {
+      const registrations = await navigator.serviceWorker.getRegistrations();
+      await Promise.all(registrations.map((registration) => registration.unregister()));
+      await navigator.serviceWorker.register('/legacy-auth-capturing-sw.js', { scope: '/' });
+      await navigator.serviceWorker.ready;
+    });
+    await expect.poll(async () => page.evaluate(() => navigator.serviceWorker.controller?.scriptURL ?? '')).toContain('legacy-auth-capturing-sw.js');
+
+    await page.getByRole('link', { name: 'Sign in with ChatGPT' }).click();
+
+    await expect(page).toHaveURL(/\/signin-with-chatgpt/u);
+    await expect(page.locator('body')).toHaveText('host-owned-sign-in');
   } finally {
     await context.close();
   }
