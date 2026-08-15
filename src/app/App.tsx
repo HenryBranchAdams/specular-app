@@ -618,45 +618,60 @@ function ConnectionsView({
   blocks,
   documentId,
   dormancyDays,
+  onAnnounce,
   onOpenBlock,
   onKindChange,
 }: {
   blocks: ThoughtBlock[];
   documentId: string;
   dormancyDays: number;
+  onAnnounce: (message: string) => void;
   onOpenBlock: (block: ThoughtBlock) => void;
   onKindChange: (blockId: string, kind: ThoughtKind) => void;
 }) {
   const [kind, setKind] = useState<ThoughtKind | 'all'>('all');
   const [scope, setScope] = useState<'document' | 'workspace'>('document');
   const [status, setStatus] = useState<'all' | 'active' | 'resting' | 'dormant' | 'closed'>('all');
-  const visible = blocks.filter((block) => (
+  const matchingBlocks = (
+    nextScope: typeof scope,
+    nextKind: typeof kind,
+    nextStatus: typeof status,
+  ) => blocks.filter((block) => (
     block.content.trim().length > 0
-    && (scope === 'workspace' || block.documentId === documentId)
-    && (kind === 'all' || block.kind === kind)
-    && (status === 'all' || effectiveStatus(block.updatedAt, block.status, dormancyDays) === status)
+    && (nextScope === 'workspace' || block.documentId === documentId)
+    && (nextKind === 'all' || block.kind === nextKind)
+    && (nextStatus === 'all' || effectiveStatus(block.updatedAt, block.status, dormancyDays) === nextStatus)
   ));
+  const visible = matchingBlocks(scope, kind, status);
+  const announceFilter = (nextScope: typeof scope, nextKind: typeof kind, nextStatus: typeof status) => {
+    const count = matchingBlocks(nextScope, nextKind, nextStatus).length;
+    onAnnounce(count === 0
+      ? 'No connections match these filters.'
+      : `${String(count)} connection${count === 1 ? '' : 's'} shown.`);
+  };
   return (
     <section aria-label="Connections" className="connections-view">
       <header>
         <div><p className="eyebrow">Connections</p><h1>The shape of this thinking</h1></div>
         <div className="graph-filters">
-          <select aria-label="Connections scope" onChange={(event) => { setScope(event.target.value as typeof scope); }} value={scope}>
+          <select aria-label="Connections scope" onChange={(event) => { const next = event.target.value as typeof scope; setScope(next); announceFilter(next, kind, status); }} value={scope}>
             <option value="document">Current document</option>
             <option value="workspace">Entire workspace</option>
           </select>
-          <select aria-label="Filter connections by kind" onChange={(event) => { setKind(event.target.value as ThoughtKind | 'all'); }} value={kind}>
+          <select aria-label="Filter connections by kind" onChange={(event) => { const next = event.target.value as ThoughtKind | 'all'; setKind(next); announceFilter(scope, next, status); }} value={kind}>
             <option value="all">All kinds</option>
             {Object.entries(KIND_LABELS).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
           </select>
-          <select aria-label="Filter connections by status" onChange={(event) => { setStatus(event.target.value as typeof status); }} value={status}>
+          <select aria-label="Filter connections by status" onChange={(event) => { const next = event.target.value as typeof status; setStatus(next); announceFilter(scope, kind, next); }} value={status}>
             <option value="all">All states</option>
             <option value="active">Active</option><option value="resting">Resting</option><option value="dormant">Dormant</option><option value="closed">Closed</option>
           </select>
         </div>
       </header>
       {visible.length === 0 ? (
-        <div className="graph-empty"><Network size={22} /><p>Connections will become visible as you write and branch.</p></div>
+        <div className="graph-empty"><Network size={22} /><p>{blocks.some((block) => block.content.trim().length > 0)
+          ? 'No connections match these filters.'
+          : 'Connections will become visible as you write and branch.'}</p></div>
       ) : (
         <div className="thought-graph">
           {visible.map((block, index) => (
@@ -828,6 +843,7 @@ export function App({
   const [calibration, setCalibration] = useState('');
   const [calibrationDictationStatus, setCalibrationDictationStatus] = useState<'idle' | 'requesting' | 'recording' | 'processing' | 'interrupted'>('idle');
   const [calibrationDictationError, setCalibrationDictationError] = useState<string | null>(null);
+  const [workspaceAnnouncement, setWorkspaceAnnouncement] = useState({ message: '', sequence: 0 });
   const accountDeleteTriggerRef = useRef<HTMLButtonElement>(null);
   const libraryCloseRef = useRef<HTMLButtonElement>(null);
   const libraryOverlayRef = useRef<HTMLDivElement>(null);
@@ -847,6 +863,10 @@ export function App({
   stateRef.current = state;
   calibrationRef.current = calibration;
   organizerRef.current = organizer;
+
+  const announceWorkspace = (message: string) => {
+    setWorkspaceAnnouncement((current) => ({ message, sequence: current.sequence + 1 }));
+  };
 
   useModalFocus({
     active: libraryOpen,
@@ -1341,6 +1361,10 @@ export function App({
     }));
     dictationDraftRef.current = null;
     setDictationError(null);
+    announceWorkspace('Dictation added to writing.');
+    window.setTimeout(() => {
+      globalThis.document.querySelector<HTMLTextAreaElement>(`[data-block-id="${draft.blockId}"] textarea`)?.focus();
+    }, 0);
   };
 
   const updateDocument = (patch: Partial<ThoughtDocument>) => {
@@ -1410,6 +1434,7 @@ export function App({
     }));
     setSelectedBlockId(id);
     setSelection('');
+    announceWorkspace(originPrompt === null ? 'New writing block added.' : 'Linked writing block added.');
     window.setTimeout(() => {
       globalThis.document.querySelector<HTMLTextAreaElement>(`[data-block-id="${id}"] textarea`)?.focus();
     }, 0);
@@ -1482,6 +1507,10 @@ export function App({
     setPendingDeleteBlockId(null);
     setSelectedBlockId(nextBlockId);
     setSelection('');
+    announceWorkspace('Writing block deleted.');
+    window.setTimeout(() => {
+      if (nextBlockId !== null) globalThis.document.querySelector<HTMLTextAreaElement>(`[data-block-id="${nextBlockId}"] textarea`)?.focus();
+    }, 0);
   };
 
   const requestDeleteBlock = (blockId: string) => {
@@ -1560,6 +1589,7 @@ export function App({
           updatedAt: now,
         };
         setState((current) => ({ ...current, annotations: [...current.annotations, annotation] }));
+        announceWorkspace('Reflection ready.');
       } else {
         setState((current) => ({
           ...current,
@@ -1577,6 +1607,7 @@ export function App({
               }
             : annotation),
         }));
+        announceWorkspace('Reflection updated from your clarification.');
       }
     } catch (error) {
       setReflectionError(error instanceof Error ? error.message : 'Specular could not reflect right now.');
@@ -1656,6 +1687,14 @@ export function App({
 
   return (
     <main className="specular-shell">
+      <div
+        aria-atomic="true"
+        aria-label="Workspace status"
+        aria-live="polite"
+        className="sr-only"
+        key={workspaceAnnouncement.sequence}
+        role="status"
+      >{workspaceAnnouncement.message}</div>
       <header className="workspace-header">
         <button className="brand" onClick={() => { setView('document'); }} type="button">Specular</button>
         <div className="header-actions">
@@ -1729,6 +1768,7 @@ export function App({
           blocks={state.blocks}
           documentId={currentDocument.id}
           dormancyDays={state.settings.dormancyDays}
+          onAnnounce={announceWorkspace}
           onOpenBlock={(block) => { setSelectedBlockId(block.id); setView('document'); window.setTimeout(() => { globalThis.document.querySelector<HTMLTextAreaElement>(`[data-block-id="${block.id}"] textarea`)?.focus(); }, 0); }}
           onKindChange={(blockId, kind) => { updateBlock(blockId, (block) => ({ ...block, kind, kindSource: 'author', updatedAt: Date.now() })); }}
         />
@@ -1836,7 +1876,9 @@ export function App({
                       ? current.versions
                       : [...current.versions, { content: current.content, createdAt: Date.now() }].slice(-500);
                     return { ...current, content: version.content, versions, updatedAt: Date.now() };
-                  }); }}
+                  }); announceWorkspace('Earlier version restored.'); window.setTimeout(() => {
+                    globalThis.document.querySelector<HTMLTextAreaElement>(`[data-block-id="${block.id}"] textarea`)?.focus();
+                  }, 0); }}
                   onSelection={setSelection}
                   placeholder={block.id === blocks[0]?.id && block.content.trim().length === 0 ? starterPrompt : null}
                 />
@@ -1867,7 +1909,7 @@ export function App({
               }
             }}
             onMove={(move) => { void runReflection(move); }}
-            onSave={() => { if (currentAnnotation !== null) setState((current) => ({ ...current, annotations: current.annotations.map((annotation) => annotation.id === currentAnnotation.id ? { ...annotation, status: 'saved' } : annotation) })); }}
+            onSave={() => { if (currentAnnotation !== null) { setState((current) => ({ ...current, annotations: current.annotations.map((annotation) => annotation.id === currentAnnotation.id ? { ...annotation, status: 'saved' } : annotation) })); announceWorkspace('Reflection saved for later.'); } }}
             selection={selection}
           />
         </section>

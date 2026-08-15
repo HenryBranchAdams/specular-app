@@ -2,8 +2,12 @@ import { expect, type Page } from '@playwright/test';
 import { createInitialWorkspace, type WorkspaceState } from '../../src/thinking/model';
 
 export interface ThinkingMockController {
+  delayWorkspaceLoad(): void;
   delayReflection(): void;
+  failNextReflection(): void;
+  failNextWorkspaceSave(): void;
   releaseReflection(): void;
+  releaseWorkspaceLoad(): void;
 }
 
 const reflection = {
@@ -18,8 +22,13 @@ const reflection = {
 
 export async function installThinkingMocks(page: Page): Promise<ThinkingMockController> {
   let delayed = false;
+  let workspaceLoadDelayed = false;
+  let workspaceSaveShouldFail = false;
+  let reflectionShouldFail = false;
   let release: (() => void) | undefined;
+  let releaseWorkspace: (() => void) | undefined;
   let pending = Promise.resolve();
+  let pendingWorkspace = Promise.resolve();
   let workspace: WorkspaceState = createInitialWorkspace(1_800_000_000_000);
   let revision = 0;
 
@@ -33,11 +42,20 @@ export async function installThinkingMocks(page: Page): Promise<ThinkingMockCont
   });
   await page.route('**/api/workspace', async (route) => {
     if (route.request().method() === 'PUT') {
+      if (workspaceSaveShouldFail) {
+        workspaceSaveShouldFail = false;
+        await route.abort('failed');
+        return;
+      }
       const body = route.request().postDataJSON() as { workspace: WorkspaceState };
       workspace = body.workspace;
       revision += 1;
       await route.fulfill({ contentType: 'application/json', status: 200, body: JSON.stringify({ revision }) });
       return;
+    }
+    if (workspaceLoadDelayed) {
+      await pendingWorkspace;
+      workspaceLoadDelayed = false;
     }
     await route.fulfill({ contentType: 'application/json', status: 200, body: JSON.stringify({ revision, workspace }) });
   });
@@ -47,20 +65,45 @@ export async function installThinkingMocks(page: Page): Promise<ThinkingMockCont
       await pending;
       delayed = false;
     }
+    if (reflectionShouldFail) {
+      reflectionShouldFail = false;
+      await route.fulfill({ contentType: 'application/json', status: 503, body: JSON.stringify({ error: 'Reflection is temporarily unavailable.' }) });
+      return;
+    }
     await route.fulfill({ contentType: 'application/json', status: 200, body: JSON.stringify(reflection) });
+  });
+  await page.route('**/api/dictation/transcribe', async (route) => {
+    await route.fulfill({ contentType: 'application/json', status: 200, body: JSON.stringify({ transcript: 'A synthetic dictated thought.' }) });
+  });
+  await page.route('**/api/dictation/cleanup', async (route) => {
+    await route.fulfill({ contentType: 'application/json', status: 200, body: JSON.stringify({ cleaned: 'A synthetic dictated thought.' }) });
   });
   await page.route('**/api/shares', async (route) => {
     await route.fulfill({ contentType: 'application/json', status: 201, body: JSON.stringify({ url: '/s/browser-snapshot' }) });
   });
 
   return {
+    delayWorkspaceLoad(): void {
+      workspaceLoadDelayed = true;
+      pendingWorkspace = new Promise<void>((resolve) => { releaseWorkspace = resolve; });
+    },
     delayReflection(): void {
       delayed = true;
       pending = new Promise<void>((resolve) => { release = resolve; });
     },
+    failNextReflection(): void {
+      reflectionShouldFail = true;
+    },
+    failNextWorkspaceSave(): void {
+      workspaceSaveShouldFail = true;
+    },
     releaseReflection(): void {
       release?.();
       release = undefined;
+    },
+    releaseWorkspaceLoad(): void {
+      releaseWorkspace?.();
+      releaseWorkspace = undefined;
     },
   };
 }
@@ -83,7 +126,17 @@ export async function expectNoHorizontalOverflow(page: Page): Promise<void> {
     body: document.body.scrollWidth,
     document: document.documentElement.scrollWidth,
     viewport: document.documentElement.clientWidth,
+    offenders: [...document.querySelectorAll<HTMLElement>('body *')]
+      .map((element) => ({
+        name: `${element.tagName.toLowerCase()}${element.className.length > 0 ? `.${element.className.split(/\s+/u).join('.')}` : ''}`,
+        left: Math.round(element.getBoundingClientRect().left),
+        right: Math.round(element.getBoundingClientRect().right),
+        scrollWidth: element.scrollWidth,
+      }))
+      .filter(({ left, right, scrollWidth }) => left < 0 || right > document.documentElement.clientWidth || scrollWidth > document.documentElement.clientWidth)
+      .slice(0, 8),
   }));
-  expect(dimensions.body).toBeLessThanOrEqual(dimensions.viewport);
-  expect(dimensions.document).toBeLessThanOrEqual(dimensions.viewport);
+  const evidence = JSON.stringify(dimensions.offenders);
+  expect(dimensions.body, evidence).toBeLessThanOrEqual(dimensions.viewport);
+  expect(dimensions.document, evidence).toBeLessThanOrEqual(dimensions.viewport);
 }

@@ -23,7 +23,14 @@
     "route:signed-out": "tests/e2e/ui-surfaces.spec.ts",
     "route:verification-failed": "tests/e2e/ui-surfaces.spec.ts",
     "route:workspace": "tests/e2e/specular.spec.ts",
+    "route:workspace-loading": "tests/e2e/core-authoring-states.spec.ts",
+    "route:workspace-actions": "tests/e2e/core-authoring-states.spec.ts",
+    "route:workspace-extreme": "tests/e2e/core-authoring-states.spec.ts",
+    "route:workspace-recovery": "tests/e2e/core-authoring-states.spec.ts",
+    "route:dictation-review": "tests/e2e/core-authoring-states.spec.ts",
+    "route:reflection-states": "tests/e2e/core-authoring-states.spec.ts",
     "route:connections": "tests/e2e/specular.spec.ts",
+    "route:connections-filtered": "tests/e2e/core-authoring-states.spec.ts",
     "route:library": "tests/e2e/accessibility.spec.ts",
     "route:snapshot-editor": "tests/e2e/specular.spec.ts",
     "route:hosted-snapshot": "tests/e2e/ui-surfaces.spec.ts"
@@ -58,8 +65,8 @@
       "patternIds": ["header-navbar", "tabs", "focus-ring-web", "sticky-fixed"],
       "requiredStates": ["document", "connections", "saving", "offline", "locked"],
       "storyIds": ["primitives-button--states", "primitives-button--icon-button-states"],
-      "routeScenarios": ["route:workspace", "route:connections"],
-      "maturity": "transition",
+      "routeScenarios": ["route:workspace", "route:workspace-loading", "route:workspace-actions", "route:workspace-recovery", "route:connections"],
+      "maturity": "ready",
       "exceptions": []
     },
     {
@@ -69,8 +76,8 @@
       "patternIds": ["form-field", "accordion", "badge-chip-pill", "empty-state", "resize-handle"],
       "requiredStates": ["empty", "typical", "extreme-content", "offline", "recovery", "dictation-review"],
       "storyIds": ["primitives-field--states"],
-      "routeScenarios": ["route:workspace"],
-      "maturity": "transition",
+      "routeScenarios": ["route:workspace", "route:workspace-loading", "route:workspace-actions", "route:workspace-extreme", "route:workspace-recovery", "route:dictation-review"],
+      "maturity": "ready",
       "exceptions": []
     },
     {
@@ -80,8 +87,8 @@
       "patternIds": ["alert-callout-banner", "accordion", "form-field", "skeleton-spinner"],
       "requiredStates": ["empty", "loading", "reflection", "calibration", "failure", "saved"],
       "storyIds": ["patterns-status--preparing", "patterns-status--update-failure"],
-      "routeScenarios": ["route:workspace"],
-      "maturity": "transition",
+      "routeScenarios": ["route:workspace", "route:reflection-states"],
+      "maturity": "ready",
       "exceptions": []
     },
     {
@@ -91,8 +98,8 @@
       "patternIds": ["toggle-group", "switch-checkbox-radio", "empty-state", "truncation"],
       "requiredStates": ["loading", "empty", "populated", "filtered-empty", "extreme-content"],
       "storyIds": ["primitives-field--states"],
-      "routeScenarios": ["route:connections"],
-      "maturity": "transition",
+      "routeScenarios": ["route:workspace-loading", "route:connections", "route:workspace-extreme", "route:connections-filtered"],
+      "maturity": "ready",
       "exceptions": []
     },
     {

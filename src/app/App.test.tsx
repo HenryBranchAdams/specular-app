@@ -111,6 +111,8 @@ describe('Specular thinking workspace', () => {
 
     await user.click(screen.getByRole('button', { name: 'Keep dictation' }));
     expect(canonical).toHaveValue('A spoken thought without filler.');
+    expect(canonical).toHaveFocus();
+    expect(screen.getByRole('status', { name: 'Workspace status' })).toHaveTextContent('Dictation added to writing.');
     expect(screen.queryByRole('textbox', { name: 'Dictation draft' })).not.toBeInTheDocument();
   });
 
@@ -323,6 +325,42 @@ describe('Specular thinking workspace', () => {
     expect(screen.getAllByRole('textbox', { name: 'Thought writing block' })).toHaveLength(1);
   });
 
+  it('announces block creation and deletion while moving focus to the canonical writing target', async () => {
+    const user = userEvent.setup();
+    setup();
+    await user.click(screen.getByRole('button', { name: 'New block' }));
+    const blocks = screen.getAllByRole('textbox', { name: 'Thought writing block' });
+    expect(blocks[1]).toHaveFocus();
+    expect(screen.getByRole('status', { name: 'Workspace status' })).toHaveTextContent('New writing block added.');
+
+    const secondCard = blocks[1]?.closest('article');
+    if (secondCard === null || secondCard === undefined) throw new Error('Expected a second block card.');
+    await user.click(within(secondCard).getByRole('button', { name: 'Delete block' }));
+    expect(screen.getByRole('status', { name: 'Workspace status' })).toHaveTextContent('Writing block deleted.');
+    expect(screen.getByRole('textbox', { name: 'Thought writing block' })).toHaveFocus();
+  });
+
+  it('announces version restoration and returns focus to the restored writing', async () => {
+    const user = userEvent.setup();
+    const initial = createInitialWorkspace(1_800_000_000_000);
+    const block = initial.blocks[0];
+    if (block === undefined) throw new Error('Expected an initial block.');
+    initial.blocks[0] = {
+      ...block,
+      content: 'Current wording.',
+      versions: [{ content: 'Earlier wording.', createdAt: 1_799_999_000_000 }],
+    };
+    setup({ initialState: initial });
+
+    await user.click(screen.getByText('History · 1 version'));
+    await user.click(screen.getByRole('button', { name: /Earlier wording/u }));
+
+    const canonical = screen.getByRole('textbox', { name: 'Thought writing block' });
+    expect(canonical).toHaveValue('Earlier wording.');
+    expect(canonical).toHaveFocus();
+    expect(screen.getByRole('status', { name: 'Workspace status' })).toHaveTextContent('Earlier version restored.');
+  });
+
   it('uses visible in-page confirmation before removing authored material', async () => {
     const user = userEvent.setup();
     setup();
@@ -350,6 +388,7 @@ describe('Specular thinking workspace', () => {
     await user.click(screen.getByRole('button', { name: 'Reflect' }));
 
     expect(await screen.findByText('You are separating attention from certainty.')).toBeVisible();
+    expect(screen.getByRole('status', { name: 'Workspace status' })).toHaveTextContent('Reflection ready.');
     expect(reflect).toHaveBeenCalledWith(expect.objectContaining({
       focus: 'Attention can be important without becoming certainty.',
       move: 'reflect',
@@ -410,6 +449,9 @@ describe('Specular thinking workspace', () => {
     const correction = within(graph).getByRole('combobox', { name: /Correct kind for/u });
     await user.selectOptions(correction, 'question');
     expect(correction).toHaveValue('question');
+
+    await user.selectOptions(within(graph).getByRole('combobox', { name: 'Filter connections by status' }), 'dormant');
+    expect(screen.getByRole('status', { name: 'Workspace status' })).toHaveTextContent('No connections match these filters.');
   });
 
   it('creates a user-authored snapshot and publishes only selected canonical blocks', async () => {
