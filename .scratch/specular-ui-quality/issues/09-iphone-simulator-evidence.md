@@ -1,6 +1,6 @@
 # 09 — Add non-blocking iPhone Simulator evidence
 
-Status: complete
+Status: ready-for-agent
 Blocked by: 08
 
 ## Outcome

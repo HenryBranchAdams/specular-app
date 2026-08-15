@@ -20,10 +20,18 @@ export default defineConfig({
   },
   projects: [{ name: 'chromium-blocking' }],
   snapshotPathTemplate: '{testDir}/__screenshots__/{arg}{ext}',
-  webServer: {
-    command: 'VITE_ENABLE_REALTIME=true npm run build && npx vite preview --host 127.0.0.1 --port 4173',
-    reuseExistingServer: false,
-    timeout: 120_000,
-    url: 'http://127.0.0.1:4173',
-  },
+  webServer: [
+    {
+      command: 'VITE_ENABLE_REALTIME=true npm run build && npx vite preview --host 127.0.0.1 --port 4173',
+      reuseExistingServer: false,
+      timeout: 120_000,
+      url: 'http://127.0.0.1:4173',
+    },
+    {
+      command: 'npm run storybook -- --ci --no-open',
+      reuseExistingServer: false,
+      timeout: 120_000,
+      url: 'http://127.0.0.1:6006/iframe.html',
+    },
+  ],
 });

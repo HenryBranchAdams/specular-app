@@ -27,6 +27,7 @@ export function PwaPromptSurface({
       aria-label={updateAvailable ? 'Application update' : 'Offline availability'}
       aria-live="polite"
       className={`pwa-prompt pwa-prompt--${kind}`}
+      data-ui-surface="pwa-status"
       onBlur={(event: FocusEvent<HTMLDivElement>) => {
         if (!event.currentTarget.contains(event.relatedTarget)) onPauseChange?.(false);
       }}

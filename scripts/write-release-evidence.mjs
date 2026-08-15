@@ -41,7 +41,11 @@ const baselineFiles = [
   'tests/visual/__screenshots__/authoring-desktop.png',
   'tests/visual/__screenshots__/entry-mobile.png',
   'tests/visual/__screenshots__/library-mobile.png',
+  'tests/visual/__screenshots__/offline-ready-mobile.png',
   'tests/visual/__screenshots__/published-mobile.png',
+  'tests/visual/__screenshots__/update-failure-mobile.png',
+  'tests/visual/__screenshots__/update-preparing-mobile.png',
+  'tests/visual/__screenshots__/update-ready-mobile.png',
   'tests/visual/__screenshots__/snapshot-mobile.png',
 ];
 for (const path of baselineFiles) await access(resolve(path));
@@ -76,7 +80,7 @@ const manifest = {
       activeCount: exceptionRegistry.exceptions.length,
     },
     reviewerEvidence: {
-      status: 'owner-directed',
+      status: 'owner-approved',
       reference: 'docs/validation/ui-baseline-review.md',
     },
   },

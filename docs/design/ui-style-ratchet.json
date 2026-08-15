@@ -1,14 +1,52 @@
 {
-  "schemaVersion": 1,
-  "policy": "Existing src/styles.css debt may decrease but not increase. New CSS files must be registered with zero raw visual values or a dated, owner-reviewed exception.",
+  "schemaVersion": 2,
+  "policy": "Existing src/styles.css debt may decrease but not increase. Same-count substitutions cannot introduce raw visual values outside the owner-reviewed allowlist. New CSS files require explicit registration.",
   "files": {
     "src/styles.css": {
-      "colors": 57,
-      "elevation": 7,
-      "motion": 6,
-      "radius": 25,
-      "spacing": 338,
-      "zIndex": 10
+      "colors": {
+        "maximum": 47,
+        "allowedValues": [
+          "#0274b6", "#073955", "#141414", "#1c1c1c", "#222", "#237a3b", "#262626", "#3a3a3a", "#565656", "#5f6266", "#756f66", "#8a5a00", "#8b2e24", "#9a6a27", "#aaa398", "#b42318", "#b7b7b7", "#b8894b", "#bfc2c6", "#d7d1c5", "#d9dbde", "#e8f4fb", "#f2f3f4", "#f4e7e4", "#f7f7f7", "#fff",
+          "color-mix(in srgb, var(--danger) 14%, transparent)", "color-mix(in srgb, var(--danger) 35%, var(--line))", "color-mix(in srgb, var(--danger) 38%, var(--line-strong))", "color-mix(in srgb, var(--danger) 5%, var(--paper-raised))", "color-mix(in srgb, var(--paper-raised) 94%, transparent)", "color-mix(in srgb, var(--rust) 35%, var(--line))",
+          "rgb(255 255 255 / 48%)", "rgb(255 255 255 / 54%)", "rgb(255 255 255 / 55%)", "rgb(255 255 255 / 62%)", "rgb(255 255 255 / 72%)", "rgb(255 255 255 / 96%)", "rgb(34 34 34 / 12%)", "rgb(34 34 34 / 18%)", "rgb(34 34 34 / 42%)"
+        ]
+      },
+      "elevation": {
+        "maximum": 3,
+        "allowedValues": [
+          "box-shadow: 0 0 0 0.22rem color-mix(in srgb, var(--danger) 14%, transparent);",
+          "box-shadow: 0 1rem 2.5rem rgb(34 34 34 / 12%);",
+          "box-shadow: inset 0 -1px var(--ink);"
+        ]
+      },
+      "motion": {
+        "maximum": 6,
+        "allowedValues": [
+          "animation-duration: 0.001ms !important;", "animation-iteration-count: 1 !important;", "animation: spin 0.9s linear infinite;", "transition-duration: 0.001ms !important;", "transition: background var(--motion-fast) var(--ease-standard), border-color var(--motion-fast) var(--ease-standard);", "transition: background var(--motion-fast) var(--ease-standard);"
+        ]
+      },
+      "radius": {
+        "maximum": 11,
+        "allowedValues": ["border-radius: 0.25rem;", "border-radius: 0.35rem;", "border-radius: 0.3rem;", "border-radius: 0.5rem;", "border-radius: 50%;"]
+      },
+      "spacing": {
+        "maximum": 232,
+        "allowedValues": [
+          "bottom: 0.45rem;", "bottom: max(var(--space-4), env(safe-area-inset-bottom, 0px), env(keyboard-inset-height, 0px));",
+          "gap: 0.15rem;", "gap: 0.25rem;", "gap: 0.2rem;", "gap: 0.32rem;", "gap: 0.35rem;", "gap: 0.45rem;", "gap: 0.4rem;", "gap: 0.55rem;", "gap: 0.5rem;", "gap: 0.65rem;", "gap: 0.6rem;", "gap: 0.75rem;", "gap: 0.7rem;", "gap: 0.8rem;", "gap: 1.25rem;", "gap: 1.8rem;", "gap: 1rem;", "gap: 2rem;", "gap: 3rem;", "gap: clamp(var(--space-6), 5vw, 5rem);",
+          "height: 0.46rem;", "height: 100%;", "height: 1px;", "height: 1rem;", "height: 2.75rem;", "inset: 4.25rem 0 0 auto;", "left: 50%;", "left: max(var(--space-4), env(safe-area-inset-left, 0px));",
+          "margin: 0 0 0.2rem;", "margin: 0 0 0.35rem;", "margin: 0 0 0.65rem;", "margin: 0 0 0.75rem;", "margin: 0 0 1.25rem;", "margin: 0 0 1.45rem;", "margin: 0 0 1.7rem;", "margin: 0 0 1rem;", "margin: 0 0 2rem;", "margin: 0 0 3rem;", "margin: 0 0 clamp(2.4rem, 5vh, 4rem);", "margin: 0.35rem 0;", "margin: 0.5rem 0 0;", "margin: 0.75rem auto 0;", "margin: 1.4rem 0 4rem;", "margin: 1.5rem 0 1rem;", "margin: 2rem 0 0 1.85rem;", "margin: calc(-1 * clamp(2.25rem, 5vh, 4rem)) 0 clamp(2.25rem, 5vh, 4rem);",
+          "max-height: 100%;", "max-height: calc(100dvh - 2.5rem);", "max-width: 100%;", "max-width: 10rem;", "max-width: 12rem;", "max-width: 31rem;", "max-width: 34rem;", "max-width: 36rem;", "max-width: 38rem;", "max-width: 44rem;",
+          "min-height: 100%;", "min-height: 100dvh;", "min-height: 10rem;", "min-height: 2.25rem;", "min-height: 2.6rem;", "min-height: 2.75rem;", "min-height: 24rem;", "min-height: 26rem;", "min-height: 2rem;", "min-height: 3.4rem;", "min-height: 34rem;", "min-height: 3rem;", "min-height: 4.25rem;", "min-height: 4.5rem;", "min-height: 4rem;", "min-height: 5.5rem;", "min-height: 52rem;", "min-height: 7rem;", "min-height: 8rem;", "min-height: calc(100dvh - 4.25rem);",
+          "padding: 0 0 0.85rem 0.8rem;", "padding: 0 0 1rem;", "padding: 0 0.25rem;", "padding: 0 0.65rem;", "padding: 0 0.75rem;", "padding: 0 0.7rem;", "padding: 0 0.8rem;", "padding: 0 0.95rem;", "padding: 0 1rem;", "padding: 0 max(1.5rem, calc((100vw - 83rem) / 2));", "padding: 0.2rem 0 1.4rem;", "padding: 0.35rem 0.45rem;", "padding: 0.35rem 0;", "padding: 0.55rem 0.7rem;", "padding: 0.5in 0.7in;", "padding: 0.5rem 0.75rem;", "padding: 0.65rem 0;", "padding: 0.65rem 3.25rem 0.65rem 0.65rem;", "padding: 0.75rem 0.8rem;", "padding: 0.75rem 0;", "padding: 0.75rem;", "padding: 0.7rem 1rem;", "padding: 0.85rem 1rem;", "padding: 0.85rem;", "padding: 1.15rem 1.5rem;", "padding: 1.15rem;", "padding: 1.1rem;", "padding: 1.5rem 0 1.75rem;", "padding: 1.5rem;", "padding: 1rem 0 0 1.5rem;", "padding: 1rem 0 0.3rem;", "padding: 1rem;", "padding: 2rem 0 6rem;", "padding: clamp(1rem, 6vw, 3rem);", "padding: clamp(2.5rem, 6vw, 5rem);", "padding: clamp(3.5rem, 8vh, 6.5rem) 0 9rem;", "padding: clamp(3.5rem, 8vh, 6rem) 0 7rem;", "padding: clamp(4rem, 10vh, 8rem) 0;", "padding: clamp(var(--space-5), 3vw, var(--space-7));", "padding: max(var(--space-5), env(safe-area-inset-top, 0px)) max(var(--space-5), env(safe-area-inset-right, 0px)) max(var(--space-5), env(safe-area-inset-bottom, 0px)) max(var(--space-5), env(safe-area-inset-left, 0px));",
+          "right: 0.45rem;", "right: max(var(--space-4), env(safe-area-inset-right, 0px));", "top: 4rem;", "top: 7.75rem;", "top: calc(100% + 0.65rem);",
+          "width: 0.46rem;", "width: 0.75rem;", "width: 100%;", "width: 1px;", "width: 1rem;", "width: 2.25rem;", "width: 2.75rem;", "width: 2rem;", "width: 3rem;", "width: min(100% - 2rem, 47rem);", "width: min(100% - 2rem, 72rem);", "width: min(100% - 3rem, 46rem);", "width: min(100% - 3rem, 80rem);", "width: min(100% - 3rem, 90rem);", "width: min(100%, 24rem);", "width: min(100%, 34rem);", "width: min(100%, 38rem);", "width: min(100%, 70rem);", "width: min(27rem, calc(100vw - 3rem));", "width: min(31rem, calc(100vw - 4rem));", "width: min(34rem, calc(100% - 2rem));", "width: min(36rem, 100%);", "width: min(92vw, 26rem);"
+        ]
+      },
+      "zIndex": {
+        "maximum": 6,
+        "allowedValues": ["z-index: 10;", "z-index: 20;", "z-index: 25;", "z-index: 2;", "z-index: 30;", "z-index: 35;"]
+      }
     }
   },
   "exceptions": []

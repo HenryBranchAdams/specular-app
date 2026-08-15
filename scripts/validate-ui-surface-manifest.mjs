@@ -6,6 +6,7 @@ const readJson = async (path) => JSON.parse(await readFile(resolve(root, path), 
 const manifest = await readJson('docs/design/ui-surface-manifest.json');
 const inventory = await readJson(manifest.componentInventory);
 const registry = await readJson('src/ui/surface-registry.json');
+const surfaceAttributePattern = /data-ui-surface=["']([a-z0-9-]+)["']/gu;
 
 const fail = (message) => { throw new Error(`UI surface manifest: ${message}`); };
 const unique = (values, label) => {
@@ -40,6 +41,21 @@ for (const surface of manifest.surfaces) {
   for (const scenario of surface.routeScenarios) {
     if (manifest.routeCatalog[scenario] === undefined) fail(`${surface.id} uses unknown route scenario ${scenario}.`);
   }
+  const productionSource = await readFile(resolve(root, surface.productionEntry), 'utf8');
+  const ownedSurfaceIds = [...productionSource.matchAll(surfaceAttributePattern)].map((match) => match[1]);
+  if (!ownedSurfaceIds.includes(surface.id)) {
+    fail(`${surface.productionEntry} does not mark the ${surface.id} production root.`);
+  }
+}
+
+const annotatedIds = [];
+for (const path of new Set(manifest.surfaces.map(({ productionEntry }) => productionEntry))) {
+  const source = await readFile(resolve(root, path), 'utf8');
+  annotatedIds.push(...[...source.matchAll(surfaceAttributePattern)].map((match) => match[1]));
+}
+const unknownAnnotatedIds = [...new Set(annotatedIds)].filter((id) => !registryIds.includes(id));
+if (unknownAnnotatedIds.length > 0) {
+  fail(`production roots use unregistered surface IDs: ${unknownAnnotatedIds.join(', ')}.`);
 }
 
 const widget = manifest.legacyCompatibility.find(({ id }) => id === 'mcp-widget');
@@ -55,4 +71,4 @@ await ensureFiles([
   widget.source,
 ], 'catalog');
 
-console.log(`Validated ${String(manifest.surfaces.length)} active UI surfaces and ${String(manifest.legacyCompatibility.length)} legacy boundary.`);
+console.log(`Validated ${String(manifest.surfaces.length)} annotated active UI surfaces and ${String(manifest.legacyCompatibility.length)} legacy boundary.`);

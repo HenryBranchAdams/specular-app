@@ -211,14 +211,14 @@ function PublishedPage({ slug }: { slug: string }) {
   }, [slug]);
 
   if (error !== null) {
-    return <main className="published-page"><p className="published-kicker">Specular</p><h1>{error}</h1></main>;
+    return <main className="published-page" data-ui-surface="hosted-snapshot"><p className="published-kicker">Specular</p><h1>{error}</h1></main>;
   }
   if (snapshot === null) {
-    return <main className="published-page"><LoaderCircle aria-label="Loading snapshot" className="spin" /></main>;
+    return <main className="published-page" data-ui-surface="hosted-snapshot"><LoaderCircle aria-label="Loading snapshot" className="spin" /></main>;
   }
   const references = snapshot.blocks.flatMap((block) => block.references);
   return (
-    <main className="published-page">
+    <main className="published-page" data-ui-surface="hosted-snapshot">
       <p className="published-kicker">A Specular reflection</p>
       <h1>{snapshot.title}</h1>
       <p className="published-date">Captured {new Date(snapshot.createdAt).toLocaleDateString()}</p>
@@ -274,7 +274,7 @@ function DocumentTitleEditor({ onChange, value }: { onChange: (value: string) =>
 }
 
 function AuthoringPageSurface({ children }: { children: ReactNode }) {
-  return <article aria-label="Thinking document" className="thinking-document" data-ui-region="authoring-page">{children}</article>;
+  return <article aria-label="Thinking document" className="thinking-document" data-ui-surface="document-authoring">{children}</article>;
 }
 
 function BlockEditor({
@@ -511,7 +511,7 @@ function ReflectionMargin({
   const calibrationRef = useRef<HTMLTextAreaElement>(null);
   const canReflect = focusBlock !== null && focusBlock.content.trim().length > 0;
   return (
-    <aside aria-label="Reflection margin" className="reflection-margin">
+    <aside aria-label="Reflection margin" className="reflection-margin" data-ui-surface="reflection-margin">
       <div className="reflection-margin__heading">
         <select
           aria-label="Context scope"
@@ -657,7 +657,7 @@ function ConnectionsView({
       : `${String(count)} connection${count === 1 ? '' : 's'} shown.`);
   };
   return (
-    <section aria-label="Connections" className="connections-view">
+    <section aria-label="Connections" className="connections-view" data-ui-surface="connections">
       <header>
         <div><p className="eyebrow">Connections</p><h1>The shape of this thinking</h1></div>
         <div className="graph-filters">
@@ -752,7 +752,7 @@ function SnapshotEditor({
     setCopied(true);
   };
   return (
-    <div aria-label="Snapshot editor" aria-modal="true" className="snapshot-overlay" ref={overlayRef} role="dialog">
+    <div aria-label="Snapshot editor" aria-modal="true" className="snapshot-overlay" data-ui-surface="snapshot-editor" ref={overlayRef} role="dialog">
       <section className="snapshot-panel">
         <header>
           <div><p className="eyebrow">Snapshot</p><h1>{snapshot.title}</h1></div>
@@ -1722,7 +1722,7 @@ export function App({
   };
 
   if (!initialized) {
-    return <main className="workspace-loading"><span>Specular</span><LoaderCircle aria-label="Opening private workspace" className="spin" /></main>;
+    return <main className="workspace-loading" data-ui-surface="workspace-shell"><span>Specular</span><LoaderCircle aria-label="Opening private workspace" className="spin" /></main>;
   }
 
   if (synchronizationStatus === 'locked' && session !== undefined) {
@@ -1736,7 +1736,7 @@ export function App({
   }
 
   return (
-    <main className="specular-shell">
+    <main className="specular-shell" data-ui-surface="workspace-shell">
       <div
         aria-atomic="true"
         aria-label="Workspace status"
@@ -1767,7 +1767,7 @@ export function App({
 
       {libraryOpen ? (
         <div className="library-overlay" ref={libraryOverlayRef}>
-        <aside aria-label="Document library" aria-modal="true" className="library-drawer" role="dialog">
+        <aside aria-label="Document library" aria-modal="true" className="library-drawer" data-ui-surface="library-drawer" role="dialog">
           <header><div><p className="eyebrow">Private workspace</p><h2>Library</h2></div><button aria-label="Close library" onClick={() => { setLibraryOpen(false); }} ref={libraryCloseRef} type="button"><X size={18} /></button></header>
           <button className="new-document" onClick={createDocument} type="button"><Plus size={16} />New document</button>
           <div className="document-list">

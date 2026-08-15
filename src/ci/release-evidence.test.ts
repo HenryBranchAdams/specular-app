@@ -17,9 +17,19 @@ describe('versioned UI release evidence', () => {
     for (const field of ['surfaceManifest', 'baselineCommit', 'baselines', 'viewports', 'accessibilityPolicy', 'exceptions', 'reviewerEvidence']) {
       expect(writer).toContain(field);
     }
-    for (const baseline of ['authoring-desktop', 'entry-mobile', 'library-mobile', 'snapshot-mobile', 'published-mobile']) {
+    for (const baseline of [
+      'authoring-desktop',
+      'entry-mobile',
+      'library-mobile',
+      'offline-ready-mobile',
+      'snapshot-mobile',
+      'published-mobile',
+      'update-failure-mobile',
+      'update-preparing-mobile',
+      'update-ready-mobile',
+    ]) {
       expect(existsSync(join(process.cwd(), `tests/visual/__screenshots__/${baseline}.png`))).toBe(true);
     }
-    expect(readFileSync(join(process.cwd(), 'docs/validation/ui-baseline-review.md'), 'utf8')).toContain('Status: owner-directed');
+    expect(readFileSync(join(process.cwd(), 'docs/validation/ui-baseline-review.md'), 'utf8')).toContain('Status: owner-approved');
   });
 });

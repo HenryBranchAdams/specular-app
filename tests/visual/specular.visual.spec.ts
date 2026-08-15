@@ -37,6 +37,22 @@ test('signed-out entry at a mobile viewport', async ({ page }) => {
   await expect(page).toHaveScreenshot('entry-mobile.png', screenshotOptions);
 });
 
+test('PWA notices remain distinct at a mobile viewport', async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  const states = [
+    ['patterns-status--update-ready', 'Application update', 'update-ready-mobile.png'],
+    ['patterns-status--preparing', 'Application update', 'update-preparing-mobile.png'],
+    ['patterns-status--update-failure', 'Application update', 'update-failure-mobile.png'],
+    ['patterns-status--offline-ready', 'Offline availability', 'offline-ready-mobile.png'],
+  ] as const;
+  for (const [storyId, accessibleName, screenshot] of states) {
+    await page.goto(`http://127.0.0.1:6006/iframe.html?id=${storyId}&viewMode=story`);
+    await expect(page.getByRole('status', { name: accessibleName })).toBeVisible();
+    await settleVisual(page);
+    await expect(page).toHaveScreenshot(screenshot, screenshotOptions);
+  }
+});
+
 test('Library and Snapshot overlays at a mobile viewport', async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
   await installThinkingMocks(page);

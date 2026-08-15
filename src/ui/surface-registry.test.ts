@@ -1,3 +1,5 @@
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import componentInventory from '../../docs/design/specular-component-library-inventory.json';
 import surfaceManifest from '../../docs/design/ui-surface-manifest.json';
@@ -20,6 +22,13 @@ describe('production UI surface ownership', () => {
       expect(surface.patternIds.every((id) => inventoryIds.has(id))).toBe(true);
       expect(surface.storyIds.length + surface.routeScenarios.length).toBeGreaterThan(0);
       expect(surface.requiredStates.length).toBeGreaterThan(0);
+    }
+  });
+
+  it('marks every registered production root with its governed surface ID', () => {
+    for (const surface of surfaceManifest.surfaces) {
+      const source = readFileSync(join(process.cwd(), surface.productionEntry), 'utf8');
+      expect(source).toContain(`data-ui-surface="${surface.id}"`);
     }
   });
 

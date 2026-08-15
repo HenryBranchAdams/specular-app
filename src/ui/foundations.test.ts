@@ -6,6 +6,16 @@ import { describe, expect, it } from 'vitest';
 
 const styles = readFileSync(join(process.cwd(), 'src/styles.css'), 'utf8');
 const viteConfig = readFileSync(join(process.cwd(), 'vite.config.ts'), 'utf8');
+const styleRatchet = JSON.parse(
+  readFileSync(join(process.cwd(), 'docs/design/ui-style-ratchet.json'), 'utf8'),
+) as {
+  schemaVersion: number;
+  files: Record<string, Record<string, { maximum: number; allowedValues: string[] }>>;
+};
+const styleRatchetValidator = readFileSync(
+  join(process.cwd(), 'scripts/validate-ui-style-ratchet.mjs'),
+  'utf8',
+);
 
 describe('Specular visual foundations', () => {
   it('loads only the approved Noto Sans and Playfair Display 400 faces', () => {
@@ -39,5 +49,20 @@ describe('Specular visual foundations', () => {
     expect(styles).toMatch(/:focus-visible[\s\S]*outline:\s*2px solid var\(--color-focus\)/u);
     expect(styles).toMatch(/outline-offset:\s*2px/u);
     expect(styles).not.toMatch(/focus-visible[^{}]*box-shadow:[^;]*(?:blur|color-mix)/u);
+  });
+
+  it('ratchets exact raw style values instead of allowing same-count substitutions', () => {
+    expect(styleRatchet.schemaVersion).toBe(2);
+    expect(styleRatchet.files['src/styles.css']).toBeDefined();
+
+    for (const categories of Object.values(styleRatchet.files)) {
+      for (const policy of Object.values(categories)) {
+        expect(policy.maximum).toBeGreaterThanOrEqual(0);
+        expect(Array.isArray(policy.allowedValues)).toBe(true);
+      }
+    }
+
+    expect(styleRatchetValidator).toContain('introducedValues');
+    expect(styleRatchetValidator).toContain('--print-baseline');
   });
 });
