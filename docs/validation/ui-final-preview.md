@@ -6,7 +6,7 @@ Status: qualified-local
 
 ## Revisions
 
-- Candidate runtime revision: `7f5eb60e9650e6a889ac631c1bb468ef73bf57f9`
+- Candidate runtime revision: `3d541b4fafb8673a495ed0bf89209be010e91822`
 - Rollback revision: `9f979de8fd20d40a305a195276d71fccd85d0899`
 - Owner review: approved visual doctrine and the standalone elevated authoring-page refinement on 2026-08-15
 
@@ -18,7 +18,7 @@ The candidate applies the clean, crisp Specular visual system across the full go
 
 The final local qualification passed:
 
-- TypeScript, ESLint, Stylelint, exact-value style ratchet, surface-manifest, component-inventory, and exception-registry checks
+- TypeScript, ESLint, Stylelint, exact-value style ratchet, discoverable production-surface manifest, component-inventory, and exception-registry checks
 - 530 unit tests and the coverage gate
 - 15 Storybook interaction and accessibility stories
 - 5 blocking Chromium visual suites, including all four PWA notice states
