@@ -1,0 +1,13 @@
+{
+  "surfaces": [
+    { "id": "session-boundary", "module": "src/auth/SessionBoundary.tsx", "coverage": "active" },
+    { "id": "pwa-status", "module": "src/components/PwaUpdatePrompt.tsx", "coverage": "active" },
+    { "id": "workspace-shell", "module": "src/app/App.tsx", "coverage": "active" },
+    { "id": "document-authoring", "module": "src/app/App.tsx", "coverage": "active" },
+    { "id": "reflection-margin", "module": "src/app/App.tsx", "coverage": "active" },
+    { "id": "connections", "module": "src/app/App.tsx", "coverage": "active" },
+    { "id": "library-drawer", "module": "src/app/App.tsx", "coverage": "active" },
+    { "id": "snapshot-editor", "module": "src/app/App.tsx", "coverage": "active" },
+    { "id": "hosted-snapshot", "module": "src/app/App.tsx", "coverage": "active" }
+  ]
+}

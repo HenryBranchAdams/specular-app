@@ -9,7 +9,8 @@ import hostingConfig from './.openai/hosting.json';
 const manifestLinkPattern = /<link\s+rel="manifest"[^>]*>/gu;
 
 export default defineConfig(({ mode }) => {
-  const deploymentPlugins = mode === 'test'
+  const storybookBuild = process.env.STORYBOOK === 'true';
+  const deploymentPlugins = mode === 'test' || storybookBuild
     ? []
     : [
         sites(),
@@ -33,6 +34,7 @@ export default defineConfig(({ mode }) => {
     react(),
     ...deploymentPlugins,
     VitePWA({
+      disable: storybookBuild,
       registerType: 'prompt',
       injectRegister: false,
       manifest: {

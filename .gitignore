@@ -9,6 +9,7 @@ playwright-report-integrated/
 test-results/
 coverage/
 artifacts/
+storybook-static/
 .codegraph/
 .DS_Store
 .env

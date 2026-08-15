@@ -17,3 +17,7 @@ Create reciprocal production-surface ownership and a local Storybook harness usi
 - Initial stories cover buttons, icon buttons, status patterns, dialogs, fields, and the two supplied failure states.
 - Stories contain no real authored writing, identity, or production responses.
 - No application redesign is included in this issue.
+
+## Comments
+
+- 2026-08-15: Implemented on `agent/specular-ui-rework` with a reciprocal nine-surface manifest and production registry, synthetic Storybook stories, route scenarios, and a legacy MCP-widget boundary. Focused registry, component, Storybook-build, and type checks passed.

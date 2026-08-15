@@ -1,0 +1,137 @@
+{
+  "$schema": "./ui-surface-manifest.schema.json",
+  "schemaVersion": 1,
+  "componentInventory": "docs/design/specular-component-library-inventory.json",
+  "dataPolicy": "synthetic-only-no-author-content",
+  "storyCatalog": {
+    "primitives-button--states": "src/components/ui/Button.stories.tsx",
+    "primitives-button--icon-button-states": "src/components/ui/Button.stories.tsx",
+    "primitives-field--states": "src/components/ui/Field.stories.tsx",
+    "patterns-status--update-ready": "src/components/PwaUpdatePrompt.stories.tsx",
+    "patterns-status--preparing": "src/components/PwaUpdatePrompt.stories.tsx",
+    "patterns-status--update-failure": "src/components/PwaUpdatePrompt.stories.tsx",
+    "patterns-status--offline-ready": "src/components/PwaUpdatePrompt.stories.tsx",
+    "patterns-dialog--destructive": "src/components/ConfirmDeleteDialog.stories.tsx",
+    "entry-session-boundary--signed-out": "src/auth/SessionBoundary.stories.tsx",
+    "entry-session-boundary--verification-failed": "src/auth/SessionBoundary.stories.tsx"
+  },
+  "routeCatalog": {
+    "route:signed-out": "tests/e2e/ui-surfaces.spec.ts",
+    "route:verification-failed": "tests/e2e/ui-surfaces.spec.ts",
+    "route:workspace": "tests/e2e/specular.spec.ts",
+    "route:connections": "tests/e2e/specular.spec.ts",
+    "route:library": "tests/e2e/accessibility.spec.ts",
+    "route:snapshot-editor": "tests/e2e/specular.spec.ts",
+    "route:hosted-snapshot": "tests/e2e/ui-surfaces.spec.ts"
+  },
+  "surfaces": [
+    {
+      "id": "session-boundary",
+      "label": "Entry and identity boundary",
+      "productionEntry": "src/auth/SessionBoundary.tsx",
+      "patternIds": ["sign-in-form", "form-field", "skeleton-spinner", "focus-ring-web"],
+      "requiredStates": ["verifying", "signed-out", "verification-failed", "authentication-lost", "locked"],
+      "storyIds": ["entry-session-boundary--signed-out", "entry-session-boundary--verification-failed"],
+      "routeScenarios": ["route:signed-out", "route:verification-failed"],
+      "maturity": "transition",
+      "exceptions": []
+    },
+    {
+      "id": "pwa-status",
+      "label": "PWA update and offline status",
+      "productionEntry": "src/components/PwaUpdatePrompt.tsx",
+      "patternIds": ["toast", "alert-callout-banner", "sticky-fixed", "focus-ring-web"],
+      "requiredStates": ["update-ready", "preparing", "update-failed", "offline-ready", "dismissed"],
+      "storyIds": ["patterns-status--update-ready", "patterns-status--preparing", "patterns-status--update-failure", "patterns-status--offline-ready"],
+      "routeScenarios": ["route:workspace"],
+      "maturity": "transition",
+      "exceptions": []
+    },
+    {
+      "id": "workspace-shell",
+      "label": "Hosted workspace shell and navigation",
+      "productionEntry": "src/app/App.tsx",
+      "patternIds": ["header-navbar", "tabs", "focus-ring-web", "sticky-fixed"],
+      "requiredStates": ["document", "connections", "saving", "offline", "locked"],
+      "storyIds": ["primitives-button--states", "primitives-button--icon-button-states"],
+      "routeScenarios": ["route:workspace", "route:connections"],
+      "maturity": "transition",
+      "exceptions": []
+    },
+    {
+      "id": "document-authoring",
+      "label": "Canonical writing document",
+      "productionEntry": "src/app/App.tsx",
+      "patternIds": ["form-field", "accordion", "badge-chip-pill", "empty-state", "resize-handle"],
+      "requiredStates": ["empty", "typical", "extreme-content", "offline", "recovery", "dictation-review"],
+      "storyIds": ["primitives-field--states"],
+      "routeScenarios": ["route:workspace"],
+      "maturity": "transition",
+      "exceptions": []
+    },
+    {
+      "id": "reflection-margin",
+      "label": "Reflection and calibration margin",
+      "productionEntry": "src/app/App.tsx",
+      "patternIds": ["alert-callout-banner", "accordion", "form-field", "skeleton-spinner"],
+      "requiredStates": ["empty", "loading", "reflection", "calibration", "failure", "saved"],
+      "storyIds": ["patterns-status--preparing", "patterns-status--update-failure"],
+      "routeScenarios": ["route:workspace"],
+      "maturity": "transition",
+      "exceptions": []
+    },
+    {
+      "id": "connections",
+      "label": "Connections view",
+      "productionEntry": "src/app/App.tsx",
+      "patternIds": ["toggle-group", "switch-checkbox-radio", "empty-state", "truncation"],
+      "requiredStates": ["loading", "empty", "populated", "filtered-empty", "extreme-content"],
+      "storyIds": ["primitives-field--states"],
+      "routeScenarios": ["route:connections"],
+      "maturity": "transition",
+      "exceptions": []
+    },
+    {
+      "id": "library-drawer",
+      "label": "Library, account, and publication settings",
+      "productionEntry": "src/app/App.tsx",
+      "patternIds": ["dialog-drawer-sheet", "switch-checkbox-radio", "empty-state", "three-dots", "focus-ring-web"],
+      "requiredStates": ["open", "empty-publications", "loading-publications", "publication-failure", "account-busy", "account-failure"],
+      "storyIds": ["patterns-dialog--destructive"],
+      "routeScenarios": ["route:library"],
+      "maturity": "transition",
+      "exceptions": []
+    },
+    {
+      "id": "snapshot-editor",
+      "label": "Snapshot editor and publication controls",
+      "productionEntry": "src/app/App.tsx",
+      "patternIds": ["dialog-drawer-sheet", "form-field", "switch-checkbox-radio", "alert-callout-banner"],
+      "requiredStates": ["draft", "suggested-title", "publishing", "published", "failure", "revoke-pending"],
+      "storyIds": ["patterns-dialog--destructive", "primitives-field--states"],
+      "routeScenarios": ["route:snapshot-editor"],
+      "maturity": "transition",
+      "exceptions": []
+    },
+    {
+      "id": "hosted-snapshot",
+      "label": "Hosted snapshot reader",
+      "productionEntry": "src/app/App.tsx",
+      "patternIds": ["card", "skeleton-spinner", "empty-state", "truncation"],
+      "requiredStates": ["loading", "available", "unavailable", "extreme-content", "with-references"],
+      "storyIds": [],
+      "routeScenarios": ["route:hosted-snapshot"],
+      "maturity": "transition",
+      "exceptions": []
+    }
+  ],
+  "legacyCompatibility": [
+    {
+      "id": "mcp-widget",
+      "label": "MCP compatibility widget",
+      "source": "public/specular-widget.html",
+      "coverage": "excluded",
+      "reason": "Legacy compatibility surface outside the hosted-product UI rework; retention, adaptation, or removal requires separate future work."
+    }
+  ]
+}
