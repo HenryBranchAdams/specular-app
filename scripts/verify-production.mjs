@@ -102,6 +102,11 @@ try {
   invariant(manifest.status === 200, 'The immutable server does not serve the PWA manifest.');
   const serviceWorker = await request('/sw.js');
   invariant(serviceWorker.status === 200, 'The immutable server does not serve its service worker.');
+  const serviceWorkerText = await serviceWorker.text();
+  for (const authRoute of ['signin-with-chatgpt', 'signout-with-chatgpt', 'callback']) {
+    invariant(serviceWorkerText.includes(authRoute),
+      `The PWA service worker can intercept the Sites-owned ${authRoute} route.`);
+  }
   const staticAssetPaths = [...appHtml.matchAll(/(?:href|src)="([^"]+\.(?:css|js))"/gu)]
     .map((match) => match[1]);
   invariant(staticAssetPaths.length >= 2, 'The built app does not reference its static assets.');
@@ -161,7 +166,7 @@ try {
     ok: true,
     checks: [
       'immutable-artifacts', 'static-assets', 'health-readiness', 'secure-headers', 'origin-rejection',
-      'request-size', 'typed-provider-failure', 'pwa-degradation', 'mcp-text-fallback',
+      'request-size', 'typed-provider-failure', 'pwa-degradation', 'pwa-auth-route-handoff', 'mcp-text-fallback',
       'privacy-log-sentinel',
     ],
   }, null, 2) + '\n');

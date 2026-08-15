@@ -63,6 +63,9 @@ export default defineConfig(async ({ mode }) => {
         cleanupOutdatedCaches: true,
         globPatterns: ['**/*.{css,html,js}'],
         navigateFallback: '/index.html',
+        navigateFallbackDenylist: [
+          /^\/(?:signin-with-chatgpt|signout-with-chatgpt|callback)(?:\/|$)/u,
+        ],
         skipWaiting: true,
       },
     }),
