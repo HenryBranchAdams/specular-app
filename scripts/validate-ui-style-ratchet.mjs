@@ -5,11 +5,11 @@ const root = process.cwd();
 const policy = JSON.parse(await readFile(resolve(root, 'docs/design/ui-style-ratchet.json'), 'utf8'));
 const categoryPatterns = {
   colors: /#[0-9a-f]{3,8}\b|(?:rgb|hsl|oklch|lab|color-mix)\(/giu,
-  elevation: /box-shadow:\s*(?!var\()[^;]+;/giu,
-  motion: /(?:animation|transition)(?:-[a-z-]+)?:\s*(?!var\()[^;]+;/giu,
-  radius: /border-radius:\s*(?!var\()[^;]+;/giu,
-  spacing: /(?:gap|inset|margin|padding|top|right|bottom|left|min-(?:width|height)|max-(?:width|height)|width|height):\s*(?!var\()[^;]*(?:\d(?:px|r?em|vh|vw|dvh|dvw|%|in)|clamp\(|min\(|max\(|calc\()[^;]*;/giu,
-  zIndex: /z-index:\s*(?!var\()[^;]+;/giu,
+  elevation: /box-shadow:(?!\s*var\()\s*[^;]+;/giu,
+  motion: /(?:animation|transition)(?:-[a-z-]+)?:(?!\s*var\()\s*[^;]+;/giu,
+  radius: /border-radius:(?!\s*var\()\s*[^;]+;/giu,
+  spacing: /(?:gap|inset|margin|padding|top|right|bottom|left|min-(?:width|height)|max-(?:width|height)|width|height):(?!\s*var\()\s*[^;]*(?:\d(?:px|r?em|vh|vw|dvh|dvw|%|in)|clamp\(|min\(|max\(|calc\()[^;]*;/giu,
+  zIndex: /z-index:(?!\s*var\()\s*[^;]+;/giu,
 };
 
 const violations = [];

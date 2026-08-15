@@ -46,7 +46,31 @@ describe('authenticated workspace boundary', () => {
     );
 
     expect(await screen.findByRole('alert')).toHaveTextContent('could not verify your ChatGPT session');
+    expect(screen.getByRole('button', { name: 'Try again' })).toBeVisible();
     expect(screen.queryByText('private workspace content')).not.toBeInTheDocument();
+  });
+
+  it('retries a failed verification without exposing private content in between', async () => {
+    const loadSession = vi.fn()
+      .mockRejectedValueOnce(new Error('offline'))
+      .mockResolvedValueOnce({
+        authenticated: true as const,
+        email: 'writer@example.com',
+        cacheNamespace: 'account:writer',
+        signOutUrl: '/signout-with-chatgpt?return_to=%2F',
+      });
+    render(
+      <SessionBoundary loadSession={loadSession}>
+        {() => <p>private workspace content</p>}
+      </SessionBoundary>,
+    );
+
+    expect(await screen.findByRole('button', { name: 'Try again' })).toBeVisible();
+    expect(screen.queryByText('private workspace content')).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Try again' }));
+
+    expect(await screen.findByText('private workspace content')).toBeVisible();
+    expect(loadSession).toHaveBeenCalledTimes(2);
   });
 
   it('locks private content when a focused window no longer has the same authenticated session', async () => {

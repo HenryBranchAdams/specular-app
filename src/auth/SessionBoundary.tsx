@@ -17,6 +17,26 @@ export interface SessionBoundaryProps {
   revalidationIntervalMs?: number;
 }
 
+export interface SessionGateProps {
+  action?: ReactNode;
+  alert?: boolean;
+  description: string;
+  title: string;
+}
+
+export function SessionGate({ action, alert = false, description, title }: SessionGateProps) {
+  return (
+    <main className="session-gate" data-ui-surface="session-boundary">
+      <span className="session-gate__brand">Specular</span>
+      <section className="session-gate__content">
+        <h1>{title}</h1>
+        <p role={alert ? 'alert' : undefined}>{description}</p>
+        {action === undefined ? null : <div className="session-gate__actions">{action}</div>}
+      </section>
+    </main>
+  );
+}
+
 export function SessionBoundary({
   children,
   loadSession = loadBrowserSession,
@@ -24,6 +44,7 @@ export function SessionBoundary({
 }: SessionBoundaryProps) {
   const [session, setSession] = useState<BrowserSession | null>(null);
   const [failed, setFailed] = useState(false);
+  const [retryVersion, setRetryVersion] = useState(0);
   const verifiedSession = useRef<AuthenticatedSession | null>(null);
 
   useEffect(() => {
@@ -70,14 +91,28 @@ export function SessionBoundary({
       globalThis.document.removeEventListener('visibilitychange', verifyWhenVisible);
       unsubscribeAuthenticationLost();
     };
-  }, [loadSession, revalidationIntervalMs]);
+  }, [loadSession, revalidationIntervalMs, retryVersion]);
 
   if (failed) {
     return (
-      <main className="session-gate">
-        <span className="session-gate__brand">Specular</span>
-        <p role="alert">Specular could not verify your ChatGPT session. Reload when your connection returns.</p>
-      </main>
+      <SessionGate
+        action={(
+          <button
+            className="primary-action"
+            onClick={() => {
+              setFailed(false);
+              setSession(null);
+              setRetryVersion((version) => version + 1);
+            }}
+            type="button"
+          >
+            Try again
+          </button>
+        )}
+        alert
+        description="Specular could not verify your ChatGPT session. Your private workspace stayed closed. Check your connection, then try again."
+        title="We couldn’t verify this session"
+      />
     );
   }
   if (session === null) {
@@ -85,14 +120,11 @@ export function SessionBoundary({
   }
   if (!session.authenticated) {
     return (
-      <main className="session-gate">
-        <span className="session-gate__brand">Specular</span>
-        <div>
-          <h1>Your private thinking workspace</h1>
-          <p>Sign in before Specular opens or reads a workspace on this device.</p>
-          <PlatformSignInLink className="primary-action" href={session.signInUrl}>Sign in with ChatGPT</PlatformSignInLink>
-        </div>
-      </main>
+      <SessionGate
+        action={<PlatformSignInLink className="primary-action" href={session.signInUrl}>Sign in with ChatGPT</PlatformSignInLink>}
+        description="Sign in before Specular opens or reads a workspace on this device."
+        title="Your private thinking workspace"
+      />
     );
   }
   return children(session);

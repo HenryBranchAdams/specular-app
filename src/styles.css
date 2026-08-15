@@ -273,36 +273,73 @@ a:focus-visible {
 }
 
 .session-gate {
-  min-height: 100vh;
+  min-height: 100dvh;
   display: grid;
   grid-template-rows: auto 1fr;
-  padding: 24px clamp(24px, 7vw, 96px);
-  background: var(--paper, #f3f0e8);
-  color: var(--ink, #25231f);
+  padding:
+    max(var(--space-5), env(safe-area-inset-top, 0px))
+    max(var(--space-5), env(safe-area-inset-right, 0px))
+    max(var(--space-5), env(safe-area-inset-bottom, 0px))
+    max(var(--space-5), env(safe-area-inset-left, 0px));
+  color: var(--color-text);
+  background: var(--color-canvas);
 }
 
 .session-gate__brand {
   font-family: var(--font-authored);
-  font-size: 1.2rem;
+  font-size: 1.25rem;
+  line-height: 1.2;
 }
 
-.session-gate > div,
-.session-gate > p {
+.session-gate__content {
   place-self: center center;
-  max-width: 34rem;
+  width: min(100%, 31rem);
+  padding-block: clamp(var(--space-7), 10dvh, 7rem);
 }
 
 .session-gate h1 {
+  max-width: 13ch;
+  margin: 0;
   font-family: var(--font-authored);
-  font-size: clamp(2.2rem, 6vw, 4.5rem);
+  font-size: clamp(2rem, 6vw, 3.75rem);
   font-weight: 400;
-  line-height: 0.98;
+  line-height: 1.02;
+  letter-spacing: -0.035em;
+}
+
+.session-gate__content > p {
+  max-width: 36rem;
+  margin: var(--space-4) 0 0;
+  color: var(--color-text-muted);
+  font-size: 1rem;
+  line-height: 1.55;
+}
+
+.session-gate__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-3);
+  margin-top: var(--space-5);
+}
+
+.session-gate .primary-action {
+  border-radius: var(--radius-control);
+  font-size: 1rem;
+  white-space: nowrap;
 }
 
 .session-gate a.primary-action {
-  display: inline-block;
-  margin-top: 1rem;
   text-decoration: none;
+}
+
+@media (max-width: 360px) {
+  .session-gate {
+    padding-inline: var(--space-4);
+  }
+
+  .session-gate__content {
+    padding-block: var(--space-7);
+  }
 }
 
 .account-boundary {

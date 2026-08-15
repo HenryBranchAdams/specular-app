@@ -15,3 +15,7 @@ Make verification, signed-out, failed-verification, authentication-loss, and loc
 - Copy uses canonical author/private-workspace language and does not imply a local-only mode.
 - Sign-in busy, failure, retry, and focus states are represented in stories and route screenshots.
 - The owner approves the before/after visual baseline.
+
+## Comments
+
+- 2026-08-15: Implemented one shared entry/identity composition for signed-out, verification-failed, authentication-loss, and locked-workspace states. The white dynamic-viewport layout uses safe-area spacing, bounded Playfair headings, canonical hosted-workspace language, an explicit retry path that stays fail-closed, and a represented sign-in busy state. Focused auth, App, Storybook-build, style, and type checks passed; owner visual review is scheduled for checkpoint 1 after issue 05.

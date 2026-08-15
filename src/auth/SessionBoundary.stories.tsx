@@ -1,6 +1,7 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { expect, within } from 'storybook/test';
-import { SessionBoundary } from './SessionBoundary';
+import { PlatformSignInLink } from './PlatformSignInLink';
+import { SessionBoundary, SessionGate } from './SessionBoundary';
 
 const meta = {
   title: 'Entry/Session boundary',
@@ -31,5 +32,29 @@ export const VerificationFailed: Story = {
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
     await expect(await canvas.findByRole('alert')).toHaveTextContent('could not verify your ChatGPT session');
+  },
+};
+
+export const SigningIn = {
+  render: () => (
+    <SessionGate
+      action={(
+        <PlatformSignInLink
+          className="primary-action"
+          href="/signin-with-chatgpt?return_to=%2F"
+          navigate={() => undefined}
+          prepareForNavigation={() => new Promise<void>(() => undefined)}
+        >
+          Sign in with ChatGPT
+        </PlatformSignInLink>
+      )}
+      description="Sign in before Specular opens or reads a workspace on this device."
+      title="Your private thinking workspace"
+    />
+  ),
+  play: async ({ canvasElement }: { canvasElement: HTMLElement }) => {
+    const canvas = within(canvasElement);
+    canvas.getByRole('link', { name: 'Sign in with ChatGPT' }).click();
+    await expect(await canvas.findByRole('link', { name: 'Opening ChatGPT…' })).toHaveAttribute('aria-busy', 'true');
   },
 };

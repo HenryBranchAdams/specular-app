@@ -8,6 +8,12 @@ test('signed-out and verification-failed boundaries keep private content closed'
   await page.goto('/');
   await expect(page.getByRole('link', { name: 'Sign in with ChatGPT' })).toBeVisible();
   await expectNoHorizontalOverflow(page);
+  const viewport = page.viewportSize();
+  if (viewport !== null) await page.setViewportSize({ width: viewport.width, height: 480 });
+  await page.evaluate(() => { document.documentElement.style.fontSize = '200%'; });
+  await expect(page.getByRole('heading', { name: 'Your private thinking workspace' })).toBeVisible();
+  await expect(page.getByRole('link', { name: 'Sign in with ChatGPT' })).toBeVisible();
+  await expectNoHorizontalOverflow(page);
 
   await page.unroute('**/api/session');
   await page.route('**/api/session', async (route) => {

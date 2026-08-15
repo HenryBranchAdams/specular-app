@@ -34,6 +34,7 @@ import {
 import { HttpDictationService, type DictationService } from '../dictation/client';
 import { clearCachedSession, type AuthenticatedSession } from '../auth/session';
 import { PlatformSignInLink } from '../auth/PlatformSignInLink';
+import { SessionGate } from '../auth/SessionBoundary';
 import { deleteHostedAccount, downloadAccountArchive, downloadDeviceRecovery } from '../account/client';
 import { registerReloadSafetyCheck } from '../pwa/reload-safety';
 import { releaseServiceWorkersForPlatformAuth } from '../pwa/platform-auth-navigation';
@@ -1608,14 +1609,11 @@ export function App({
 
   if (synchronizationStatus === 'locked' && session !== undefined) {
     return (
-      <main className="session-gate">
-        <span className="session-gate__brand">Specular</span>
-        <div>
-          <h1>Workspace locked</h1>
-          <p>Your ChatGPT session changed or expired. Cached writing remains hidden for this account until you sign in again.</p>
-          <PlatformSignInLink className="primary-action" href="/signin-with-chatgpt?return_to=%2F">Sign in again</PlatformSignInLink>
-        </div>
-      </main>
+      <SessionGate
+        action={<PlatformSignInLink className="primary-action" href="/signin-with-chatgpt?return_to=%2F">Sign in again</PlatformSignInLink>}
+        description="Your ChatGPT session changed or expired. Cached writing remains hidden for this account until you sign in again."
+        title="Workspace locked"
+      />
     );
   }
 

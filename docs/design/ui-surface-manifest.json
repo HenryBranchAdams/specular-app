@@ -13,7 +13,8 @@
     "patterns-status--offline-ready": "src/components/PwaUpdatePrompt.stories.tsx",
     "patterns-dialog--destructive": "src/components/ConfirmDeleteDialog.stories.tsx",
     "entry-session-boundary--signed-out": "src/auth/SessionBoundary.stories.tsx",
-    "entry-session-boundary--verification-failed": "src/auth/SessionBoundary.stories.tsx"
+    "entry-session-boundary--verification-failed": "src/auth/SessionBoundary.stories.tsx",
+    "entry-session-boundary--signing-in": "src/auth/SessionBoundary.stories.tsx"
   },
   "routeCatalog": {
     "route:signed-out": "tests/e2e/ui-surfaces.spec.ts",
@@ -31,9 +32,9 @@
       "productionEntry": "src/auth/SessionBoundary.tsx",
       "patternIds": ["sign-in-form", "form-field", "skeleton-spinner", "focus-ring-web"],
       "requiredStates": ["verifying", "signed-out", "verification-failed", "authentication-lost", "locked"],
-      "storyIds": ["entry-session-boundary--signed-out", "entry-session-boundary--verification-failed"],
+      "storyIds": ["entry-session-boundary--signed-out", "entry-session-boundary--verification-failed", "entry-session-boundary--signing-in"],
       "routeScenarios": ["route:signed-out", "route:verification-failed"],
-      "maturity": "transition",
+      "maturity": "ready",
       "exceptions": []
     },
     {
