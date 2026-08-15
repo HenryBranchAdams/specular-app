@@ -26,6 +26,7 @@
     "test:e2e:functional": "playwright test --grep-invert @performance",
     "test:e2e:integrated": "npm run build && playwright test --config playwright.integrated.config.ts",
     "test:a11y": "playwright test tests/e2e/accessibility.spec.ts",
+    "test:ui": "STORYBOOK=true STORYBOOK_DISABLE_TELEMETRY=1 vitest run --config vitest.storybook.config.ts",
     "test:performance": "playwright test --grep @performance --project=chromium-375 --workers=1 --retries=0",
     "lint": "eslint .",
     "lint:styles": "stylelint \"src/**/*.css\" && node scripts/validate-ui-style-ratchet.mjs",

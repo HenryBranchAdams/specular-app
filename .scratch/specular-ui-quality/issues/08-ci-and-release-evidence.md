@@ -6,6 +6,7 @@ Blocked by: 07
 ## Progress
 
 - 2026-08-15: repaired the pre-existing Lighthouse runner failure with an explicit hosted-Chromium launch flag and a deterministic, compressed, fail-closed anonymous fixture over the emitted client build. Ticket completion remains blocked by 07 because canonical visual baselines and release evidence depend on the approved final surface.
+- 2026-08-15: added the existing style, component-inventory, reciprocal surface-manifest, and real-Chromium Storybook interaction/accessibility contracts to hosted CI, with a machine-readable Storybook report uploaded on failure. Canonical pixel baselines and the versioned UI release-evidence extension still depend on 07.
 
 ## Outcome
 
