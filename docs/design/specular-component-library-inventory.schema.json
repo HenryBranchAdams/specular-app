@@ -1,0 +1,69 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://specular.local/schemas/specular-component-library-inventory.schema.json",
+  "title": "Specular component library inventory",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["$schema", "catalog", "tiers", "entries"],
+  "properties": {
+    "$schema": { "type": "string" },
+    "catalog": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "source", "capturedAt", "entryCount", "tierCounts"],
+      "properties": {
+        "name": { "type": "string", "minLength": 1 },
+        "source": { "type": "string", "format": "uri" },
+        "capturedAt": { "type": "string", "format": "date" },
+        "entryCount": { "const": 44 },
+        "tierCounts": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["foundation", "core", "conditional", "excluded"],
+          "properties": {
+            "foundation": { "const": 7 },
+            "core": { "const": 15 },
+            "conditional": { "const": 15 },
+            "excluded": { "const": 7 }
+          }
+        }
+      }
+    },
+    "tiers": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["foundation", "core", "conditional", "excluded"],
+      "properties": {
+        "foundation": { "type": "string", "minLength": 1 },
+        "core": { "type": "string", "minLength": 1 },
+        "conditional": { "type": "string", "minLength": 1 },
+        "excluded": { "type": "string", "minLength": 1 }
+      }
+    },
+    "entries": {
+      "type": "array",
+      "minItems": 44,
+      "maxItems": 44,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "name", "source", "tier", "specularEntry", "use"],
+        "properties": {
+          "id": { "type": "string", "pattern": "^[a-z0-9-]+$" },
+          "name": { "type": "string", "minLength": 1 },
+          "source": { "type": "string", "format": "uri" },
+          "tier": { "enum": ["foundation", "core", "conditional", "excluded"] },
+          "specularEntry": { "type": ["string", "null"] },
+          "use": { "type": "string", "minLength": 1 }
+        },
+        "allOf": [
+          {
+            "if": { "properties": { "tier": { "const": "excluded" } }, "required": ["tier"] },
+            "then": { "properties": { "specularEntry": { "type": "null" } } },
+            "else": { "properties": { "specularEntry": { "type": "string", "minLength": 1 } } }
+          }
+        ]
+      }
+    }
+  }
+}
