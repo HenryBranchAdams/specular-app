@@ -40,6 +40,20 @@
   },
   "surfaceParts": [
     {
+      "id": "published-writing",
+      "productionEntry": "src/app/App.tsx",
+      "ownerSurfaceIds": ["hosted-snapshot"],
+      "coverage": "owned-part",
+      "reason": "Canonical writing is the governed content region inside the hosted snapshot reader."
+    },
+    {
+      "id": "snapshot-preview",
+      "productionEntry": "src/app/App.tsx",
+      "ownerSurfaceIds": ["snapshot-editor"],
+      "coverage": "owned-part",
+      "reason": "The preview is governed by the snapshot editor and must preserve the exact published projection."
+    },
+    {
       "id": "capsule-library",
       "productionEntry": "src/components/CapsuleLibrary.tsx",
       "ownerSurfaceIds": ["library-drawer"],

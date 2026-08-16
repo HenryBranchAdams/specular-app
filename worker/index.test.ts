@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import worker from './index';
 
 class MemoryDatabase {
-  readonly rows = new Map<string, { payload: string; owner_id: string; created_at: number; revoked_at: number | null }>();
+  readonly rows = new Map<string, { payload: string; owner_id: string; created_at: number; revoked_at: number | null; visibility: 'signed_in' | 'public' }>();
   readonly workspaces = new Map<string, { cache_namespace: string; revision: number; state: string }>();
   readonly mutations = new Map<string, number>();
   readonly usage = new Map<string, number>();
@@ -49,7 +49,7 @@ class MemoryDatabase {
       first: <T>() => {
         if (query.startsWith('SELECT payload')) {
           const row = this.rows.get(String(readValues()[0]));
-          return Promise.resolve((row?.revoked_at !== null ? null : { payload: row.payload }) as T | null);
+          return Promise.resolve((row?.revoked_at !== null ? null : { payload: row.payload, visibility: row.visibility }) as T | null);
         }
         if (query.startsWith('SELECT owner_id')) {
           const row = this.rows.get(String(readValues()[0]));
@@ -101,8 +101,8 @@ class MemoryDatabase {
       run: () => {
         let changes: number | undefined;
         if (query.startsWith('INSERT INTO published_snapshots_v2')) {
-          const [slug, ownerId, payload, createdAt] = readValues();
-          this.rows.set(String(slug), { payload: String(payload), owner_id: String(ownerId), created_at: Number(createdAt), revoked_at: null });
+          const [slug, ownerId, payload, createdAt, visibility] = readValues();
+          this.rows.set(String(slug), { payload: String(payload), owner_id: String(ownerId), created_at: Number(createdAt), revoked_at: null, visibility: visibility === 'public' ? 'public' : 'signed_in' });
         }
         if (query.startsWith('UPDATE published_snapshots_v2')) {
           const [revokedAt, slug, ownerId] = readValues();
@@ -162,7 +162,7 @@ class MemoryDatabase {
         if (query.startsWith('SELECT slug, payload')) {
           const ownerId = String(readValues()[0]);
           return Promise.resolve({ success: true, results: [...this.rows.entries()].flatMap(([slug, row]) => row.owner_id === ownerId
-            ? [{ slug, payload: row.payload, created_at: row.created_at, revoked_at: row.revoked_at }]
+            ? [{ slug, payload: row.payload, created_at: row.created_at, revoked_at: row.revoked_at, visibility: row.visibility }]
             : []) as T[] });
         }
         return Promise.resolve({ success: true, results: [] as T[] });
@@ -594,14 +594,14 @@ describe('Sites worker', () => {
     const created = await worker.fetch(protectedRequest('/api/shares', {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
-      body: JSON.stringify(payload),
+      body: JSON.stringify({ snapshot: payload, visibility: 'signed_in' }),
     }), env);
     expect(created.status).toBe(201);
     const body = await created.json() as { slug: string };
     expect(body.slug).toMatch(/^[a-z0-9]{16}$/u);
 
     const listed = await worker.fetch(protectedRequest('/api/shares'), env);
-    await expect(listed.json()).resolves.toMatchObject({ snapshots: [{ slug: body.slug, title: payload.title }] });
+    await expect(listed.json()).resolves.toMatchObject({ snapshots: [{ slug: body.slug, title: payload.title, visibility: 'signed_in' }] });
     const otherList = await worker.fetch(protectedRequest('/api/shares', {}, {
       'oai-authenticated-user-id': 'site-user-two', 'oai-authenticated-user-email': 'other@example.com',
     }), env);
@@ -612,6 +612,28 @@ describe('Sites worker', () => {
     }), env);
     expect(loaded.status).toBe(200);
     await expect(loaded.json()).resolves.toEqual(payload);
+
+    const anonymous = await worker.fetch(new Request(`https://specular.example/api/shares/${body.slug}`), env);
+    expect(anonymous.status).toBe(401);
+  });
+
+  it('lets an anonymous reader open only a snapshot explicitly published for anyone with the link', async () => {
+    const database = new MemoryDatabase();
+    const env = environment(database);
+    const payload = {
+      title: 'A public reflection', createdAt: 1_800_000_000_000,
+      blocks: [{ id: 'block:one', content: 'Deliberately public authored words.', kind: 'thought', references: [] }],
+    };
+    const created = await worker.fetch(protectedRequest('/api/shares', {
+      method: 'POST', headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ snapshot: payload, visibility: 'public' }),
+    }), env);
+    const { slug } = await created.json() as { slug: string };
+
+    const loaded = await worker.fetch(new Request(`https://specular.example/api/shares/${slug}`), env);
+    expect(loaded.status).toBe(200);
+    await expect(loaded.json()).resolves.toEqual(payload);
+    expect((await worker.fetch(new Request('https://specular.example/api/shares'), env)).status).toBe(401);
   });
 
   it('allows only the snapshot owner to revoke a published link', async () => {
@@ -622,7 +644,7 @@ describe('Sites worker', () => {
       blocks: [{ id: 'block:one', content: 'Authored words.', kind: 'thought', references: [] }],
     };
     const created = await worker.fetch(protectedRequest('/api/shares', {
-      method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(payload),
+      method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ snapshot: payload, visibility: 'signed_in' }),
     }), env);
     const { slug } = await created.json() as { slug: string };
 

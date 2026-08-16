@@ -22,8 +22,19 @@ describe('Specular root routing', () => {
 
     expect(await screen.findByRole('heading', { name: 'A public synthetic snapshot' })).toBeVisible();
     expect(screen.queryByRole('link', { name: 'Sign in with ChatGPT' })).not.toBeInTheDocument();
-    expect(fetchMock).toHaveBeenCalledWith('/api/shares/abcdefghijklmnop', undefined);
+    expect(fetchMock).toHaveBeenCalledWith('/api/shares/abcdefghijklmnop');
     expect(fetchMock).not.toHaveBeenCalledWith('/api/session', expect.anything());
+    expect(screen.getByRole('link', { name: 'Write your own in Specular' })).toHaveAttribute('href', '/');
+  });
+
+  it('offers a Specular entry path when a signed-in snapshot requires authentication', async () => {
+    globalThis.history.replaceState({}, '', '/s/abcdefghijklmnop');
+    vi.stubGlobal('fetch', vi.fn(() => Promise.resolve(new Response(JSON.stringify({ error: 'authentication_required' }), { status: 401 }))));
+
+    render(<SpecularRoot />);
+
+    expect(await screen.findByRole('heading', { name: 'Sign in to read this snapshot.' })).toBeVisible();
+    expect(screen.getByRole('link', { name: 'Continue to Specular' })).toHaveAttribute('href', '/');
   });
 
   it('preserves authored paragraph boundaries on a published snapshot', async () => {

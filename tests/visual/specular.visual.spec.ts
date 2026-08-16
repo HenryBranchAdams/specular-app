@@ -71,6 +71,18 @@ test('Library and Snapshot overlays at a mobile viewport', async ({ page }) => {
   await expect(page).toHaveScreenshot('snapshot-mobile.png', overlayScreenshotOptions);
 });
 
+test('Snapshot publication controls at a desktop viewport', async ({ page }) => {
+  await installThinkingMocks(page);
+  await openSpecular(page);
+  await page.getByRole('textbox', { name: 'Document title' }).fill('A deliberate public projection');
+  await writeThought(page, 'An author should understand exactly who can read a published page.');
+  await page.getByRole('button', { name: 'Create snapshot' }).click();
+  await page.getByRole('combobox', { name: 'Who can read the published page?' }).selectOption('public');
+  await expect(page.getByText('Unlisted and readable without a Specular account.')).toBeVisible();
+  await settleVisual(page);
+  await expect(page).toHaveScreenshot('snapshot-public-desktop.png', overlayScreenshotOptions);
+});
+
 test('public snapshot with references at a mobile viewport', async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
   await page.route('**/api/shares/visual-snapshot', async (route) => {
@@ -89,4 +101,23 @@ test('public snapshot with references at a mobile viewport', async ({ page }) =>
   await expect(page.getByRole('heading', { name: 'A published synthetic reflection' })).toBeVisible();
   await settleVisual(page);
   await expect(page).toHaveScreenshot('published-mobile.png', screenshotOptions);
+});
+
+test('public snapshot attribution remains restrained at a desktop viewport', async ({ page }) => {
+  await page.route('**/api/shares/visual-desktop', async (route) => {
+    await route.fulfill({ contentType: 'application/json', status: 200, body: JSON.stringify({
+      title: 'Where attention settles',
+      createdAt: 1_800_000_000_000,
+      blocks: [{
+        id: 'synthetic:block',
+        content: 'The first paragraph keeps its own breath.\n\nThe second paragraph begins after deliberate space.',
+        kind: 'thought',
+        references: [],
+      }],
+    }) });
+  });
+  await openSpecularPath(page, '/s/visual-desktop');
+  await expect(page.getByRole('link', { name: 'Write your own in Specular' })).toBeVisible();
+  await settleVisual(page);
+  await expect(page).toHaveScreenshot('published-desktop.png', screenshotOptions);
 });

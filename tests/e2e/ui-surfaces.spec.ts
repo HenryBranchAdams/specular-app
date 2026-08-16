@@ -48,6 +48,8 @@ test('hosted snapshot loading, available, empty, and unavailable states stay dis
   await expect(page.getByLabel('Loading snapshot')).toBeVisible();
   release?.();
   await expect(page.getByRole('heading', { name: 'Synthetic attention notes' })).toBeVisible();
+  await expect(page).toHaveTitle('Synthetic attention notes');
+  await expect(page.getByRole('link', { name: 'Write your own in Specular' })).toHaveAttribute('href', '/');
 
   response = 'empty';
   await page.reload();

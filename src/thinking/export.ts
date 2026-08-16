@@ -1,11 +1,16 @@
 import type { PublishedSnapshot } from './share-client';
 
-function safeFilename(title: string): string {
-  const value = title.toLocaleLowerCase('en-US')
-    .replace(/[^a-z0-9]+/gu, '-')
-    .replace(/^-+|-+$/gu, '')
-    .slice(0, 80);
-  return value.length === 0 ? 'specular-snapshot' : value;
+export function snapshotFilename(title: string): string {
+  let withoutControlCharacters = '';
+  for (const character of title.trim()) {
+    withoutControlCharacters += character.charCodeAt(0) < 32 ? '-' : character;
+  }
+  const value = withoutControlCharacters
+    .replace(/[<>:"/\\|?*]/gu, '-')
+    .replace(/\s+/gu, ' ')
+    .replace(/[. ]+$/gu, '')
+    .slice(0, 120);
+  return value.length === 0 ? 'Specular snapshot' : value;
 }
 
 export function snapshotToMarkdown(snapshot: PublishedSnapshot): string {
@@ -33,8 +38,24 @@ export function downloadMarkdown(snapshot: PublishedSnapshot): void {
   const blob = new Blob([snapshotToMarkdown(snapshot)], { type: 'text/markdown;charset=utf-8' });
   const url = URL.createObjectURL(blob);
   const anchor = document.createElement('a');
-  anchor.download = `${safeFilename(snapshot.title)}.md`;
+  anchor.download = `${snapshotFilename(snapshot.title)}.md`;
   anchor.href = url;
   anchor.click();
   URL.revokeObjectURL(url);
+}
+
+export function printSnapshot(snapshot: PublishedSnapshot): void {
+  const previousTitle = document.title;
+  const restoreTitle = () => {
+    document.title = previousTitle;
+    globalThis.removeEventListener('afterprint', restoreTitle);
+  };
+  document.title = snapshotFilename(snapshot.title);
+  globalThis.addEventListener('afterprint', restoreTitle, { once: true });
+  try {
+    globalThis.print();
+  } catch (error) {
+    restoreTitle();
+    throw error;
+  }
 }

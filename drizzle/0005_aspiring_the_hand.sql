@@ -1,0 +1,1 @@
+ALTER TABLE `published_snapshots_v2` ADD `visibility` text DEFAULT 'signed_in' NOT NULL;

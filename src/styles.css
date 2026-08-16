@@ -22,6 +22,7 @@
   --color-danger: #b42318;
   --color-warning: #8a5a00;
   --color-success: #237a3b;
+  --space-0: 0;
   --space-1: 0.25rem;
   --space-2: 0.5rem;
   --space-3: 0.75rem;
@@ -1794,6 +1795,33 @@ a:focus-visible {
   text-transform: none;
 }
 
+.snapshot-layout > aside .snapshot-visibility-field {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: var(--space-2);
+  padding: var(--space-4) var(--space-0) var(--space-1);
+  border-bottom: 0;
+}
+
+.snapshot-visibility-field select {
+  min-height: var(--touch-target);
+  padding: var(--space-0) var(--space-6) var(--space-0) var(--space-3);
+  border: 1px solid var(--color-control-border);
+  border-radius: var(--radius-control);
+  color: var(--ink);
+  background: var(--paper-raised);
+  font: inherit;
+}
+
+.snapshot-visibility-field select:disabled {
+  color: var(--quiet);
+  cursor: not-allowed;
+}
+
+#snapshot-visibility-help {
+  margin: var(--space-0) var(--space-0) var(--space-4);
+}
+
 .snapshot-title-confirmation {
   padding: 0 0 1rem;
   border-bottom: 1px solid var(--line);
@@ -1931,11 +1959,27 @@ a:focus-visible {
 }
 
 .published-page > footer {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-4);
   padding-top: 1.5rem;
   margin-top: 5rem;
   border-top: 1px solid var(--line);
   color: var(--quiet);
   font-size: 0.75rem;
+}
+
+.published-page > footer a,
+.published-entry-link {
+  color: var(--ink);
+  font-weight: 400;
+  text-underline-offset: 0.24em;
+}
+
+.published-entry-link {
+  display: inline-block;
+  margin-top: var(--space-6);
 }
 
 @media (max-width: 860px) {
@@ -1945,6 +1989,11 @@ a:focus-visible {
     min-height: 4rem;
     padding: 0 1rem;
     backdrop-filter: none;
+  }
+
+  .published-page > footer {
+    align-items: flex-start;
+    flex-direction: column;
   }
 
   .workspace-nav {

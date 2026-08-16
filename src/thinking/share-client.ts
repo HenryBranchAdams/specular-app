@@ -14,23 +14,26 @@ export interface PublishedSnapshot {
   blocks: PublishedBlock[];
 }
 
+export type ShareVisibility = 'signed_in' | 'public';
+
 export interface HostedSnapshotSummary {
   slug: string;
   title: string;
   createdAt: number;
   revokedAt: number | null;
+  visibility: ShareVisibility;
 }
 
 export interface SharePublisher {
-  publish(snapshot: PublishedSnapshot): Promise<{ url: string }>;
+  publish(snapshot: PublishedSnapshot, visibility: ShareVisibility): Promise<{ url: string }>;
 }
 
 export class HttpSharePublisher implements SharePublisher {
-  async publish(snapshot: PublishedSnapshot): Promise<{ url: string }> {
+  async publish(snapshot: PublishedSnapshot, visibility: ShareVisibility): Promise<{ url: string }> {
     const response = await protectedFetch('/api/shares', {
       method: 'POST',
       headers: { 'content-type': 'application/json', 'x-specular-intent': 'mutate' },
-      body: JSON.stringify(snapshot),
+      body: JSON.stringify({ snapshot, visibility }),
     });
     const body = await response.json() as { url?: unknown };
     if (!response.ok || typeof body.url !== 'string') {
@@ -40,8 +43,16 @@ export class HttpSharePublisher implements SharePublisher {
   }
 }
 
+export class SnapshotAuthenticationRequiredError extends Error {
+  constructor() {
+    super('Sign in to read this snapshot.');
+    this.name = 'SnapshotAuthenticationRequiredError';
+  }
+}
+
 export async function loadPublishedSnapshot(slug: string): Promise<PublishedSnapshot> {
-  const response = await protectedFetch(`/api/shares/${encodeURIComponent(slug)}`);
+  const response = await fetch(`/api/shares/${encodeURIComponent(slug)}`);
+  if (response.status === 401) throw new SnapshotAuthenticationRequiredError();
   const body = await response.json() as unknown;
   if (!response.ok || typeof body !== 'object' || body === null) {
     throw new Error('This snapshot is unavailable.');
@@ -68,6 +79,7 @@ export async function listPublishedSnapshots(): Promise<HostedSnapshotSummary[]>
       title: candidate.title,
       createdAt: candidate.createdAt,
       revokedAt: typeof candidate.revokedAt === 'number' ? candidate.revokedAt : null,
+      visibility: candidate.visibility === 'public' ? 'public' : 'signed_in',
     }];
   });
 }

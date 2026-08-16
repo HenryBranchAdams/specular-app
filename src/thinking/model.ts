@@ -160,6 +160,7 @@ export const thoughtSnapshotSchema = z.object({
   blockIds: z.array(z.string().min(1).max(128)).min(1).max(5_000),
   createdAt: z.number().int().nonnegative(),
   publishedUrl: z.string().url().max(2_000).nullable(),
+  visibility: z.enum(['signed_in', 'public']).default('signed_in'),
 }).strict();
 
 export const workspaceStateSchema = z.object({

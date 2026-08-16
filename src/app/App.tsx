@@ -42,7 +42,7 @@ import { ConfirmDeleteDialog } from '../components/ConfirmDeleteDialog';
 import { useModalFocus } from '../components/use-modal-focus';
 import { registerReloadSafetyCheck } from '../pwa/reload-safety';
 import { releaseServiceWorkersForPlatformAuth } from '../pwa/platform-auth-navigation';
-import { downloadMarkdown } from '../thinking/export';
+import { downloadMarkdown, printSnapshot } from '../thinking/export';
 import {
   createInitialWorkspace,
   effectiveStatus,
@@ -72,9 +72,11 @@ import {
   loadPublishedSnapshot,
   revokeHostedSnapshot,
   revokePublishedSnapshot,
+  SnapshotAuthenticationRequiredError,
   type HostedSnapshotSummary,
   type PublishedSnapshot,
   type SharePublisher,
+  type ShareVisibility,
 } from '../thinking/share-client';
 
 export interface AppProps {
@@ -214,20 +216,37 @@ function snapshotPayload(
 function PublishedPage({ slug }: { slug: string }) {
   const [snapshot, setSnapshot] = useState<PublishedSnapshot | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [authenticationRequired, setAuthenticationRequired] = useState(false);
 
   useEffect(() => {
     let active = true;
     void loadPublishedSnapshot(slug).then(
       (value) => { if (active) setSnapshot(value); },
       (reason: unknown) => {
-        if (active) setError(reason instanceof Error ? reason.message : 'This snapshot is unavailable.');
+        if (active) {
+          setAuthenticationRequired(reason instanceof SnapshotAuthenticationRequiredError);
+          setError(reason instanceof Error ? reason.message : 'This snapshot is unavailable.');
+        }
       },
     );
     return () => { active = false; };
   }, [slug]);
 
+  useEffect(() => {
+    if (snapshot === null) return;
+    const previousTitle = document.title;
+    document.title = snapshot.title;
+    return () => { document.title = previousTitle; };
+  }, [snapshot]);
+
   if (error !== null) {
-    return <main className="published-page" data-ui-surface="hosted-snapshot"><p className="published-kicker">Specular</p><h1>{error}</h1></main>;
+    return (
+      <main className="published-page" data-ui-surface="hosted-snapshot">
+        <p className="published-kicker">Specular</p>
+        <h1>{error}</h1>
+        {authenticationRequired ? <a className="published-entry-link" href="/">Continue to Specular</a> : null}
+      </main>
+    );
   }
   if (snapshot === null) {
     return <main className="published-page" data-ui-surface="hosted-snapshot"><LoaderCircle aria-label="Loading snapshot" className="spin" /></main>;
@@ -238,7 +257,7 @@ function PublishedPage({ slug }: { slug: string }) {
       <p className="published-kicker">A Specular reflection</p>
       <h1>{snapshot.title}</h1>
       <p className="published-date">Captured {new Date(snapshot.createdAt).toLocaleDateString()}</p>
-      <article aria-label="Published writing" className="published-body">
+      <article aria-label="Published writing" className="published-body" data-ui-part="published-writing">
         {snapshot.blocks.length === 0
           ? <p className="published-empty">This snapshot has no published writing.</p>
           : snapshot.blocks.map((block) => <SnapshotWritingBlock block={block} key={block.id} />)}
@@ -256,7 +275,10 @@ function PublishedPage({ slug }: { slug: string }) {
           ))}</ol>
         </section>
       )}
-      <footer>Written and directed by its author in Specular.</footer>
+      <footer>
+        <span>Written and directed by its author in Specular.</span>
+        <a href="/">Write your own in Specular</a>
+      </footer>
     </main>
   );
 }
@@ -729,6 +751,7 @@ function SnapshotEditor({
   onToggleBlock,
   onTitleChange,
   onTitleConfirm,
+  onVisibilityChange,
   operation,
   restoreFocusTo,
   snapshot,
@@ -743,6 +766,7 @@ function SnapshotEditor({
   onToggleBlock: (blockId: string) => void;
   onTitleChange: (title: string) => void;
   onTitleConfirm: () => void;
+  onVisibilityChange: (visibility: ShareVisibility) => void;
   operation: 'publish' | 'revoke' | null;
   restoreFocusTo: HTMLElement | null;
   snapshot: ThoughtSnapshot;
@@ -784,6 +808,25 @@ function SnapshotEditor({
                 <button onClick={onTitleConfirm} type="button">Use this title</button>
               </div>
             )}
+            <label className="snapshot-visibility-field">
+              <span>Who can read the published page?</span>
+              <select
+                aria-describedby="snapshot-visibility-help"
+                disabled={snapshot.publishedUrl !== null}
+                onChange={(event) => { onVisibilityChange(event.target.value as ShareVisibility); }}
+                value={snapshot.visibility}
+              >
+                <option value="signed_in">Signed-in readers</option>
+                <option value="public">Anyone with the link</option>
+              </select>
+            </label>
+            <p id="snapshot-visibility-help">
+              {snapshot.publishedUrl === null
+                ? snapshot.visibility === 'public'
+                  ? 'Unlisted and readable without a Specular account.'
+                  : 'Readers must sign in before Specular returns the writing.'
+                : 'Revoke this link before changing who can read it.'}
+            </p>
             <h2>Included writing</h2>
             {allBlocks.map((block) => (
               <label key={block.id}>
@@ -793,7 +836,7 @@ function SnapshotEditor({
             ))}
             <p>Selected writing and references are content. Specular adds presentation.</p>
           </aside>
-          <article aria-label="Snapshot preview" className="snapshot-preview">
+          <article aria-label="Snapshot preview" className="snapshot-preview" data-ui-part="snapshot-preview">
             <p className="published-kicker">A Specular reflection</p>
             <h1>{payload.title}</h1>
             {payload.blocks.map((block) => <SnapshotWritingBlock block={block} key={block.id} />)}
@@ -802,7 +845,7 @@ function SnapshotEditor({
         <footer>
           <button disabled={!snapshot.titleConfirmed || snapshot.title.trim().length === 0} onClick={() => { downloadMarkdown(payload); }} type="button"><Download size={15} />Markdown</button>
           <button disabled={!snapshot.titleConfirmed || snapshot.title.trim().length === 0} onClick={onPrint} type="button"><Printer size={15} />Print / PDF</button>
-          <button className="primary-action" disabled={operation !== null || payload.blocks.length === 0 || !snapshot.titleConfirmed || snapshot.title.trim().length === 0} onClick={onPublish} type="button">
+          <button className="primary-action" disabled={snapshot.publishedUrl !== null || operation !== null || payload.blocks.length === 0 || !snapshot.titleConfirmed || snapshot.title.trim().length === 0} onClick={onPublish} type="button">
             {operation === 'publish' ? <LoaderCircle className="spin" size={15} /> : <Share2 size={15} />}
             {operation === 'publish' ? 'Publishing page…' : 'Publish page'}
           </button>
@@ -1687,6 +1730,7 @@ export function App({
       blockIds,
       createdAt: now,
       publishedUrl: null,
+      visibility: 'signed_in',
     };
     setState((current) => ({ ...current, snapshots: [...current.snapshots, snapshot] }));
     setShareError(null);
@@ -1700,7 +1744,7 @@ export function App({
     setShareError(null);
     setSnapshotStatusMessage('');
     try {
-      const result = await sharePublisher.publish(snapshotPayload(state, currentSnapshot));
+      const result = await sharePublisher.publish(snapshotPayload(state, currentSnapshot), currentSnapshot.visibility);
       setState((current) => ({
         ...current,
         snapshots: current.snapshots.map((snapshot) => snapshot.id === currentSnapshot.id
@@ -1825,7 +1869,13 @@ export function App({
                   {publishedLinksStatus === 'ready' && hostedSnapshots.length === 0 ? <span>No published links yet.</span> : null}
                   {publishedLinksStatus === 'ready' ? hostedSnapshots.map((snapshot) => (
                     <div key={snapshot.slug}>
-                      <span><b>{snapshot.title}</b><small>{snapshot.revokedAt === null ? new Date(snapshot.createdAt).toLocaleDateString() : 'Revoked'}</small></span>
+                      <span>
+                        <b>{snapshot.title}</b>
+                        <small>
+                          {snapshot.revokedAt === null ? new Date(snapshot.createdAt).toLocaleDateString() : 'Revoked'}
+                          {' · '}{snapshot.visibility === 'public' ? 'Anyone with the link' : 'Signed-in readers'}
+                        </small>
+                      </span>
                       {snapshot.revokedAt === null ? (
                         <button disabled={libraryOperation !== null} onClick={() => { void revokeHostedLink(snapshot.slug); }} type="button">
                           {libraryOperation?.kind === 'revoke' && libraryOperation.slug === snapshot.slug ? 'Revoking…' : 'Revoke'}
@@ -2014,12 +2064,13 @@ export function App({
         <SnapshotEditor
           error={shareError}
           onClose={() => { setSnapshotId(null); }}
-          onPrint={() => { window.print(); }}
+          onPrint={() => { printSnapshot(snapshotPayload(state, currentSnapshot)); }}
           onPublish={() => { void publishSnapshot(); }}
           onRevoke={() => { void revokeSnapshot(); }}
           onToggleBlock={(blockId) => { setState((current) => ({ ...current, snapshots: current.snapshots.map((snapshot) => snapshot.id === currentSnapshot.id ? { ...snapshot, blockIds: snapshot.blockIds.includes(blockId) ? snapshot.blockIds.filter((id) => id !== blockId) : [...snapshot.blockIds, blockId] } : snapshot) })); }}
           onTitleChange={(title) => { setState((current) => ({ ...current, snapshots: current.snapshots.map((snapshot) => snapshot.id === currentSnapshot.id ? { ...snapshot, title, titleConfirmed: title.trim().length > 0 } : snapshot) })); }}
           onTitleConfirm={() => { setState((current) => ({ ...current, snapshots: current.snapshots.map((snapshot) => snapshot.id === currentSnapshot.id && snapshot.title.trim().length > 0 ? { ...snapshot, titleConfirmed: true } : snapshot) })); }}
+          onVisibilityChange={(visibility) => { setState((current) => ({ ...current, snapshots: current.snapshots.map((snapshot) => snapshot.id === currentSnapshot.id ? { ...snapshot, visibility } : snapshot) })); }}
           operation={snapshotOperation}
           restoreFocusTo={snapshotTriggerRef.current}
           snapshot={currentSnapshot}

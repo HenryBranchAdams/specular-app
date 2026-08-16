@@ -499,11 +499,33 @@ describe('Specular thinking workspace', () => {
     expect(within(editor).getAllByText('Attention can justify another look without becoming proof.')).toHaveLength(2);
     await user.click(within(editor).getByRole('button', { name: 'Publish page' }));
 
-    expect(publish).toHaveBeenCalledWith(expect.objectContaining({
-      title: 'Attention without certainty',
-      blocks: [expect.objectContaining({ content: 'Attention can justify another look without becoming proof.' })],
-    }));
+    expect(publish).toHaveBeenCalledWith(
+      expect.objectContaining({
+        title: 'Attention without certainty',
+        blocks: [expect.objectContaining({ content: 'Attention can justify another look without becoming proof.' })],
+      }),
+      'signed_in',
+    );
     expect(await within(editor).findByRole('button', { name: 'Copy link' })).toBeVisible();
+  });
+
+  it('makes public access an explicit snapshot choice and locks it after publication', async () => {
+    const user = userEvent.setup();
+    const publish = vi.fn(() => Promise.resolve({ url: 'https://specular.example/s/abcdefghijklmnop' }));
+    setup({ sharePublisher: { publish } });
+    await user.type(screen.getByRole('textbox', { name: 'Thought writing block' }), 'A thought chosen for public reading.');
+    await user.click(screen.getByRole('button', { name: 'Create snapshot' }));
+    const editor = screen.getByRole('dialog', { name: 'Snapshot editor' });
+    const visibility = within(editor).getByRole('combobox', { name: 'Who can read the published page?' });
+
+    expect(visibility).toHaveValue('signed_in');
+    await user.selectOptions(visibility, 'public');
+    expect(within(editor).getByText('Unlisted and readable without a Specular account.')).toBeVisible();
+    await user.click(within(editor).getByRole('button', { name: 'Publish page' }));
+
+    expect(publish).toHaveBeenCalledWith(expect.any(Object), 'public');
+    expect(await within(editor).findByRole('combobox', { name: 'Who can read the published page?' })).toBeDisabled();
+    expect(within(editor).getByRole('button', { name: 'Publish page' })).toBeDisabled();
   });
 
   it('keeps authored paragraph boundaries in a snapshot preview', async () => {
@@ -877,6 +899,7 @@ describe('Specular thinking workspace', () => {
           title: 'A hosted thought',
           createdAt: 1_800_000_000_000,
           revokedAt: null,
+          visibility: 'public',
         }] }), { status: 200 }));
       }
       if (input === '/api/shares/abcdefghijklmnop' && init?.method === 'DELETE') {
@@ -901,9 +924,10 @@ describe('Specular thinking workspace', () => {
 
     await user.click(await screen.findByRole('button', { name: 'Library' }));
     expect(await screen.findByText('A hosted thought')).toBeVisible();
+    expect(screen.getByText(/Anyone with the link/u)).toBeVisible();
     await user.click(screen.getByRole('button', { name: 'Revoke' }));
 
-    expect(await screen.findByText('Revoked')).toBeVisible();
+    expect(await screen.findByText(/Revoked · Anyone with the link/u)).toBeVisible();
     expect(fetchMock).toHaveBeenCalledWith('/api/shares/abcdefghijklmnop', expect.objectContaining({ method: 'DELETE' }));
   });
 

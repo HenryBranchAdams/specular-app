@@ -26,6 +26,15 @@ const AUTHORS = {
   },
 } as const;
 
+function mutationHeaders(author: typeof AUTHORS.a | typeof AUTHORS.b) {
+  return {
+    ...author,
+    'content-type': 'application/json',
+    origin: baseUrl.origin,
+    'x-specular-intent': 'mutate',
+  };
+}
+
 async function prepareDatabase() {
   await harness.getWorker().applyD1Migrations('DB');
 }
@@ -193,13 +202,27 @@ describe('built Worker with D1', () => {
     expect(attempts.slice(3).filter(({ status }) => status === 400).length).toBeLessThanOrEqual(2);
   });
 
-  it('keeps snapshot, archive, revocation, and account deletion tenant-scoped', async () => {
-    const mutationHeaders = (author: typeof AUTHORS.a | typeof AUTHORS.b) => ({
-      ...author,
-      'content-type': 'application/json',
-      origin: baseUrl.origin,
-      'x-specular-intent': 'mutate',
+  it('serves a deliberately public snapshot anonymously without opening protected share management', async () => {
+    const snapshot = {
+      title: 'Public synthetic thought',
+      createdAt: 1_800_000_000_000,
+      blocks: [{ id: 'block:public', content: 'A deliberately public projection.', kind: 'thought', references: [] }],
+    };
+    const created = await harness.fetch('/api/shares', {
+      method: 'POST',
+      headers: mutationHeaders(AUTHORS.a),
+      body: JSON.stringify({ snapshot, visibility: 'public' }),
     });
+    expect(created.status).toBe(201);
+    const { slug } = await created.json() as { slug: string };
+
+    const anonymousRead = await harness.fetch(`/api/shares/${slug}`);
+    expect(anonymousRead.status).toBe(200);
+    await expect(anonymousRead.json()).resolves.toEqual(snapshot);
+    expect((await harness.fetch('/api/shares')).status).toBe(401);
+  });
+
+  it('keeps snapshot, archive, revocation, and account deletion tenant-scoped', async () => {
     const firstSessionResponse = await harness.fetch('/api/session', { headers: AUTHORS.a });
     const firstSession = await firstSessionResponse.json() as { cacheNamespace: string };
     const secondSession = await harness.fetch('/api/session', { headers: AUTHORS.b });
@@ -252,7 +275,7 @@ describe('built Worker with D1', () => {
     const created = await harness.fetch('/api/shares', {
       method: 'POST',
       headers: mutationHeaders(AUTHORS.a),
-      body: JSON.stringify(snapshot),
+      body: JSON.stringify({ snapshot, visibility: 'signed_in' }),
     });
     expect(created.status).toBe(201);
     const { slug } = await created.json() as { slug: string };
@@ -267,6 +290,7 @@ describe('built Worker with D1', () => {
     const signedInReader = await harness.fetch(`/api/shares/${slug}`, { headers: AUTHORS.b });
     expect(signedInReader.status).toBe(200);
     await expect(signedInReader.json()).resolves.toEqual(snapshot);
+    expect((await harness.fetch(`/api/shares/${slug}`)).status).toBe(401);
 
     const archive = await harness.fetch('/api/archive', { headers: AUTHORS.a });
     const archiveBody = await archive.json() as {

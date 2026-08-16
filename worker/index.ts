@@ -79,6 +79,13 @@ const publishedSnapshotSchema = z.object({
   }).strict()).min(1).max(1_000),
 }).strict();
 
+const shareVisibilitySchema = z.enum(['signed_in', 'public']);
+
+const publishSnapshotRequestSchema = z.object({
+  snapshot: publishedSnapshotSchema,
+  visibility: shareVisibilitySchema,
+}).strict();
+
 const cleanupRequestSchema = z.object({
   verbatim: z.string().trim().min(1).max(40_000),
 }).strict();
@@ -623,24 +630,25 @@ function randomSlug(): string {
 }
 
 async function createShare(request: Request, tenantId: string, env: Env): Promise<Response> {
-  let snapshot: z.infer<typeof publishedSnapshotSchema>;
+  let input: z.infer<typeof publishSnapshotRequestSchema>;
   try {
-    snapshot = publishedSnapshotSchema.parse(await boundedJson(request, 512 * 1024));
+    input = publishSnapshotRequestSchema.parse(await boundedJson(request, 512 * 1024));
   } catch {
     return json({ error: 'invalid_snapshot' }, 400);
   }
   const slug = randomSlug();
-  await env.DB.prepare('INSERT INTO published_snapshots_v2 (slug, owner_id, payload, created_at, revoked_at) VALUES (?, ?, ?, ?, NULL)')
-    .bind(slug, tenantId, JSON.stringify(snapshot), Date.now())
+  await env.DB.prepare('INSERT INTO published_snapshots_v2 (slug, owner_id, payload, created_at, revoked_at, visibility) VALUES (?, ?, ?, ?, NULL, ?)')
+    .bind(slug, tenantId, JSON.stringify(input.snapshot), Date.now(), input.visibility)
     .run();
   return json({ slug, url: `/s/${slug}` }, 201);
 }
 
-async function readShare(slug: string, env: Env): Promise<Response> {
-  const row = await env.DB.prepare('SELECT payload FROM published_snapshots_v2 WHERE slug = ? AND revoked_at IS NULL')
+async function readShare(slug: string, authenticated: boolean, env: Env): Promise<Response> {
+  const row = await env.DB.prepare('SELECT payload, visibility FROM published_snapshots_v2 WHERE slug = ? AND revoked_at IS NULL')
     .bind(slug)
-    .first<{ payload: string }>();
+    .first<{ payload: string; visibility: z.infer<typeof shareVisibilitySchema> }>();
   if (row === null) return json({ error: 'not_found' }, 404);
+  if (row.visibility !== 'public' && !authenticated) return json({ error: 'authentication_required' }, 401);
   try {
     return json(publishedSnapshotSchema.parse(JSON.parse(row.payload) as unknown));
   } catch {
@@ -658,19 +666,19 @@ async function revokeShare(slug: string, tenantId: string, env: Env): Promise<Re
 }
 
 async function listShares(tenantId: string, env: Env): Promise<Response> {
-  const rows = await env.DB.prepare('SELECT slug, payload, created_at, revoked_at FROM published_snapshots_v2 WHERE owner_id = ? ORDER BY created_at DESC')
-    .bind(tenantId).all<{ slug: string; payload: string; created_at: number; revoked_at: number | null }>();
+  const rows = await env.DB.prepare('SELECT slug, payload, created_at, revoked_at, visibility FROM published_snapshots_v2 WHERE owner_id = ? ORDER BY created_at DESC')
+    .bind(tenantId).all<{ slug: string; payload: string; created_at: number; revoked_at: number | null; visibility: z.infer<typeof shareVisibilitySchema> }>();
   return json({ snapshots: (rows.results ?? []).map((row) => {
     const snapshot = publishedSnapshotSchema.parse(JSON.parse(row.payload) as unknown);
-    return { slug: row.slug, title: snapshot.title, createdAt: row.created_at, revokedAt: row.revoked_at };
+    return { slug: row.slug, title: snapshot.title, createdAt: row.created_at, revokedAt: row.revoked_at, visibility: row.visibility };
   }) });
 }
 
 async function downloadArchive(tenantId: string, env: Env): Promise<Response> {
   const row = await workspaceFor(tenantId, env);
   const workspace = workspaceStateSchema.parse(JSON.parse(row.state) as unknown);
-  const snapshots = await env.DB.prepare('SELECT slug, payload, created_at, revoked_at FROM published_snapshots_v2 WHERE owner_id = ? ORDER BY created_at ASC')
-    .bind(tenantId).all<{ slug: string; payload: string; created_at: number; revoked_at: number | null }>();
+  const snapshots = await env.DB.prepare('SELECT slug, payload, created_at, revoked_at, visibility FROM published_snapshots_v2 WHERE owner_id = ? ORDER BY created_at ASC')
+    .bind(tenantId).all<{ slug: string; payload: string; created_at: number; revoked_at: number | null; visibility: z.infer<typeof shareVisibilitySchema> }>();
   const archive = {
     format: 'specular-archive',
     version: 1,
@@ -680,6 +688,7 @@ async function downloadArchive(tenantId: string, env: Env): Promise<Response> {
       slug: snapshot.slug,
       createdAt: snapshot.created_at,
       revokedAt: snapshot.revoked_at,
+      visibility: snapshot.visibility,
       snapshot: publishedSnapshotSchema.parse(JSON.parse(snapshot.payload) as unknown),
     })),
   };
@@ -704,6 +713,10 @@ const worker = {
   async fetch(request: Request, env: Env): Promise<Response> {
     const url = new URL(request.url);
     if (url.pathname === '/healthz') return json({ ok: true });
+    const shareMatch = /^\/api\/shares\/([a-z0-9]{16})$/u.exec(url.pathname);
+    if (shareMatch?.[1] !== undefined && request.method === 'GET') {
+      try { return await readShare(shareMatch[1], authorAccountFrom(request) !== null, env); } catch { return json({ error: 'storage_failure' }, 503); }
+    }
     if (url.pathname.startsWith('/api/')) {
       const account = authorAccountFrom(request);
       if (account === null) {
@@ -772,10 +785,6 @@ const worker = {
       const account = authorAccountFrom(request);
       if (account === null) return json({ error: 'authentication_required' }, 401);
       try { return await listShares(account.id, env); } catch { return json({ error: 'storage_failure' }, 503); }
-    }
-    const shareMatch = /^\/api\/shares\/([a-z0-9]{16})$/u.exec(url.pathname);
-    if (shareMatch?.[1] !== undefined && request.method === 'GET') {
-      try { return await readShare(shareMatch[1], env); } catch { return json({ error: 'storage_failure' }, 503); }
     }
     if (shareMatch?.[1] !== undefined && request.method === 'DELETE') {
       const account = authorAccountFrom(request);

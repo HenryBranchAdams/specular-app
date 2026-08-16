@@ -33,8 +33,16 @@ A downloadable, versioned copy of an author account's durable author-owned mater
 _Avoid_: Transfer file, portable workspace
 
 **Hosted snapshot**:
-A deliberately published projection of canonical writing available to a signed-in ChatGPT visitor who possesses its opaque link.
+A deliberately published projection of canonical writing available through an opaque link with access chosen by the author.
 _Avoid_: Public workspace, shared document
+
+**Signed-in snapshot**:
+A hosted snapshot available to any signed-in ChatGPT visitor who possesses its opaque link. This is the default publication level.
+_Avoid_: Private workspace, owner-only snapshot
+
+**Public snapshot**:
+An unlisted hosted snapshot available to anyone who possesses its opaque link, including a reader without a Specular account.
+_Avoid_: Public workspace, searchable profile
 
 **Revoked snapshot**:
 A hosted snapshot whose link the author has deliberately invalidated without changing the underlying private document.

@@ -1,5 +1,5 @@
 {
-  "version": 1,
+  "version": 2,
   "identitySource": "oai-authenticated-user-id",
   "default": "deny",
   "principals": ["anonymous", "author", "other-signed-in-author"],
@@ -11,7 +11,8 @@
     { "method": "DELETE", "path": "/api/account", "anonymous": 401, "author": 204, "scope": "own-account", "mutationOriginRequired": true },
     { "method": "GET", "path": "/api/shares", "anonymous": 401, "author": 200, "scope": "owned-snapshots" },
     { "method": "POST", "path": "/api/shares", "anonymous": 401, "author": 201, "scope": "own-account", "mutationOriginRequired": true },
-    { "method": "GET", "path": "/api/shares/{slug}", "anonymous": 401, "author": 200, "scope": "any-signed-in-capability-holder" },
+    { "method": "GET", "path": "/api/shares/{slug}", "condition": "visibility=signed_in", "anonymous": 401, "author": 200, "scope": "any-signed-in-capability-holder" },
+    { "method": "GET", "path": "/api/shares/{slug}", "condition": "visibility=public", "anonymous": 200, "author": 200, "scope": "any-capability-holder" },
     { "method": "DELETE", "path": "/api/shares/{slug}", "anonymous": 401, "author": 204, "other-signed-in-author": 404, "scope": "owner-only", "mutationOriginRequired": true },
     { "method": "POST", "path": "/api/reflect", "anonymous": 401, "author": "provider-result", "scope": "own-usage-budget", "mutationOriginRequired": true },
     { "method": "POST", "path": "/api/organize", "anonymous": 401, "author": "provider-result", "scope": "own-usage-budget", "mutationOriginRequired": true },

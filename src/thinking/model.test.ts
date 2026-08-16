@@ -55,6 +55,7 @@ describe('thinking model', () => {
       }],
     });
     expect(parsed.snapshots[0]?.title).toBe('');
+    expect(parsed.snapshots[0]?.visibility).toBe('signed_in');
   });
 
   it('treats staleness as a visual dormant state without rewriting explicit status', () => {

@@ -51,7 +51,7 @@ test('Library distinguishes publication loading, empty, failure, retry, and revo
   await expect(library.getByRole('button', { name: 'Revoking…' })).toBeDisabled();
   releaseRevoke?.();
   await expect(library.getByLabel('Library status')).toHaveText('Published link revoked.');
-  await expect(library.getByText('Revoked', { exact: true })).toBeVisible();
+  await expect(library.getByText(/Revoked · Signed-in readers/u)).toBeVisible();
 });
 
 test('snapshot publication and revocation expose action-specific progress and success', async ({ page }) => {
@@ -60,10 +60,12 @@ test('snapshot publication and revocation expose action-specific progress and su
   await page.unroute('**/api/shares/*');
   let releasePublish: (() => void) | undefined;
   const pendingPublish = new Promise<void>((resolve) => { releasePublish = resolve; });
+  let publishedVisibility: unknown;
   let releaseRevoke: (() => void) | undefined;
   const pendingRevoke = new Promise<void>((resolve) => { releaseRevoke = resolve; });
 
   await page.route('**/api/shares', async (route) => {
+    publishedVisibility = (route.request().postDataJSON() as { visibility?: unknown }).visibility;
     await pendingPublish;
     await route.fulfill({ contentType: 'application/json', status: 201, body: JSON.stringify({ url: '/s/abcdefghijklmnop' }) });
   });
@@ -77,11 +79,16 @@ test('snapshot publication and revocation expose action-specific progress and su
   await writeThought(page, 'Publication should expose what Specular is doing without implying completion early.');
   await page.getByRole('button', { name: 'Create snapshot' }).click();
   const snapshot = page.getByRole('dialog', { name: 'Snapshot editor' });
+  const visibility = snapshot.getByRole('combobox', { name: 'Who can read the published page?' });
+  await expect(visibility).toHaveValue('signed_in');
+  await visibility.selectOption('public');
 
   await snapshot.getByRole('button', { name: 'Publish page' }).click();
   await expect(snapshot.getByRole('button', { name: 'Publishing page…' })).toBeDisabled();
   releasePublish?.();
   await expect(snapshot.getByLabel('Snapshot status')).toHaveText('Page published. Link ready to copy.');
+  expect(publishedVisibility).toBe('public');
+  await expect(visibility).toBeDisabled();
 
   await snapshot.getByRole('button', { name: 'Revoke link' }).click();
   await expect(snapshot.getByRole('button', { name: 'Revoking link…' })).toBeDisabled();

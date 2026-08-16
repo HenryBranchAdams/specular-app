@@ -323,6 +323,7 @@ describe('workspace synchronization', () => {
       blockIds: [baseBlock.id],
       createdAt: 1_800_000_000_000,
       publishedUrl: null,
+      visibility: 'signed_in',
     }];
     const server = retitle(base, 'Hosted edit');
     const local = retitle(base, 'Device edit');

@@ -29,4 +29,5 @@ export const publishedSnapshotsV2 = sqliteTable('published_snapshots_v2', {
   payload: text('payload').notNull(),
   createdAt: integer('created_at').notNull(),
   revokedAt: integer('revoked_at'),
+  visibility: text('visibility').notNull().default('signed_in'),
 });
