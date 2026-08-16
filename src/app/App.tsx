@@ -777,7 +777,7 @@ function SnapshotEditor({
                 <span>{block.content.slice(0, 90)}{block.content.length > 90 ? '…' : ''}</span>
               </label>
             ))}
-            <p>Only your writing, confirmed order, and references appear in the artifact.</p>
+            <p>Selected writing and references are content. Specular adds presentation.</p>
           </aside>
           <article className="snapshot-preview">
             <p className="published-kicker">A Specular reflection</p>

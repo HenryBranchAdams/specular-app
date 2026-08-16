@@ -38,6 +38,17 @@ describe('Specular visual foundations', () => {
     expect(viteConfig).toMatch(/theme_color:\s*'#ffffff'/iu);
   });
 
+  it('keeps editable boundaries, placeholders, native selection, and source links explicit', () => {
+    expect(styles).toMatch(/--color-control-border:\s*var\(--color-text-muted\);/u);
+    expect(styles).toMatch(/\.snapshot-title-field input\s*\{[\s\S]*?border:\s*1px solid var\(--color-control-border\)/u);
+    expect(styles).toMatch(/\.calibration textarea\s*\{[\s\S]*?border:\s*1px solid var\(--color-control-border\)/u);
+    expect(styles).toMatch(/input::placeholder,[\s\S]*?textarea::placeholder\s*\{[\s\S]*?color:\s*var\(--color-text-muted\);[\s\S]*?opacity:\s*1;/u);
+    expect(styles).toMatch(/input\[type="checkbox"\],[\s\S]*?input\[type="radio"\]\s*\{[\s\S]*?accent-color:\s*var\(--color-focus\);/u);
+    expect(styles).toMatch(/\.published-references a\s*\{[\s\S]*?color:\s*inherit;[\s\S]*?text-decoration:\s*underline;/u);
+    expect(styles).toMatch(/\.reflection-sources a\s*\{[\s\S]*?color:\s*inherit;[\s\S]*?text-decoration:\s*underline;/u);
+    expect(styles).toMatch(/\.library-drawer h2\s*\{[\s\S]*?font-family:\s*var\(--font-ui\);/u);
+  });
+
   it('defines dark tokens, safe-area utilities, dynamic viewport sizing, and reduced motion', () => {
     expect(styles).toContain('[data-theme="dark"]');
     expect(styles).toContain('env(safe-area-inset-bottom');

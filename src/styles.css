@@ -16,6 +16,7 @@
   --color-text-muted: #5f6266;
   --color-border: #d9dbde;
   --color-border-strong: #bfc2c6;
+  --color-control-border: var(--color-text-muted);
   --color-focus: #0274b6;
   --color-focus-soft: #e8f4fb;
   --color-danger: #b42318;
@@ -96,6 +97,17 @@ input,
 textarea,
 select {
   font: inherit;
+}
+
+input::placeholder,
+textarea::placeholder {
+  color: var(--color-text-muted);
+  opacity: 1;
+}
+
+input[type="checkbox"],
+input[type="radio"] {
+  accent-color: var(--color-focus);
 }
 
 button,
@@ -236,7 +248,7 @@ a:focus-visible {
   min-height: 7rem;
   padding: var(--space-3);
   resize: vertical;
-  border: 1px solid var(--color-border);
+  border: 1px solid var(--color-control-border);
   border-radius: var(--radius-control);
   color: var(--color-text);
   background: var(--color-surface);
@@ -696,12 +708,6 @@ a:focus-visible {
   font-size: 0.75rem;
 }
 
-.document-title::placeholder,
-.thought-card__textarea::placeholder {
-  color: #aaa398;
-  opacity: 1;
-}
-
 .starter-intentions {
   position: absolute;
   z-index: 10;
@@ -950,7 +956,7 @@ a:focus-visible {
   min-height: 8rem;
   padding: 0.85rem;
   resize: vertical;
-  border: 1px solid var(--line);
+  border: 1px solid var(--color-control-border);
   outline: 0;
   color: var(--ink);
   background: var(--paper-raised);
@@ -1030,7 +1036,7 @@ a:focus-visible {
   min-width: 0;
   min-height: 2.6rem;
   padding: 0 0.7rem;
-  border: 1px solid var(--line);
+  border: 1px solid var(--color-control-border);
   border-radius: 0.25rem;
   color: var(--ink-soft);
   background: rgb(255 255 255 / 54%);
@@ -1144,7 +1150,7 @@ a:focus-visible {
 .graph-filters select {
   max-width: 10rem;
   padding: 0.35rem 0.45rem;
-  border: 1px solid var(--line);
+  border: 1px solid var(--color-control-border);
   border-radius: 0.25rem;
   color: var(--ink-soft);
   background: var(--paper-raised);
@@ -1304,10 +1310,11 @@ a:focus-visible {
   align-items: center;
   justify-content: space-between;
   gap: 0.5rem;
-  color: var(--blue);
+  color: inherit;
   font-size: 0.72rem;
   line-height: 1.35;
-  text-decoration: none;
+  text-decoration: underline;
+  text-underline-offset: 0.2em;
 }
 
 .calibration {
@@ -1356,7 +1363,7 @@ a:focus-visible {
   min-height: 5.5rem;
   padding: 0.65rem 3.25rem 0.65rem 0.65rem;
   resize: vertical;
-  border: 1px solid var(--line);
+  border: 1px solid var(--color-control-border);
   border-radius: 0.3rem;
   color: var(--ink);
   background: var(--paper-raised);
@@ -1456,7 +1463,13 @@ a:focus-visible {
   text-transform: uppercase;
 }
 
-.library-drawer h2,
+.library-drawer h2 {
+  margin: 0;
+  font-family: var(--font-ui);
+  font-weight: 400;
+  letter-spacing: -0.02em;
+}
+
 .connections-view h1,
 .snapshot-panel h1 {
   margin: 0;
@@ -1531,7 +1544,7 @@ a:focus-visible {
 .library-drawer > footer select {
   min-height: var(--touch-target);
   padding: 0 var(--space-2);
-  border: 1px solid var(--line);
+  border: 1px solid var(--color-control-border);
   border-radius: var(--radius-control);
   background: transparent;
 }
@@ -1611,7 +1624,7 @@ a:focus-visible {
   max-width: 100%;
   min-height: var(--touch-target);
   padding: 0 var(--space-3);
-  border: 1px solid var(--line);
+  border: 1px solid var(--color-control-border);
   border-radius: var(--radius-control);
   color: var(--ink-soft);
   background: var(--paper-raised);
@@ -1773,7 +1786,7 @@ a:focus-visible {
 .snapshot-title-field input {
   min-height: var(--touch-target);
   padding: 0 0.65rem;
-  border: 1px solid var(--line);
+  border: 1px solid var(--color-control-border);
   border-radius: 0.25rem;
   color: var(--ink);
   background: var(--paper-raised);
@@ -1891,7 +1904,9 @@ a:focus-visible {
 }
 
 .published-references a {
-  color: var(--blue);
+  color: inherit;
+  text-decoration: underline;
+  text-underline-offset: 0.2em;
 }
 
 .published-page > footer {

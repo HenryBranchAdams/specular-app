@@ -67,6 +67,8 @@ test('source metadata remains distinct from authored prose and exports with a sn
 
   await page.getByRole('button', { name: 'Create snapshot' }).click();
   const snapshot = page.getByRole('dialog', { name: 'Snapshot editor' });
+  await expect(snapshot.getByRole('textbox', { name: 'Snapshot title' })).toHaveCSS('border-top-color', 'rgb(95, 98, 102)');
+  expect(await snapshot.getByRole('checkbox').first().evaluate((element) => getComputedStyle(element).accentColor)).toBe('rgb(2, 116, 182)');
   const download = page.waitForEvent('download');
   await snapshot.getByRole('button', { name: 'Markdown' }).click();
   expect((await download).suggestedFilename()).toBe('a-source-and-my-response.md');

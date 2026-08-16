@@ -80,6 +80,11 @@ test('hosted snapshots reflow extreme synthetic content and references at 200%',
   await expect(page.getByRole('heading', { name: /deliberately long synthetic title/iu })).toBeVisible();
   await expect(page.getByRole('heading', { name: 'References' })).toBeVisible();
   await page.evaluate(() => { document.documentElement.style.fontSize = '200%'; });
-  await expect(page.getByRole('link', { name: /reference title/iu })).toBeVisible();
+  const referenceLink = page.getByRole('link', { name: /reference title/iu });
+  await expect(referenceLink).toBeVisible();
+  expect(await referenceLink.evaluate((element) => {
+    const style = getComputedStyle(element);
+    return { color: style.color, textDecorationLine: style.textDecorationLine };
+  })).toEqual({ color: 'rgb(95, 98, 102)', textDecorationLine: 'underline' });
   await expectNoHorizontalOverflow(page);
 });
