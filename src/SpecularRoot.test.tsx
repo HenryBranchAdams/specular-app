@@ -25,4 +25,20 @@ describe('Specular root routing', () => {
     expect(fetchMock).toHaveBeenCalledWith('/api/shares/abcdefghijklmnop', undefined);
     expect(fetchMock).not.toHaveBeenCalledWith('/api/session', expect.anything());
   });
+
+  it('preserves authored paragraph boundaries on a published snapshot', async () => {
+    globalThis.history.replaceState({}, '', '/s/abcdefghijklmnop');
+    vi.stubGlobal('fetch', vi.fn(() => Promise.resolve(new Response(JSON.stringify({
+      title: 'Paragraph fidelity',
+      createdAt: 1_800_000_000_000,
+      blocks: [{ id: 'block:one', kind: 'thought', content: 'First paragraph.\n\nSecond paragraph.', references: [] }],
+    }), { status: 200 }))));
+
+    render(<SpecularRoot />);
+
+    const body = await screen.findByRole('article', { name: 'Published writing' });
+    expect(body.querySelectorAll('.snapshot-writing-block > p')).toHaveLength(2);
+    expect(screen.getByText('First paragraph.')).toBeVisible();
+    expect(screen.getByText('Second paragraph.')).toBeVisible();
+  });
 });

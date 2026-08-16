@@ -56,6 +56,12 @@ describe('Specular visual foundations', () => {
     expect(styles).toContain('@media (prefers-reduced-motion: reduce)');
   });
 
+  it('isolates the printable snapshot from the interactive workspace layout', () => {
+    expect(styles).toMatch(/@media print\s*\{[\s\S]*?\.specular-shell\s*>\s*:not\(\.snapshot-overlay\)\s*\{[\s\S]*?display:\s*none\s*!important;/u);
+    expect(styles).toMatch(/@media print\s*\{[\s\S]*?\.snapshot-panel\s*>\s*header,[\s\S]*?\.snapshot-layout\s*>\s*aside\s*\{[\s\S]*?display:\s*none\s*!important;/u);
+    expect(styles).toMatch(/@media print\s*\{[\s\S]*?\.snapshot-preview\s*\{[\s\S]*?position:\s*static;/u);
+  });
+
   it('uses one focus-visible contract without a decorative glow', () => {
     expect(styles).toMatch(/:focus-visible[\s\S]*outline:\s*2px solid var\(--color-focus\)/u);
     expect(styles).toMatch(/outline-offset:\s*2px/u);

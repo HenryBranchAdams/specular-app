@@ -30,6 +30,35 @@ test('canonical block actions announce their result and leave focus on writing',
   await expect(page.getByRole('status', { name: 'Workspace status' })).toHaveText('Writing block deleted.');
 });
 
+test('snapshot paragraphs, print isolation, and between-block insertion preserve document structure', async ({ page }) => {
+  await installThinkingMocks(page);
+  await openSpecular(page);
+
+  const blocks = page.getByRole('textbox', { name: 'Thought writing block' });
+  await blocks.first().fill('First paragraph.\n\nSecond paragraph.');
+  await page.getByRole('button', { name: 'New block' }).click();
+  await blocks.last().fill('Later completed thought.');
+  await page.getByRole('button', { name: 'Insert block between writing blocks' }).click();
+  await expect(blocks).toHaveCount(3);
+  await expect(blocks.nth(0)).toHaveValue('First paragraph.\n\nSecond paragraph.');
+  await expect(blocks.nth(1)).toHaveValue('');
+  await expect(blocks.nth(1)).toBeFocused();
+  await expect(blocks.nth(2)).toHaveValue('Later completed thought.');
+
+  await page.getByRole('button', { name: 'Create snapshot' }).click();
+  const preview = page.getByRole('article', { name: 'Snapshot preview' });
+  await expect(preview.locator('.snapshot-writing-block').first().locator('p')).toHaveCount(2);
+  await expect(preview.getByText('First paragraph.')).toBeVisible();
+  await expect(preview.getByText('Second paragraph.')).toBeVisible();
+
+  await page.emulateMedia({ media: 'print' });
+  await expect(page.locator('.workspace-header')).toBeHidden();
+  await expect(page.locator('.snapshot-panel > header')).toBeHidden();
+  await expect(page.locator('.snapshot-layout > aside')).toBeHidden();
+  await expect(preview).toBeVisible();
+  await expect(preview).toHaveCSS('position', 'static');
+});
+
 test('offline writing remains device-safe and recovers synchronization without losing authorship', async ({ page }) => {
   const mocks = await installThinkingMocks(page);
   await openSpecular(page);

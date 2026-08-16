@@ -353,6 +353,26 @@ describe('Specular thinking workspace', () => {
     expect(screen.getByRole('textbox', { name: 'Thought writing block' })).toHaveFocus();
   });
 
+  it('inserts a new writing block at the chosen boundary without reordering existing writing', async () => {
+    const user = userEvent.setup();
+    setup();
+    const first = screen.getByRole('textbox', { name: 'Thought writing block' });
+    await user.type(first, 'First completed thought.');
+    await user.click(screen.getByRole('button', { name: 'New block' }));
+    const second = screen.getAllByRole('textbox', { name: 'Thought writing block' })[1];
+    if (second === undefined) throw new Error('Expected a second writing block.');
+    await user.type(second, 'Second completed thought.');
+
+    await user.click(screen.getByRole('button', { name: 'Insert block between writing blocks' }));
+
+    const blocks = screen.getAllByRole('textbox', { name: 'Thought writing block' });
+    expect(blocks).toHaveLength(3);
+    expect(blocks[0]).toHaveValue('First completed thought.');
+    expect(blocks[1]).toHaveValue('');
+    expect(blocks[1]).toHaveFocus();
+    expect(blocks[2]).toHaveValue('Second completed thought.');
+  });
+
   it('announces version restoration and returns focus to the restored writing', async () => {
     const user = userEvent.setup();
     const initial = createInitialWorkspace(1_800_000_000_000);
@@ -484,6 +504,21 @@ describe('Specular thinking workspace', () => {
       blocks: [expect.objectContaining({ content: 'Attention can justify another look without becoming proof.' })],
     }));
     expect(await within(editor).findByRole('button', { name: 'Copy link' })).toBeVisible();
+  });
+
+  it('keeps authored paragraph boundaries in a snapshot preview', async () => {
+    const user = userEvent.setup();
+    const initial = createInitialWorkspace(1_800_000_000_000);
+    const block = initial.blocks[0];
+    if (block === undefined) throw new Error('Expected an initial writing block.');
+    initial.blocks[0] = { ...block, content: 'First paragraph.\n\nSecond paragraph.' };
+    setup({ initialState: initial });
+
+    await user.click(screen.getByRole('button', { name: 'Create snapshot' }));
+
+    const preview = screen.getByRole('article', { name: 'Snapshot preview' });
+    expect(within(preview).getByText('First paragraph.').tagName).toBe('P');
+    expect(within(preview).getByText('Second paragraph.').tagName).toBe('P');
   });
 
   it('uses action-specific pending and success states while publishing and revoking a snapshot', async () => {

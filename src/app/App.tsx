@@ -22,6 +22,7 @@ import {
   X,
 } from 'lucide-react';
 import {
+  Fragment,
   useEffect,
   useRef,
   useState,
@@ -147,6 +148,21 @@ function wordCount(value: string): number {
   return trimmed.length === 0 ? 0 : trimmed.split(/\s+/u).length;
 }
 
+function authoredParagraphs(content: string): string[] {
+  return content
+    .replace(/\r\n?/gu, '\n')
+    .split(/\n[\t ]*\n+/gu)
+    .filter((paragraph) => paragraph.length > 0);
+}
+
+function SnapshotWritingBlock({ block }: { block: PublishedSnapshot['blocks'][number] }) {
+  const paragraphs = authoredParagraphs(block.content);
+  const content = paragraphs.map((paragraph, index) => <p key={`${block.id}:paragraph:${String(index)}`}>{paragraph}</p>);
+  return block.references.length > 0
+    ? <blockquote className="snapshot-writing-block">{content}</blockquote>
+    : <div className="snapshot-writing-block">{content}</div>;
+}
+
 function contextBlocksFor(
   state: WorkspaceState,
   document: ThoughtDocument,
@@ -222,12 +238,10 @@ function PublishedPage({ slug }: { slug: string }) {
       <p className="published-kicker">A Specular reflection</p>
       <h1>{snapshot.title}</h1>
       <p className="published-date">Captured {new Date(snapshot.createdAt).toLocaleDateString()}</p>
-      <article className="published-body">
+      <article aria-label="Published writing" className="published-body">
         {snapshot.blocks.length === 0
           ? <p className="published-empty">This snapshot has no published writing.</p>
-          : snapshot.blocks.map((block) => block.references.length > 0
-              ? <blockquote key={block.id}>{block.content}</blockquote>
-              : <p key={block.id}>{block.content}</p>)}
+          : snapshot.blocks.map((block) => <SnapshotWritingBlock block={block} key={block.id} />)}
       </article>
       {references.length === 0 ? null : (
         <section className="published-references">
@@ -779,12 +793,10 @@ function SnapshotEditor({
             ))}
             <p>Selected writing and references are content. Specular adds presentation.</p>
           </aside>
-          <article className="snapshot-preview">
+          <article aria-label="Snapshot preview" className="snapshot-preview">
             <p className="published-kicker">A Specular reflection</p>
             <h1>{payload.title}</h1>
-            {payload.blocks.map((block) => block.references.length > 0
-              ? <blockquote key={block.id}>{block.content}</blockquote>
-              : <p key={block.id}>{block.content}</p>)}
+            {payload.blocks.map((block) => <SnapshotWritingBlock block={block} key={block.id} />)}
           </article>
         </div>
         <footer>
@@ -1444,6 +1456,7 @@ export function App({
     parentId: string | null = null,
     relationship: 'branches_from' | 'develops' = 'develops',
     originPrompt: string | null = null,
+    afterBlockId: string | null = null,
   ) => {
     const now = Date.now();
     const id = newId('block');
@@ -1470,9 +1483,13 @@ export function App({
         relationship,
         createdAt: now,
       }],
-      documents: current.documents.map((item) => item.id === current.activeDocumentId
-        ? { ...item, blockIds: [...item.blockIds, id], status: 'active', updatedAt: now }
-        : item),
+      documents: current.documents.map((item) => {
+        if (item.id !== current.activeDocumentId) return item;
+        const insertionIndex = afterBlockId === null ? item.blockIds.length : item.blockIds.indexOf(afterBlockId) + 1;
+        const blockIds = [...item.blockIds];
+        blockIds.splice(insertionIndex <= 0 ? blockIds.length : insertionIndex, 0, id);
+        return { ...item, blockIds, status: 'active', updatedAt: now };
+      }),
     }));
     setSelectedBlockId(id);
     setSelection('');
@@ -1895,8 +1912,9 @@ export function App({
             <DocumentTitleEditor onChange={(title) => { updateDocument({ title, titleSource: 'author' }); }} value={currentDocument.title} />
             {currentDocument.titleSource === 'generated' ? <p className="generated-title-note" role="status">Suggested title · edit to make it yours{organizationBusy ? ' · organizing' : ''}</p> : null}
             <div className="block-stack">
-              {blocks.map((block) => (
-                <BlockEditor
+              {blocks.map((block, index) => (
+                <Fragment key={block.id}>
+                  <BlockEditor
                   block={block}
                   canDictate={storageError === null && !calibrationDictationActive}
                   deletePending={pendingDeleteBlockId === block.id}
@@ -1904,7 +1922,6 @@ export function App({
                   dictationDraft={state.dictationDraft?.blockId === block.id ? state.dictationDraft : null}
                   dictationError={state.dictationDraft?.blockId === block.id ? dictationError : null}
                   focused={selectedBlock?.id === block.id}
-                  key={block.id}
                   onBlur={() => { window.setTimeout(() => { commitVersion(block.id); }, 0); }}
                   onChange={(content) => { updateBlock(block.id, (current) => ({ ...current, content, status: 'active', updatedAt: Date.now() })); }}
                   onAttachSource={() => { updateBlock(block.id, (current) => ({ ...current, references: [{ id: newId('reference'), title: '', author: '', url: '', excerpt: '', accessedAt: Date.now() }], updatedAt: Date.now() })); }}
@@ -1949,7 +1966,17 @@ export function App({
                   }, 0); }}
                   onSelection={setSelection}
                   placeholder={block.id === blocks[0]?.id && block.content.trim().length === 0 ? starterPrompt : null}
-                />
+                  />
+                  {index === blocks.length - 1 ? null : (
+                    <button
+                      aria-label="Insert block between writing blocks"
+                      className="add-block"
+                      onClick={() => { addBlock(null, 'develops', null, block.id); }}
+                      title="Insert block here"
+                      type="button"
+                    ><Plus size={17} /></button>
+                  )}
+                </Fragment>
               ))}
             </div>
             <button aria-label="New block" className="add-block" onClick={() => { addBlock(); }} title="New block" type="button"><Plus size={17} /></button>

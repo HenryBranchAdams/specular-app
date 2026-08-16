@@ -750,7 +750,6 @@ a:focus-visible {
 .block-stack {
   display: flex;
   flex-direction: column;
-  gap: 1.25rem;
 }
 
 .thought-card {
@@ -1823,18 +1822,29 @@ a:focus-visible {
   letter-spacing: -0.045em;
 }
 
-.snapshot-preview > p:not(.published-kicker),
-.snapshot-preview blockquote {
+.snapshot-preview .snapshot-writing-block {
+  margin: 0 0 1.45rem;
+}
+
+.snapshot-preview .snapshot-writing-block > p {
   margin: 0 0 1.45rem;
   color: var(--ink);
   font-family: var(--font-authored);
   font-size: 1.05rem;
   line-height: 1.68;
+  white-space: pre-wrap;
 }
 
-.snapshot-preview blockquote {
+.snapshot-preview .snapshot-writing-block > p:last-child {
+  margin-bottom: 0;
+}
+
+.snapshot-preview blockquote.snapshot-writing-block {
   padding-left: 1rem;
   border-left: 2px solid var(--line-strong);
+}
+
+.snapshot-preview blockquote.snapshot-writing-block > p {
   color: var(--ink-soft);
 }
 
@@ -1863,12 +1873,20 @@ a:focus-visible {
   font-size: 0.73rem;
 }
 
-.published-body p,
-.published-body blockquote {
+.published-body .snapshot-writing-block {
+  margin: 0 0 1.7rem;
+}
+
+.published-body .snapshot-writing-block > p {
   margin: 0 0 1.7rem;
   font-family: var(--font-authored);
   font-size: clamp(1.08rem, 2vw, 1.28rem);
   line-height: 1.75;
+  white-space: pre-wrap;
+}
+
+.published-body .snapshot-writing-block > p:last-child {
+  margin-bottom: 0;
 }
 
 .published-body .published-empty {
@@ -1877,9 +1895,12 @@ a:focus-visible {
   font-size: 0.9rem;
 }
 
-.published-body blockquote {
+.published-body blockquote.snapshot-writing-block {
   padding-left: 1.25rem;
   border-left: 2px solid var(--line-strong);
+}
+
+.published-body blockquote.snapshot-writing-block > p {
   color: var(--ink-soft);
 }
 
@@ -2121,22 +2142,50 @@ a:focus-visible {
 }
 
 @media print {
-  body * {
-    visibility: hidden;
+  html,
+  body,
+  #root,
+  .specular-shell {
+    min-height: 0;
+    height: auto;
+    background: var(--paper-raised);
   }
 
-  .snapshot-preview,
-  .snapshot-preview * {
-    visibility: visible;
+  .specular-shell > :not(.snapshot-overlay) {
+    display: none !important;
+  }
+
+  .snapshot-overlay {
+    position: static;
+    display: block;
+    padding: 0;
+    background: var(--paper-raised);
+  }
+
+  .snapshot-panel {
+    width: auto;
+    max-height: none;
+    overflow: visible;
+    border: 0;
+  }
+
+  .snapshot-panel > header,
+  .snapshot-panel > footer,
+  .snapshot-layout > aside {
+    display: none !important;
+  }
+
+  .snapshot-layout {
+    display: block;
+    min-height: 0;
   }
 
   .snapshot-preview {
-    position: absolute;
-    inset: 0;
-    width: 100%;
+    position: static;
+    width: auto;
     max-width: none;
     padding: 0.5in 0.7in;
-    background: white;
+    background: var(--paper-raised);
   }
 }
 
