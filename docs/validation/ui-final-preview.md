@@ -6,9 +6,10 @@ Status: qualified-local
 
 ## Revisions
 
-- Candidate runtime revision: `3d541b4fafb8673a495ed0bf89209be010e91822`
+- Candidate runtime revision: `dad2af7b0fe57791ebbcc3506d78677fefc68b44`
 - Rollback revision: `9f979de8fd20d40a305a195276d71fccd85d0899`
 - Owner review: approved visual doctrine and the standalone elevated authoring-page refinement on 2026-08-15
+- Independent review: ChatGPT Pro returned `PASS` for the owner-controlled browser preview after the final contrast and evidence-reconciliation pass on 2026-08-15
 
 The candidate is a local Git revision. It has not been pushed, published, deployed, or substituted for the current live Site.
 
@@ -19,13 +20,15 @@ The candidate applies the clean, crisp Specular visual system across the full go
 The final local qualification passed:
 
 - TypeScript, ESLint, Stylelint, exact-value style ratchet, discoverable production-surface manifest, component-inventory, and exception-registry checks
-- 530 unit tests and the coverage gate
+- 532 unit tests and the coverage gate
 - 15 Storybook interaction and accessibility stories
 - 5 blocking Chromium visual suites, including all four PWA notice states
 - 138 functional end-to-end cases across Chromium and WebKit, with 18 intentional service-worker skips, plus the performance case
 - release-evidence validation
 
 The complete branch also previously passed the worker/D1 integration, integrated-browser, fixed-evaluation, PWA-build, production-build, Lighthouse, and dependency-audit gates.
+
+The final contrast pass uses the muted-text token for editable boundaries and placeholders, reserves blue for focus and native selection, underlines source links, and records the resulting authoring, Library, Snapshot, and public-reader baselines. A forced all-baseline regeneration reconciled sub-threshold page-level changes that the ordinary 2% visual tolerance correctly permitted but did not rewrite; the subsequent immutable visual run passed.
 
 ## Evidence boundary
 
